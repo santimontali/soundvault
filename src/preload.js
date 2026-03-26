@@ -1,0 +1,36 @@
+const { contextBridge, ipcRenderer } = require('electron');
+contextBridge.exposeInMainWorld('api', {
+  getLibraryPath: ()=>ipcRenderer.invoke('get-library-path'),
+  setLibraryPath: ()=>ipcRenderer.invoke('set-library-path'),
+  getFolders: ()=>ipcRenderer.invoke('get-folders'),
+  createFolder: n=>ipcRenderer.invoke('create-folder',n),
+  renameFolder: (o,n)=>ipcRenderer.invoke('rename-folder',o,n),
+  deleteFolder: n=>ipcRenderer.invoke('delete-folder',n),
+  getSounds: f=>ipcRenderer.invoke('get-sounds',f),
+  deleteSound: p=>ipcRenderer.invoke('delete-sound',p),
+  moveSound: (p,f)=>ipcRenderer.invoke('move-sound',p,f),
+  importFiles: f=>ipcRenderer.invoke('import-files',f),
+  dropFiles: (ps,f)=>ipcRenderer.invoke('drop-files',ps,f),
+  searchAllSounds: q=>ipcRenderer.invoke('search-all-sounds',q),
+  readAudioFile: p=>ipcRenderer.invoke('read-audio-file',p),
+  renderSelectionWav: d=>ipcRenderer.invoke('render-selection-wav',d),
+  overwriteAudioFile: d=>ipcRenderer.invoke('overwrite-audio-file',d),
+  createNewAudioVersion: d=>ipcRenderer.invoke('create-new-audio-version',d),
+  startDrag: fp=>ipcRenderer.send('ondragstart',fp),
+  revealInFinder: p=>ipcRenderer.invoke('reveal-in-finder',p),
+  // Collections
+  getCollections: ()=>ipcRenderer.invoke('get-collections'),
+  createCollection: n=>ipcRenderer.invoke('create-collection',n),
+  deleteCollection: n=>ipcRenderer.invoke('delete-collection',n),
+  renameCollection: (o,n)=>ipcRenderer.invoke('rename-collection',o,n),
+  addToCollection: (n,p)=>ipcRenderer.invoke('add-to-collection',n,p),
+  removeFromCollection: (n,p)=>ipcRenderer.invoke('remove-from-collection',n,p),
+  getCollectionSounds: n=>ipcRenderer.invoke('get-collection-sounds',n),
+  setCollectionColor: (n,c)=>ipcRenderer.invoke('set-collection-color',n,c),
+  
+  // Semantic Search
+  semanticIsReady: ()=>ipcRenderer.invoke('semantic-is-ready'),
+  semanticGetProgress: ()=>ipcRenderer.invoke('semantic-get-progress'),
+  semanticStartIndex: ()=>ipcRenderer.invoke('semantic-start-indexing'),
+  semanticSearch: (q, w)=>ipcRenderer.invoke('semantic-search', q, w),
+});
