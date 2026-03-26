@@ -59,7 +59,11 @@
     .col-item,
     #sidebar-toggle,
     #sel-toolbar-global,
-    #editor-panel {
+    #editor-panel,
+    .logo,
+    .vault-selector-bar,
+    .vault-list-panel,
+    #vault-edit-overlay {
       -webkit-app-region: no-drag
     }
 
@@ -97,14 +101,170 @@
     .logo-wrap {
       display: flex;
       align-items: center;
-      padding-left: 16px
+      padding-left: 16px;
     }
 
     .logo {
+      display: flex;
+      align-items: center;
+      gap: 0;
       font-size: 14px;
       font-weight: 600;
       letter-spacing: 2.5px;
-      color: var(--accent)
+      -webkit-app-region: no-drag;
+      position: relative;
+    }
+    .logo-half {
+      cursor: pointer;
+      transition: color .3s ease, opacity .3s ease;
+      padding: 2px 0;
+      position: relative;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .logo-half.active {
+      opacity: 1;
+      font-weight: 700;
+    }
+    .logo-half.dim {
+      opacity: .45;
+      font-weight: 400;
+    }
+    .logo-half.dim:hover {
+      opacity: .85;
+    }
+    .logo-sep {
+      width: 3px;
+      height: 3px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      margin: 0 4px;
+      flex-shrink: 0;
+      opacity: .4;
+    }
+
+    /* AI icon rotation — 45° tilt when active, returns when inactive */
+    @keyframes ai-tilt {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(45deg); }
+    }
+    @keyframes ai-untilt {
+      0% { transform: rotate(45deg); }
+      100% { transform: rotate(0deg); }
+    }
+    .ai-icon-active svg {
+      animation: ai-tilt .3s cubic-bezier(.34, 1.56, .64, 1) forwards;
+    }
+    .ai-icon-inactive svg {
+      animation: ai-untilt .3s cubic-bezier(.34, 1.56, .64, 1) forwards;
+    }
+
+    /* ═══ Quick-Collect target bar ═══ */
+    /* Collect target bar — shows at top of main panel when collecting */
+    #collect-target-bar {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: var(--bg-deep);
+      border-bottom: .5px solid var(--border);
+      font-size: 11px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+    #collect-target-bar.visible {
+      display: flex;
+    }
+    #collect-target-bar .ct-label {
+      color: var(--text-muted);
+      font-size: 10px;
+      letter-spacing: .5px;
+    }
+    #collect-target-bar .ct-vault-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    #collect-target-bar .ct-name {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    #collect-target-bar .ct-change {
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      transition: color .1s;
+    }
+    #collect-target-bar .ct-change:hover {
+      color: var(--text-primary);
+    }
+    #collect-target-bar .ct-vault-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: .5px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 10px;
+      transition: border-color .1s, color .1s;
+    }
+    #collect-target-bar .ct-vault-btn:hover {
+      border-color: var(--text-muted);
+      color: var(--text-primary);
+    }
+    #collect-target-bar .ct-vault-name {
+      font-weight: 500;
+    }
+    #collect-target-bar .ct-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 0 2px;
+      transition: color .1s;
+    }
+    #collect-target-bar .ct-close:hover {
+      color: var(--text-primary);
+    }
+    /* Toast for quick feedback */
+    #collect-toast {
+      position: fixed;
+      bottom: 60px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--accent);
+      color: #111;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 6px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .2s, transform .2s;
+      z-index: 9999;
+    }
+    #collect-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    /* Underline indicator — slides between SOUND and VAULT */
+    .logo-indicator {
+      position: absolute;
+      bottom: -1px;
+      height: 1.5px;
+      border-radius: 1px;
+      opacity: .6;
+      transition: left .3s cubic-bezier(.4, 0, .2, 1), width .3s cubic-bezier(.4, 0, .2, 1), background .3s;
     }
 
     #search-box {
@@ -126,11 +286,17 @@
       border-color: var(--accent)
     }
 
+    #semantic-toggle:hover {
+      border-color: var(--text-muted) !important;
+      color: var(--text-primary) !important;
+      background: var(--bg-active) !important;
+    }
+
     .search-wrap {
       position: relative
     }
 
-    .search-wrap svg {
+    #search-input-container .search-icon-wrap svg {
       position: absolute;
       left: 10px;
       top: 50%;
@@ -152,19 +318,43 @@
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
-      transition: width .2s;
-      overflow: hidden
+      transition: width .25s cubic-bezier(.4, 0, .2, 1);
+      overflow: hidden;
     }
 
     #sidebar.collapsed {
-      width: 40px
+      width: 40px;
     }
 
+    /* Fade content during collapse — toggle button stays visible */
+    #sidebar .sidebar-section,
+    #sidebar .sidebar-bottom {
+      transition: opacity .12s ease;
+      opacity: 1;
+    }
     #sidebar.collapsed .sidebar-section,
-    #sidebar.collapsed .sidebar-bottom-content,
-    #sidebar.collapsed .sidebar-bottom,
-    #sidebar.collapsed #folders-toggle {
-      display: none !important;
+    #sidebar.collapsed .sidebar-bottom {
+      opacity: 0;
+      pointer-events: none;
+    }
+    /* Nav button fades but toggle stays */
+    #sidebar .sidebar-nav-btn {
+      transition: opacity .12s ease;
+      opacity: 1;
+    }
+    #sidebar.collapsed .sidebar-nav-btn {
+      opacity: 0;
+      pointer-events: none;
+      width: 0;
+      overflow: hidden;
+      padding: 0;
+      margin: 0;
+      flex: 0;
+    }
+    /* Top bar keeps min-width so toggle doesn't jump, but allows collapsing */
+    #sidebar-top-bar {
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     #sidebar-toggle {
@@ -172,11 +362,13 @@
       border: none;
       color: var(--text-muted);
       cursor: pointer;
-      padding: 8px 10px;
+      padding: 6px;
       display: flex;
       align-items: center;
       justify-content: center;
-      border-bottom: .5px solid var(--border)
+      border-radius: 4px;
+      transition: color .12s, background .12s;
+      flex-shrink: 0;
     }
 
     #sidebar-toggle:hover {
@@ -188,9 +380,67 @@
       transform: rotate(180deg)
     }
 
+    /* Sidebar top bar with nav button + collapse */
+    #sidebar-top-bar {
+      display: flex;
+      align-items: center;
+      padding: 4px 4px;
+      border-bottom: .5px solid var(--border);
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .sidebar-nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex: 1;
+      min-width: 0;
+      padding: 4px 8px;
+      background: none;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background .12s;
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: .3px;
+    }
+    .sidebar-nav-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .sidebar-nav-btn .nav-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      transition: background .2s;
+    }
+    .sidebar-nav-btn .nav-label {
+      flex: 1;
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sidebar-nav-btn .nav-chevron {
+      flex-shrink: 0;
+      transition: transform .2s;
+      color: var(--text-muted);
+    }
+    .sidebar-nav-btn.open .nav-chevron {
+      transform: rotate(90deg);
+    }
+
     .sidebar-section {
       flex: 1;
-      overflow-y: auto
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    /* Suppress scrollbar during sidebar width transition */
+    #sidebar.transitioning .sidebar-section {
+      overflow-y: hidden;
     }
 
     .sidebar-header {
@@ -245,7 +495,25 @@
       align-items: center;
       gap: 7px;
       border-left: 2px solid transparent;
-      position: relative
+      position: relative;
+      white-space: nowrap;
+      overflow: hidden;
+      height: 32px;
+      flex-shrink: 0;
+    }
+
+    .folder-item > svg,
+    .col-item > svg {
+      flex-shrink: 0;
+    }
+
+    .folder-item > span:first-of-type,
+    .col-item > span:first-of-type {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+      flex: 1;
     }
 
     .folder-item:hover,
@@ -268,7 +536,8 @@
     .item-count {
       margin-left: auto;
       font-size: 11px;
-      color: var(--text-muted)
+      color: var(--text-muted);
+      flex-shrink: 0;
     }
 
     .item-actions {
@@ -1547,6 +1816,278 @@
     .titlebar-word.dragging {
       background: rgba(255, 255, 255, 0.15);
     }
+
+    /* ═══ Vault Selector (inside sidebar, vault mode) ═══ */
+    /* Vault list — collapsible panel inside sidebar */
+    .vault-list-panel {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows .25s ease;
+      overflow: hidden;
+      border-bottom: .5px solid var(--border);
+      background: var(--bg-deep);
+    }
+    .vault-list-panel.expanded {
+      grid-template-rows: 1fr;
+    }
+    .vault-list-inner {
+      min-height: 0;
+      overflow: hidden;
+    }
+    .vault-list-scroll {
+      max-height: 180px;
+      overflow-y: auto;
+      padding: 4px 6px;
+    }
+    .vault-list-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background .1s;
+      position: relative;
+    }
+    .vault-list-item:hover {
+      background: var(--bg-hover);
+    }
+    .vault-list-item.active {
+      background: var(--bg-active);
+    }
+    .vault-list-item .vl-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      cursor: pointer;
+      transition: transform .1s;
+      border: .5px solid rgba(255,255,255,.1);
+    }
+    .vault-list-item .vl-dot:hover {
+      transform: scale(1.3);
+    }
+    .vault-list-item .vl-name {
+      flex: 1;
+      font-size: 11px;
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .vault-list-item.active .vl-name {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+    .vault-list-item .vl-count {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .vault-list-item .vl-actions {
+      display: none;
+      gap: 2px;
+    }
+    .vault-list-item:hover .vl-actions {
+      display: flex;
+    }
+    .vault-list-item:hover .vl-count {
+      display: none;
+    }
+    .vl-action-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 1px 3px;
+      font-size: 11px;
+      border-radius: 3px;
+    }
+    .vl-action-btn:hover {
+      color: var(--text-primary);
+      background: rgba(255,255,255,.06);
+    }
+    .vl-action-btn.danger:hover {
+      color: var(--danger);
+    }
+    .vault-list-footer {
+      padding: 5px 6px;
+    }
+    .vault-add-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 5px;
+      background: none;
+      border: .5px dashed #3a3a44;
+      border-radius: 5px;
+      color: var(--text-muted);
+      font-size: 10px;
+      cursor: pointer;
+      transition: border-color .15s, color .15s;
+    }
+    .vault-add-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .vault-list-item .vl-desc {
+      font-size: 9px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-top: 1px;
+      font-style: italic;
+      opacity: .7;
+    }
+    .vault-list-item .vl-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ═══ AI Suggestions — "Resonance" section ═══ */
+    #ai-suggestions {
+      display: none;
+      border-top: .5px solid var(--border);
+      margin-top: auto;
+      flex-shrink: 0;
+      max-height: 200px;
+      overflow: hidden;
+      transition: max-height .3s ease;
+    }
+    #ai-suggestions.visible {
+      display: block;
+    }
+    #ai-suggestions.collapsed {
+      max-height: 34px;
+    }
+    .ai-sug-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 10px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      transition: color .15s;
+      user-select: none;
+    }
+    .ai-sug-header:hover {
+      color: var(--text-secondary);
+    }
+    /* Green accent when Resonance is expanded (not collapsed) */
+    #ai-suggestions:not(.collapsed) .ai-sug-header {
+      color: var(--accent);
+    }
+    #ai-suggestions:not(.collapsed) .ai-sug-icon {
+      opacity: 1;
+    }
+    .ai-sug-header .ai-sug-icon {
+      opacity: .7;
+      flex-shrink: 0;
+    }
+    .ai-sug-header .ai-sug-label {
+      flex: 1;
+    }
+    .ai-sug-header .ai-sug-chevron {
+      transition: transform .2s;
+      flex-shrink: 0;
+    }
+    #ai-suggestions.collapsed .ai-sug-chevron {
+      transform: rotate(-90deg);
+    }
+    .ai-sug-list {
+      padding: 0 8px 8px;
+      overflow-y: auto;
+      max-height: 160px;
+    }
+    .ai-sug-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 8px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--text-secondary);
+      transition: background .1s;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .ai-sug-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .ai-sug-item .sug-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+    }
+    .ai-sug-item .sug-add {
+      opacity: 0;
+      background: none;
+      border: none;
+      color: var(--accent);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0 2px;
+      flex-shrink: 0;
+      transition: opacity .1s;
+    }
+    .ai-sug-item:hover .sug-add {
+      opacity: 1;
+    }
+    /* AI identity accent — subtle left border glow */
+    .ai-sug-list .ai-sug-item {
+      border-left: 2px solid transparent;
+    }
+    .ai-sug-list .ai-sug-item:hover {
+      border-left-color: rgba(200, 247, 109, .3);
+    }
+
+    /* ═══ Vault Edit Modal ═══ */
+    #vault-edit-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      z-index: 10002; display: none; align-items: center; justify-content: center;
+    }
+    #vault-edit-overlay.active { display: flex; }
+    .vault-edit-modal {
+      background: var(--bg-main); border: .5px solid var(--border);
+      border-radius: 12px; padding: 20px; width: 300px;
+      box-shadow: 0 16px 48px rgba(0,0,0,.5);
+    }
+    .vault-edit-modal h3 {
+      font-size: 13px; font-weight: 600; margin-bottom: 14px; color: var(--text-primary);
+    }
+    .vault-edit-field { margin-bottom: 12px; }
+    .vault-edit-field label {
+      display: block; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+      color: var(--text-muted); margin-bottom: 4px;
+    }
+    .vault-edit-field input, .vault-edit-field textarea {
+      width: 100%; background: var(--bg-hover); border: .5px solid var(--border);
+      border-radius: 6px; padding: 7px 10px; font-size: 12px; color: var(--text-primary);
+      outline: none; font-family: inherit; resize: none;
+    }
+    .vault-edit-field input:focus, .vault-edit-field textarea:focus {
+      border-color: var(--accent);
+    }
+    .vault-edit-field textarea { height: 52px; }
+    .vault-edit-colors {
+      display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 0;
+    }
+    .vault-edit-color {
+      width: 22px; height: 22px; border-radius: 5px; cursor: pointer;
+      border: 2px solid transparent; transition: border-color .1s, transform .1s;
+    }
+    .vault-edit-color:hover { transform: scale(1.15); }
+    .vault-edit-color.selected { border-color: #fff; }
+    .vault-edit-actions {
+      display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;
+    }
   </style>
 </head>
 
@@ -1554,11 +2095,14 @@
   <div id="app">
     <div id="titlebar">
       <div class="logo-wrap">
-        <div class="logo">SOUND<span style="font-weight:800">VAULT</span></div>
+        <div class="logo" id="logo-interactive">
+          <span class="logo-half" id="logo-sound" data-mode="sounds">SOUND</span><span class="logo-sep"></span><span class="logo-half" id="logo-vault" data-mode="vault">VAULT</span>
+          <div class="logo-indicator" id="logo-indicator"></div>
+        </div>
       </div>
       <div class="search-wrap" id="search-wrap-main" style="display:flex; align-items:center; gap:12px;">
         <div id="search-input-container" style="display:flex; align-items:center; gap:6px;">
-          <div style="position:relative;">
+          <div class="search-icon-wrap" style="position:relative;">
             <svg style="position:absolute; left:10px; top:50%; transform:translateY(-50%); pointer-events:none" width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5.5" stroke="#666" stroke-width="1.5"/><line x1="11" y1="11" x2="14" y2="14" stroke="#666" stroke-width="1.5" stroke-linecap="round"/></svg>
             <input type="text" id="search-box" placeholder="search sounds..." spellcheck="false" style="width:200px">
           </div>
@@ -1571,31 +2115,55 @@
           </div>
           <div id="semantic-titlebar-words" style="display:flex; align-items:center; gap:8px;"></div>
         </div>
-        <button id="semantic-toggle" title="Toggle Semantic Search (AI)" style="background:var(--bg-hover); border:0.5px solid var(--border); color:var(--text-secondary); border-radius:6px; padding:0 8px; cursor:pointer; font-size:11px; height:28px">- AI -</button>
+        <button id="semantic-toggle" title="Toggle Semantic Search (AI)" style="background:var(--bg-hover); border:0.5px solid var(--border); color:var(--text-secondary); border-radius:6px; padding:0 7px; cursor:pointer; font-size:11px; height:28px; display:flex; align-items:center; justify-content:center;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
+            <circle cx="8" cy="4" r="1.5" fill="currentColor" stroke="none"/>
+            <circle cx="4" cy="10" r="1.5" fill="currentColor" stroke="none"/>
+            <circle cx="12" cy="10" r="1.5" fill="currentColor" stroke="none"/>
+            <line x1="8" y1="5.5" x2="4.5" y2="8.8"/>
+            <line x1="8" y1="5.5" x2="11.5" y2="8.8"/>
+            <line x1="5.5" y1="10" x2="10.5" y2="10"/>
+          </svg>
+        </button>
       </div>
     </div>
     <div id="content">
       <div id="sidebar">
-        <div id="sidebar-top-bar" style="display:flex; justify-content:space-between; align-items:center; border-bottom: .5px solid var(--border); padding-right:8px">
-          <div class="sidebar-header" id="folders-toggle" style="cursor:pointer; display:flex; align-items:center; gap:4px; padding:0; padding-left:16px">
-            <svg id="folders-chevron" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="transition:transform .2s; transform:rotate(-90deg)"><path d="M3 2l4 3-4 3"/></svg>
-            Folders
-          </div>
-          <button id="sidebar-toggle" title="Toggle sidebar" style="border-bottom:none"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"
+        <div id="sidebar-top-bar">
+          <button class="sidebar-nav-btn" id="sidebar-nav-btn" title="Switch vaults">
+            <div class="nav-dot" id="nav-dot"></div>
+            <span class="nav-label" id="nav-label">Main Vault</span>
+            <svg class="nav-chevron" width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 2l4 3-4 3"/></svg>
+          </button>
+          <button id="sidebar-toggle" title="Toggle sidebar"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"
               stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
               <path d="M10 3l-5 5 5 5" />
             </svg></button>
         </div>
         <div class="sidebar-section">
-          <div id="folder-list-container">
-            <div id="folder-list-inner">
-              <div id="folder-list"></div>
-              <button id="new-folder-btn" style="margin-bottom:10px">+ new folder</button>
+          <!-- VAULT MODE: vault list + collections -->
+          <div id="sidebar-vault-view">
+            <div class="vault-list-panel" id="vault-list-panel">
+              <div class="vault-list-inner">
+                <div class="vault-list-scroll" id="vault-list-scroll"></div>
+                <div class="vault-list-footer">
+                  <button class="vault-add-btn" id="vault-add-btn">+ new vault</button>
+                </div>
+              </div>
+            </div>
+            <div class="sidebar-header" style="margin-top:6px">Collections <button class="sidebar-header-btn"
+                id="new-col-btn-head" title="New collection">+</button></div>
+            <div id="col-list"></div>
+          </div>
+          <!-- SOUNDS MODE: folder list -->
+          <div id="sidebar-sounds-view" style="display:none">
+            <div id="folder-list-container" class="expanded">
+              <div id="folder-list-inner">
+                <div id="folder-list"></div>
+                <button id="new-folder-btn" style="margin-bottom:10px">+ new folder</button>
+              </div>
             </div>
           </div>
-          <div class="sidebar-header" style="margin-top:6px">Collections <button class="sidebar-header-btn"
-              id="new-col-btn-head" title="New collection">+</button></div>
-          <div id="col-list"></div>
         </div>
         <div class="sidebar-bottom">
           <div class="sidebar-bottom-content" style="display:flex; flex-direction:column; gap:6px">
@@ -1623,8 +2191,35 @@
                 <path d="M14 8a6 6 0 0 1-10.3 4.2M2 14v-4h4" />
               </svg></button><button class="btn-small" id="import-btn">+ Import</button></div>
         </div>
+        <div id="collect-target-bar">
+          <span class="ct-label">Collecting to</span>
+          <button class="ct-vault-btn" id="ct-vault-btn" title="Change vault">
+            <span class="ct-vault-dot" id="ct-vault-dot"></span>
+            <span class="ct-vault-name" id="ct-vault-name"></span>
+          </button>
+          <span style="color:var(--text-muted); font-size:10px">›</span>
+          <span class="ct-name" id="ct-target-name">—</span>
+          <button class="ct-change" id="ct-change-btn">change</button>
+          <button class="ct-close" id="ct-close-btn">×</button>
+        </div>
         <div id="sound-list">
           <div class="drop-zone" id="drop-zone">Drop WAV files here</div>
+        </div>
+        <div id="ai-suggestions">
+          <div class="ai-sug-header" id="ai-sug-toggle">
+            <svg class="ai-sug-icon" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round">
+              <circle cx="8" cy="4" r="1.5" fill="currentColor" stroke="none"/>
+              <circle cx="4" cy="10" r="1.5" fill="currentColor" stroke="none"/>
+              <circle cx="12" cy="10" r="1.5" fill="currentColor" stroke="none"/>
+              <line x1="8" y1="5.5" x2="4.5" y2="8.8"/>
+              <line x1="8" y1="5.5" x2="11.5" y2="8.8"/>
+              <line x1="5.5" y1="10" x2="10.5" y2="10"/>
+            </svg>
+            <span class="ai-sug-label">Resonance</span>
+            <span id="ai-sug-count" style="font-size:9px; opacity:.5"></span>
+            <svg class="ai-sug-chevron" width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 2l4 3-4 3"/></svg>
+          </div>
+          <div class="ai-sug-list" id="ai-sug-list"></div>
         </div>
       </div>
     </div>
@@ -1661,6 +2256,27 @@
   </div>
   <div class="context-menu" id="context-menu"></div>
   <div class="col-color-picker" id="col-color-picker"></div>
+  <div id="vault-edit-overlay">
+    <div class="vault-edit-modal">
+      <h3>Edit Vault</h3>
+      <div class="vault-edit-field">
+        <label>Name</label>
+        <input type="text" id="ve-name" spellcheck="false">
+      </div>
+      <div class="vault-edit-field">
+        <label>Description</label>
+        <textarea id="ve-desc" placeholder="Project intent, tonal direction, notes..." spellcheck="false"></textarea>
+      </div>
+      <div class="vault-edit-field">
+        <label>Color</label>
+        <div class="vault-edit-colors" id="ve-colors"></div>
+      </div>
+      <div class="vault-edit-actions">
+        <button class="btn-modal btn-cancel" id="ve-cancel">Cancel</button>
+        <button class="btn-modal btn-confirm" id="ve-save">Save</button>
+      </div>
+    </div>
+  </div>
   <div id="sel-toolbar-global">
     <button class="sel-btn" id="gtb-edit" title="Open editor"><svg viewBox="0 0 16 16" fill="none">
         <circle cx="4.5" cy="11.5" r="2.5" stroke="currentColor" stroke-width="1.3"/>
@@ -1769,11 +2385,15 @@
     </div>
   </div>
 
+  <div id="collect-toast"></div>
+
   <script>
     let currentFolder = null, currentCollection = null, sounds = [], currentSound = null, isPlaying = false, playOffset = 0, playStartTime = 0, playEndTime = Infinity, animFrameId = null, volume = .8, contextMenuTarget = null, searchMode = false;
     let audioContext = null, gainNode = null, audioSource = null, audioBuffer = null;
     const bufferCache = new Map, peakCache = new Map;
     let selection = null;
+    let sidebarMode = 'vault'; // 'vault' = show collections, 'sounds' = show folders
+    let activeVaultData = null; // { id, name, color }
 
     function getCtx() { if (!audioContext) { audioContext = new AudioContext; gainNode = audioContext.createGain(); gainNode.gain.value = volume; gainNode.connect(audioContext.destination) } if (audioContext.state === 'suspended') audioContext.resume(); return audioContext }
     // Decode without requiring AudioContext to be resumed — use a fresh context for decoding if needed
@@ -1909,9 +2529,9 @@
 
     // Folders + Collections
     async function loadFolders() { const fs = await window.api.getFolders(); const l = document.getElementById('folder-list'); l.innerHTML = ''; for (const f of fs) { const d = document.createElement('div'); d.className = 'folder-item' + (f.name === currentFolder && !currentCollection ? ' active' : ''); d.innerHTML = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h4l2 2h6v7H2V4z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg><span>${f.name}</span><span class="item-count">${f.count}</span><span class="item-actions"><button class="item-action-btn" data-a="ren">✎</button><button class="item-action-btn" data-a="del">✕</button></span>`; d.addEventListener('click', e => { if (!e.target.closest('.item-action-btn')) selectFolder(f.name) }); d.querySelector('[data-a="ren"]').addEventListener('click', e => { e.stopPropagation(); showModal('Rename', f.name, 'Rename', async n => { await window.api.renameFolder(f.name, n); if (currentFolder === f.name) currentFolder = n; await loadFolders(); await loadSounds() }) }); d.querySelector('[data-a="del"]').addEventListener('click', e => { e.stopPropagation(); deleteFolder(f.name) }); l.appendChild(d) } }
-    async function loadCollections() { const cols = await window.api.getCollections(); const l = document.getElementById('col-list'); l.innerHTML = ''; const colors = cols.__colors || {}; for (const name of Object.keys(cols).filter(k => k !== '__colors').sort()) { const cnt = cols[name].length; const col = colors[name] || ''; const d = document.createElement('div'); d.className = 'col-item' + (name === currentCollection ? ' active' : ''); d.innerHTML = `<div class="col-color-dot" style="background:${col || 'var(--bg-hover)'}" data-col-name="${name}"></div><span>${name}</span><span class="item-count">${cnt}</span><span class="item-actions"><button class="item-action-btn" data-a="ren">✎</button><button class="item-action-btn" data-a="del">✕</button></span>`; d.addEventListener('click', e => { if (!e.target.closest('.item-action-btn') && !e.target.closest('.col-color-dot')) selectCollection(name) }); d.querySelector('.col-color-dot').addEventListener('click', e => { e.stopPropagation(); showColColorPicker(e, name, col) }); d.querySelector('[data-a="ren"]').addEventListener('click', e => { e.stopPropagation(); showModal('Rename', name, 'Rename', async n => { await window.api.renameCollection(name, n); if (currentCollection === name) currentCollection = n; await loadCollections(); await loadCollectionSounds() }) }); d.querySelector('[data-a="del"]').addEventListener('click', async e => { e.stopPropagation(); await window.api.deleteCollection(name); if (currentCollection === name) { currentCollection = null; document.getElementById('current-folder-name').textContent = 'Select a folder' } await loadCollections() }); l.appendChild(d) } }
-    async function selectFolder(n) { currentFolder = n; currentCollection = null; searchMode = false; document.getElementById('search-box').value = ''; document.getElementById('current-folder-name').textContent = n; document.getElementById('add-col-btn').style.display = ''; await loadFolders(); await loadCollections(); await loadSounds() }
-    async function selectCollection(n) { currentCollection = n; currentFolder = null; searchMode = false; document.getElementById('search-box').value = ''; document.getElementById('current-folder-name').textContent = '⬡ ' + n; document.getElementById('add-col-btn').style.display = 'none'; await loadFolders(); await loadCollections(); await loadCollectionSounds() }
+    async function loadCollections() { const cols = await window.api.getCollections(); const l = document.getElementById('col-list'); l.innerHTML = ''; const colors = cols.__colors || {}; for (const name of Object.keys(cols).filter(k => k !== '__colors').sort()) { const cnt = cols[name].length; const col = colors[name] || ''; const d = document.createElement('div'); d.className = 'col-item' + (name === currentCollection ? ' active' : ''); d.innerHTML = `<div class="col-color-dot" style="background:${col || 'var(--bg-hover)'}" data-col-name="${name}"></div><span>${name}</span><span class="item-count">${cnt}</span><span class="item-actions"><button class="item-action-btn" data-a="ren">✎</button><button class="item-action-btn" data-a="del">✕</button></span>`; d.addEventListener('click', e => { if (!e.target.closest('.item-action-btn') && !e.target.closest('.col-color-dot')) selectCollection(name) }); d.querySelector('.col-color-dot').addEventListener('click', e => { e.stopPropagation(); showColColorPicker(e, name, col) }); d.querySelector('[data-a="ren"]').addEventListener('click', e => { e.stopPropagation(); showModal('Rename', name, 'Rename', async n => { await window.api.renameCollection(name, n); if (currentCollection === name) currentCollection = n; await loadCollections(); await loadCollectionSounds() }) }); d.querySelector('[data-a="del"]').addEventListener('click', async e => { e.stopPropagation(); if (!confirm(`Delete collection "${name}"?\nSound files will not be affected.`)) return; await window.api.deleteCollection(name); if (currentCollection === name) { currentCollection = null; document.getElementById('current-folder-name').textContent = 'Select a folder' } await loadCollections() }); l.appendChild(d) } }
+    async function selectFolder(n) { currentFolder = n; currentCollection = null; searchMode = false; document.getElementById('search-box').value = ''; document.getElementById('current-folder-name').textContent = n; document.getElementById('add-col-btn').style.display = ''; await loadFolders(); await loadSounds() }
+    async function selectCollection(n) { currentCollection = n; currentFolder = null; searchMode = false; document.getElementById('search-box').value = ''; document.getElementById('current-folder-name').textContent = '⬡ ' + n; document.getElementById('add-col-btn').style.display = 'none'; await loadCollections(); await loadCollectionSounds() }
     async function loadSounds() { if (!currentFolder) return; sounds = await window.api.getSounds(currentFolder); renderSounds(sounds) }
     async function loadCollectionSounds() { if (!currentCollection) return; sounds = await window.api.getCollectionSounds(currentCollection); renderSounds(sounds) }
     async function deleteFolder(n) { if (await window.api.deleteFolder(n)) { if (currentFolder === n) { currentFolder = null; document.getElementById('current-folder-name').textContent = 'Select a folder'; document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>' } await loadFolders() } }
@@ -2088,9 +2708,9 @@
     // Context menu
     async function showCtx(x, y, sound) {
       contextMenuTarget = sound; const m = document.getElementById('context-menu');
-      const cols = await window.api.getCollections(); const colNames = Object.keys(cols).filter(k => k !== '__colors').sort();
+      const cols = await window.api.getCollections(); const colNames = Object.keys(cols).filter(k => k !== '__colors').sort(); const colColors = cols.__colors || {};
       let html = `<div class="context-menu-item" id="ctx-reveal">Show in Explorer</div><div class="context-menu-item" id="ctx-move">Move to folder...</div>`;
-      if (colNames.length) { html += `<div class="context-menu-sub">Add to collection ▸<div class="sub-menu">${colNames.map(n => `<div class="sub-menu-item" data-col="${n}">${n}</div>`).join('')}</div></div>` }
+      if (colNames.length) { html += `<div class="context-menu-sub">Add to collection ▸<div class="sub-menu">${colNames.map(n => `<div class="sub-menu-item" data-col="${n}"><span style="display:inline-block;width:7px;height:7px;border-radius:3px;margin-right:6px;background:${colColors[n] || 'var(--bg-hover)'};border:.5px solid rgba(255,255,255,.15)"></span>${n}</div>`).join('')}</div></div>` }
       html += `<div class="context-menu-sep"></div>`;
       if (currentCollection) { html += `<div class="context-menu-item" id="ctx-remove-col">Remove from collection</div>` }
       html += `<div class="context-menu-item danger" id="ctx-delete">Delete file</div>`;
@@ -2103,23 +2723,243 @@
     }
     document.addEventListener('click', e => { if (!e.target.closest('.context-menu')) document.getElementById('context-menu').classList.remove('active') });
 
-    // Sidebar toggle
-    document.getElementById('sidebar-toggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('collapsed'));
+    // Sidebar toggle — suppress scrollbar during transition
+    document.getElementById('sidebar-toggle').addEventListener('click', () => {
+      const sb = document.getElementById('sidebar');
+      sb.classList.add('transitioning');
+      sb.classList.toggle('collapsed');
+      setTimeout(() => sb.classList.remove('transitioning'), 280);
+    });
     
-    // Folders section toggle (collapsed by default with animation)
-    document.getElementById('folders-toggle').addEventListener('click', () => {
-      const fc = document.getElementById('folder-list-container');
-      const ch = document.getElementById('folders-chevron');
-      const isExpanded = fc.classList.contains('expanded');
+    // ═══ Logo-Driven Mode Switching ═══
+    function updateLogoVisuals(mode) {
+      const snd = document.getElementById('logo-sound');
+      const vlt = document.getElementById('logo-vault');
+      const ind = document.getElementById('logo-indicator');
       
-      if (isExpanded) {
-        fc.classList.remove('expanded');
-        ch.style.transform = 'rotate(-90deg)';
+      if (mode === 'sounds') {
+        snd.classList.add('active'); snd.classList.remove('dim');
+        snd.style.color = 'var(--accent)';
+        vlt.classList.remove('active'); vlt.classList.add('dim');
+        vlt.style.color = '';
+        requestAnimationFrame(() => {
+          ind.style.left = snd.offsetLeft + 'px';
+          ind.style.width = snd.offsetWidth + 'px';
+          ind.style.background = 'var(--accent)';
+        });
       } else {
-        fc.classList.add('expanded');
-        ch.style.transform = 'rotate(0deg)';
+        vlt.classList.add('active'); vlt.classList.remove('dim');
+        vlt.style.color = activeVaultData ? activeVaultData.color : 'var(--accent)';
+        snd.classList.remove('active'); snd.classList.add('dim');
+        snd.style.color = '';
+        requestAnimationFrame(() => {
+          ind.style.left = vlt.offsetLeft + 'px';
+          ind.style.width = vlt.offsetWidth + 'px';
+          ind.style.background = activeVaultData ? activeVaultData.color : 'var(--accent)';
+        });
+      }
+    }
+    
+    // Update the sidebar nav button to reflect current mode
+    function updateNavBtn() {
+      const dot = document.getElementById('nav-dot');
+      const label = document.getElementById('nav-label');
+      if (sidebarMode === 'vault' && activeVaultData) {
+        dot.style.background = activeVaultData.color;
+        label.textContent = activeVaultData.name;
+      } else {
+        dot.style.background = 'var(--accent)';
+        label.textContent = 'Folders';
+      }
+    }
+    
+    function setSidebarMode(mode) {
+      sidebarMode = mode;
+      document.getElementById('sidebar-vault-view').style.display = mode === 'vault' ? '' : 'none';
+      document.getElementById('sidebar-sounds-view').style.display = mode === 'sounds' ? '' : 'none';
+      document.getElementById('search-box').placeholder = mode === 'vault' ? 'search vault...' : 'search sounds...';
+      // Close vault list when switching modes
+      vaultListOpen = false;
+      document.getElementById('vault-list-panel').classList.remove('expanded');
+      document.getElementById('sidebar-nav-btn').classList.remove('open');
+      updateLogoVisuals(mode);
+      updateNavBtn();
+    }
+    
+    document.getElementById('logo-sound').addEventListener('click', async () => {
+      if (sidebarMode === 'sounds') return;
+      setSidebarMode('sounds');
+      currentCollection = null;
+      await loadFolders();
+      if (!currentFolder) {
+        const f = await window.api.getFolders();
+        if (f.length) await selectFolder(f[0].name);
+        else {
+          document.getElementById('current-folder-name').textContent = 'Select a folder';
+          document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>';
+          document.getElementById('sound-count').textContent = '';
+        }
       }
     });
+    
+    document.getElementById('logo-vault').addEventListener('click', () => {
+      if (sidebarMode === 'vault') return;
+      setSidebarMode('vault');
+      currentFolder = null;
+      if (!currentCollection) {
+        document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
+        document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>';
+        document.getElementById('sound-count').textContent = '';
+      }
+    });
+
+    // ═══ Sidebar Nav Button (unified vault/folders toggle) ═══
+    let vaultListOpen = false;
+    
+    document.getElementById('sidebar-nav-btn').addEventListener('click', () => {
+      if (sidebarMode === 'vault') {
+        // Toggle vault list
+        vaultListOpen = !vaultListOpen;
+        document.getElementById('vault-list-panel').classList.toggle('expanded', vaultListOpen);
+        document.getElementById('sidebar-nav-btn').classList.toggle('open', vaultListOpen);
+        if (vaultListOpen) renderVaultList();
+      } else {
+        // Toggle folder list
+        document.getElementById('folder-list-container').classList.toggle('expanded');
+        document.getElementById('sidebar-nav-btn').classList.toggle('open');
+      }
+    });
+
+    async function loadVaultSwitcher() {
+      const data = await window.api.getVaults();
+      const active = data.vaults.find(v => v.id === data.activeVaultId);
+      activeVaultData = active || data.vaults[0];
+      updateNavBtn();
+      updateLogoVisuals(sidebarMode);
+    }
+
+    async function renderVaultList() {
+      const data = await window.api.getVaults();
+      const list = document.getElementById('vault-list-scroll');
+      list.innerHTML = '';
+      for (const v of data.vaults) {
+        const isActive = v.id === data.activeVaultId;
+        const d = document.createElement('div');
+        d.className = 'vault-list-item' + (isActive ? ' active' : '');
+        const descHtml = v.description ? `<div class="vl-desc">${v.description}</div>` : '';
+        d.innerHTML = `<div class="vl-dot" style="background:${v.color}" data-vid="${v.id}"></div>
+          <div class="vl-info">
+            <div class="vl-name">${v.name}</div>
+            ${descHtml}
+          </div>
+          <span class="vl-count">${v.collectionCount}</span>
+          <span class="vl-actions">
+            <button class="vl-action-btn" data-a="edit" title="Edit vault">✎</button>
+            <button class="vl-action-btn danger" data-a="del" title="Delete">✕</button>
+          </span>`;
+        
+        d.addEventListener('click', async e => {
+          if (e.target.closest('.vl-action-btn') || e.target.closest('.vl-dot')) return;
+          if (isActive) return;
+          await window.api.switchVault(v.id);
+          vaultListOpen = false;
+          document.getElementById('vault-list-panel').classList.remove('expanded');
+          document.getElementById('sidebar-nav-btn').classList.remove('open');
+          await onVaultSwitched();
+        });
+        
+        d.querySelector('.vl-dot').addEventListener('click', e => {
+          e.stopPropagation();
+          openVaultEditModal(v);
+        });
+        d.querySelector('[data-a="edit"]')?.addEventListener('click', e => {
+          e.stopPropagation();
+          openVaultEditModal(v);
+        });
+        d.querySelector('[data-a="del"]')?.addEventListener('click', async e => {
+          e.stopPropagation();
+          if (data.vaults.length <= 1) return;
+          const ok = confirm(`Delete vault "${v.name}"?\nCollections will be removed. Sound files are never deleted.`);
+          if (!ok) return;
+          await window.api.deleteVault(v.id);
+          if (v.id === data.activeVaultId) await onVaultSwitched();
+          else renderVaultList();
+        });
+        list.appendChild(d);
+      }
+    }
+
+    // ═══ Vault Edit Modal ═══
+    const VAULT_PALETTE = ['#c8f76d','#f76d6d','#6db4f7','#f7c36d','#c46df7','#6df7d8','#f76dbb','#f79e6d','#6d8af7','#a8f76d','#f76d8e','#6df7a8'];
+    let editingVaultId = null;
+    function openVaultEditModal(v) {
+      editingVaultId = v.id;
+      document.getElementById('ve-name').value = v.name;
+      document.getElementById('ve-desc').value = v.description || '';
+      // Render color swatches
+      const cc = document.getElementById('ve-colors');
+      cc.innerHTML = VAULT_PALETTE.map(c =>
+        `<div class="vault-edit-color${c === v.color ? ' selected' : ''}" style="background:${c}" data-color="${c}"></div>`
+      ).join('');
+      cc.querySelectorAll('.vault-edit-color').forEach(sw => {
+        sw.addEventListener('click', () => {
+          cc.querySelectorAll('.vault-edit-color').forEach(s => s.classList.remove('selected'));
+          sw.classList.add('selected');
+        });
+      });
+      document.getElementById('vault-edit-overlay').classList.add('active');
+      setTimeout(() => document.getElementById('ve-name').focus(), 50);
+    }
+    document.getElementById('ve-cancel').addEventListener('click', () => {
+      document.getElementById('vault-edit-overlay').classList.remove('active');
+      editingVaultId = null;
+    });
+    document.getElementById('ve-save').addEventListener('click', async () => {
+      if (!editingVaultId) return;
+      const name = document.getElementById('ve-name').value.trim();
+      const desc = document.getElementById('ve-desc').value.trim();
+      const selColor = document.getElementById('ve-colors').querySelector('.selected');
+      const color = selColor ? selColor.dataset.color : null;
+      if (name) await window.api.renameVault(editingVaultId, name);
+      await window.api.setVaultDescription(editingVaultId, desc);
+      if (color) await window.api.setVaultColor(editingVaultId, color);
+      document.getElementById('vault-edit-overlay').classList.remove('active');
+      editingVaultId = null;
+      await loadVaultSwitcher();
+      renderVaultList();
+    });
+    document.getElementById('vault-edit-overlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('vault-edit-overlay')) {
+        document.getElementById('vault-edit-overlay').classList.remove('active');
+        editingVaultId = null;
+      }
+    });
+
+    document.getElementById('vault-add-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      showModal('New Vault', 'Project name...', 'Create', async name => {
+        const id = await window.api.createVault(name, '#c8f76d');
+        await window.api.switchVault(id);
+        vaultListOpen = false;
+        document.getElementById('vault-list-panel').classList.remove('expanded');
+        document.getElementById('sidebar-nav-btn').classList.remove('open');
+        await onVaultSwitched();
+      });
+    });
+
+    async function onVaultSwitched() {
+      await loadVaultSwitcher();
+      currentCollection = null;
+      currentFolder = null;
+      searchMode = false;
+      document.getElementById('search-box').value = '';
+      setSidebarMode('vault');
+      await loadCollections();
+      document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
+      document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>';
+      document.getElementById('sound-count').textContent = '';
+      document.getElementById('add-col-btn').style.display = 'none';
+    }
 
     // Smart Resize for Waveforms
     let resizeIdx = null;
@@ -2140,8 +2980,21 @@
       const container = document.getElementById('list-modal-items');
       container.innerHTML = '';
       items.forEach(item => {
-        const d = document.createElement('div'); d.className = 'list-modal-item'; d.textContent = item;
-        d.addEventListener('click', () => { o.classList.remove('active'); cb(item) });
+        const d = document.createElement('div'); d.className = 'list-modal-item';
+        // Support objects with { label, color } or plain strings
+        if (typeof item === 'object' && item.label) {
+          if (item.color) {
+            const dot = document.createElement('span');
+            dot.style.cssText = 'width:8px;height:8px;border-radius:3px;flex-shrink:0;display:inline-block;margin-right:8px;vertical-align:middle;border:.5px solid rgba(255,255,255,.15);';
+            dot.style.background = item.color;
+            d.appendChild(dot);
+          }
+          d.appendChild(document.createTextNode(item.label));
+          d.addEventListener('click', () => { o.classList.remove('active'); cb(item.label) });
+        } else {
+          d.textContent = item;
+          d.addEventListener('click', () => { o.classList.remove('active'); cb(item) });
+        }
         container.appendChild(d);
       });
       o.classList.add('active');
@@ -2155,13 +3008,15 @@
     document.getElementById('add-col-btn').addEventListener('click', async () => {
       if (!currentSound) return;
       const cols = await window.api.getCollections();
+      const colors = cols.__colors || {};
       const names = Object.keys(cols).filter(k => k !== '__colors').sort();
       if (!names.length) {
         showModal('New Collection', 'Name...', 'Create', async n => { await window.api.createCollection(n); await window.api.addToCollection(n, currentSound.path); await loadCollections() });
         return;
       }
-      // Show list with existing collections + option to create new
-      showListModal('Add to collection', [...names, '＋ New collection...'], async t => {
+      const items = names.map(n => ({ label: n, color: colors[n] || '' }));
+      items.push('＋ New collection...');
+      showListModal('Add to collection', items, async t => {
         if (!t) return;
         if (t === '＋ New collection...') { showModal('New Collection', 'Name...', 'Create', async n => { await window.api.createCollection(n); await window.api.addToCollection(n, currentSound.path); await loadCollections() }); return }
         await window.api.addToCollection(t, currentSound.path); await loadCollections();
@@ -2222,22 +3077,36 @@
         if (!q.trim()) { 
             updateSearchUIState(true);
             searchMode = false; 
-            if (currentCollection) await loadCollectionSounds(); 
-            else if (currentFolder) { 
+            if (sidebarMode === 'vault' && currentCollection) await loadCollectionSounds();
+            else if (sidebarMode === 'sounds' && currentFolder) { 
                 document.getElementById('current-folder-name').textContent = currentFolder; 
                 await loadSounds();
-            } 
+            } else if (sidebarMode === 'vault' && !currentCollection) {
+                // In vault mode with no collection selected, search all vault sounds
+                document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
+                document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>';
+                document.getElementById('sound-count').textContent = '';
+            }
             return; 
         } 
         searchMode = true; 
         wfQ = []; 
-        document.getElementById('current-folder-name').textContent = (useSemanticSearch ? 'AI Search: "' : 'Search: "') + q + '"'; 
-        
-        if (!isWeightUpdate) currentTermWeights = {};
         
         if (useSemanticSearch) {
+            document.getElementById('current-folder-name').textContent = 'AI Search: "' + q + '"';
+            if (!isWeightUpdate) currentTermWeights = {};
             const res = await window.api.semanticSearch(q, Object.keys(currentTermWeights).length ? currentTermWeights : null);
-            sounds = res.results || [];
+            let results = res.results || [];
+            
+            // In vault mode, filter results to only sounds in the active vault's collections
+            if (sidebarMode === 'vault') {
+                const cols = await window.api.getCollections();
+                const vaultPaths = new Set();
+                for (const k of Object.keys(cols)) { if (k !== '__colors') for (const p of cols[k]) vaultPaths.add(p); }
+                if (vaultPaths.size > 0) results = results.filter(r => vaultPaths.has(r.path));
+            }
+            
+            sounds = results;
             if (!isWeightUpdate) {
                if (res.words?.length > 1) {
                    renderSemanticTitlebar(res.words);
@@ -2247,8 +3116,20 @@
                }
             }
         } else {
+            document.getElementById('current-folder-name').textContent = 'Search: "' + q + '"';
             updateSearchUIState(true);
-            sounds = await window.api.searchAllSounds(q); 
+            
+            if (sidebarMode === 'vault') {
+                // In vault mode: search within all sounds referenced by this vault's collections
+                const cols = await window.api.getCollections();
+                const vaultPaths = new Set();
+                for (const k of Object.keys(cols)) { if (k !== '__colors') for (const p of cols[k]) vaultPaths.add(p); }
+                const allSounds = await window.api.searchAllSounds(q);
+                if (vaultPaths.size > 0) sounds = allSounds.filter(s => vaultPaths.has(s.path));
+                else sounds = []; // empty vault, no results
+            } else {
+                sounds = await window.api.searchAllSounds(q); 
+            }
         }
         renderSounds(sounds); 
     }
@@ -2309,9 +3190,17 @@
     }
     
     // Semantic Search UI Bindings
+    // AI icon tilt — rotates 45° when activated, returns when deactivated
+    function setAiIconState(container, active) {
+      container.classList.remove('ai-icon-active', 'ai-icon-inactive');
+      if (active) container.classList.add('ai-icon-active');
+      else container.classList.add('ai-icon-inactive');
+    }
+
     document.getElementById('semantic-toggle').addEventListener('click', e => {
         useSemanticSearch = !useSemanticSearch;
         const sBtn = document.getElementById('semantic-toggle');
+        setAiIconState(sBtn, useSemanticSearch);
         sBtn.style.borderColor = useSemanticSearch ? 'var(--accent)' : 'var(--border)';
         sBtn.style.color = useSemanticSearch ? 'var(--accent)' : 'var(--text-secondary)';
         sBtn.style.background = useSemanticSearch ? 'var(--accent-dim)' : 'var(--bg-hover)';
@@ -2361,7 +3250,7 @@
     }, 2500);
 
     // Settings
-    document.getElementById('settings-btn').addEventListener('click', async () => { const p = await window.api.setLibraryPath(); if (p) { bufferCache.clear(); peakCache.clear(); selection = null; currentFolder = null; currentCollection = null; await loadFolders(); await loadCollections() } });
+    document.getElementById('settings-btn').addEventListener('click', async () => { const p = await window.api.setLibraryPath(); if (p) { bufferCache.clear(); peakCache.clear(); selection = null; currentFolder = null; currentCollection = null; await loadVaultSwitcher(); await loadFolders(); await loadCollections() } });
 
     // Click outside deselects
     document.getElementById('sound-list').addEventListener('click', e => { if (!e.target.closest('.sound-item')) clearSelection() });
@@ -3134,8 +4023,164 @@
     }
     document.addEventListener('click', e => { if (!e.target.closest('.col-color-picker') && !e.target.closest('.col-color-dot')) document.getElementById('col-color-picker').classList.remove('active') });
 
+    // ═══ Quick-Collect — fast add to collection from any mode ═══
+    let collectTarget = null; // { vaultId, vaultName, vaultColor, collection }
+
+    function showCollectToast(name) {
+      const t = document.getElementById('collect-toast');
+      t.textContent = '+ ' + name;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1200);
+    }
+
+    function updateCollectBar() {
+      const bar = document.getElementById('collect-target-bar');
+      if (collectTarget) {
+        document.getElementById('ct-target-name').textContent = collectTarget.collection;
+        document.getElementById('ct-vault-dot').style.background = collectTarget.vaultColor || 'var(--accent)';
+        document.getElementById('ct-vault-name').textContent = activeVaultData ? activeVaultData.name : 'Vault';
+        bar.classList.add('visible');
+      } else {
+        bar.classList.remove('visible');
+      }
+    }
+
+    async function openCollectPicker(soundPath) {
+      const cols = await window.api.getCollections();
+      const colors = cols.__colors || {};
+      const names = Object.keys(cols).filter(k => k !== '__colors').sort();
+      if (!names.length) {
+        showModal('New Collection', 'Name...', 'Create', async n => {
+          await window.api.createCollection(n);
+          collectTarget = { collection: n, vaultColor: activeVaultData?.color };
+          updateCollectBar();
+          if (soundPath) {
+            await window.api.addToCollection(n, soundPath);
+            showCollectToast('Collection created');
+          }
+        });
+        return;
+      }
+      const items = names.map(n => ({ label: n, color: colors[n] || '' }));
+      items.push('＋ New collection...');
+      showListModal('Collect to', items, async picked => {
+        if (!picked) return;
+        if (picked === '＋ New collection...') {
+          showModal('New Collection', 'Name...', 'Create', async n => {
+            await window.api.createCollection(n);
+            collectTarget = { collection: n, vaultColor: activeVaultData?.color };
+            updateCollectBar();
+            if (soundPath) {
+              await window.api.addToCollection(n, soundPath);
+              showCollectToast('Collection created');
+            }
+          });
+          return;
+        }
+        collectTarget = { collection: picked, vaultColor: activeVaultData?.color };
+        updateCollectBar();
+        if (soundPath) {
+          await window.api.addToCollection(picked, soundPath);
+          showCollectToast(soundPath.split(/[/\\]/).pop().replace(/\.wav$/i, ''));
+        }
+      });
+    }
+
+    document.getElementById('ct-change-btn').addEventListener('click', () => openCollectPicker(null));
+    document.getElementById('ct-close-btn').addEventListener('click', () => {
+      collectTarget = null;
+      updateCollectBar();
+    });
+    // Vault selector in collect bar — switch vault for collecting
+    document.getElementById('ct-vault-btn').addEventListener('click', async () => {
+      const data = await window.api.getVaults();
+      const items = data.vaults.map(v => ({ label: v.name, color: v.color }));
+      showListModal('Select vault', items, async picked => {
+        if (!picked) return;
+        const vault = data.vaults.find(v => v.name === picked);
+        if (vault && vault.id !== data.activeVaultId) {
+          await window.api.switchVault(vault.id);
+          await onVaultSwitched();
+        }
+        // Reset collect target since vault changed
+        collectTarget = null;
+        updateCollectBar();
+        openCollectPicker(null);
+      });
+    });
+
+    // ═══ AI Suggestions — "Resonance" ═══
+    let sugCollapsed = true;
+    document.getElementById('ai-sug-toggle').addEventListener('click', () => {
+      sugCollapsed = !sugCollapsed;
+      document.getElementById('ai-suggestions').classList.toggle('collapsed', sugCollapsed);
+      setAiIconState(document.getElementById('ai-sug-toggle'), !sugCollapsed);
+    });
+
+    async function loadSuggestions() {
+      const panel = document.getElementById('ai-suggestions');
+      const list = document.getElementById('ai-sug-list');
+      const countEl = document.getElementById('ai-sug-count');
+      
+      if (!currentCollection || sidebarMode !== 'vault') {
+        panel.classList.remove('visible');
+        return;
+      }
+      
+      const ready = await window.api.semanticIsReady();
+      if (!ready) { panel.classList.remove('visible'); return; }
+      
+      try {
+        const suggestions = await window.api.semanticSuggest(currentCollection);
+        if (!suggestions || !suggestions.length) { panel.classList.remove('visible'); return; }
+        
+        list.innerHTML = '';
+        for (const s of suggestions) {
+          const d = document.createElement('div');
+          d.className = 'ai-sug-item';
+          const nm = s.name.replace(/\.wav$/i, '');
+          d.innerHTML = `<span class="sug-name" title="${nm}">${nm}</span><button class="sug-add" title="Add to ${currentCollection}">+</button>`;
+          d.addEventListener('click', e => { if (e.target.closest('.sug-add')) return; playSoundItem(s); });
+          d.querySelector('.sug-add').addEventListener('click', async e => {
+            e.stopPropagation();
+            await window.api.addToCollection(currentCollection, s.path);
+            await loadCollections();
+            await loadCollectionSounds();
+          });
+          list.appendChild(d);
+        }
+        countEl.textContent = suggestions.length;
+        panel.classList.add('visible');
+        // Auto-open only if collection has few sounds
+        const colCount = sounds ? sounds.length : 0;
+        if (colCount < 6) sugCollapsed = false;
+        panel.classList.toggle('collapsed', sugCollapsed);
+      } catch(e) { panel.classList.remove('visible'); }
+    }
+
+    // Trigger suggestions after collection loads
+    const _origSelectCollection = selectCollection;
+    selectCollection = async function(n) {
+      await _origSelectCollection(n);
+      setTimeout(loadSuggestions, 150);
+    };
+
+    // Also hide suggestions when leaving collection view
+    const _origSelectFolder = selectFolder;
+    selectFolder = async function(n) {
+      document.getElementById('ai-suggestions').classList.remove('visible');
+      await _origSelectFolder(n);
+    };
+
     // Init
-    async function init() { await loadFolders(); await loadCollections(); const f = await window.api.getFolders(); if (f.length) await selectFolder(f[0].name) }
+    async function init() { 
+      await loadVaultSwitcher();
+      await loadFolders();
+      await loadCollections();
+      // Start in vault mode — show collections of active vault
+      setSidebarMode('vault');
+      document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
+    }
     init();
   </script>
 </body>

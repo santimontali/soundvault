@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('api', {
   createNewAudioVersion: d=>ipcRenderer.invoke('create-new-audio-version',d),
   startDrag: fp=>ipcRenderer.send('ondragstart',fp),
   revealInFinder: p=>ipcRenderer.invoke('reveal-in-finder',p),
-  // Collections
+  // Collections (now scoped to active Vault)
   getCollections: ()=>ipcRenderer.invoke('get-collections'),
   createCollection: n=>ipcRenderer.invoke('create-collection',n),
   deleteCollection: n=>ipcRenderer.invoke('delete-collection',n),
@@ -27,10 +27,19 @@ contextBridge.exposeInMainWorld('api', {
   removeFromCollection: (n,p)=>ipcRenderer.invoke('remove-from-collection',n,p),
   getCollectionSounds: n=>ipcRenderer.invoke('get-collection-sounds',n),
   setCollectionColor: (n,c)=>ipcRenderer.invoke('set-collection-color',n,c),
-  
+  // Vaults
+  getVaults: ()=>ipcRenderer.invoke('get-vaults'),
+  createVault: (n,c)=>ipcRenderer.invoke('create-vault',n,c),
+  switchVault: id=>ipcRenderer.invoke('switch-vault',id),
+  renameVault: (id,n)=>ipcRenderer.invoke('rename-vault',id,n),
+  setVaultColor: (id,c)=>ipcRenderer.invoke('set-vault-color',id,c),
+  deleteVault: id=>ipcRenderer.invoke('delete-vault',id),
+  duplicateVault: id=>ipcRenderer.invoke('duplicate-vault',id),
+  setVaultDescription: (id,d)=>ipcRenderer.invoke('set-vault-description',id,d),
   // Semantic Search
   semanticIsReady: ()=>ipcRenderer.invoke('semantic-is-ready'),
   semanticGetProgress: ()=>ipcRenderer.invoke('semantic-get-progress'),
   semanticStartIndex: ()=>ipcRenderer.invoke('semantic-start-indexing'),
   semanticSearch: (q, w)=>ipcRenderer.invoke('semantic-search', q, w),
+  semanticSuggest: n=>ipcRenderer.invoke('semantic-suggest', n),
 });

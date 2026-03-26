@@ -316,6 +316,59 @@ class SemanticEngine {
 
         return { results, words: words.length > 1 ? words : [] };
     }
+
+    // ── Collection Centroid Suggestions ────────────────────────────────
+    // Given a list of file paths, computes the centroid of their embeddings
+    // and returns the top-N closest sounds NOT in the input list.
+    suggestForCollection(collectionPaths, topK = 12) {
+        if (!this.isReady || this._count === 0 || !collectionPaths.length) return [];
+
+        const t0 = Date.now();
+        // Build a Set of collection paths for fast lookup
+        const colSet = new Set(collectionPaths);
+        
+        // Find indices of collection members in the cache
+        const memberIndices = [];
+        for (let i = 0; i < this._count; i++) {
+            if (colSet.has(this._paths[i])) memberIndices.push(i);
+        }
+        if (memberIndices.length === 0) return [];
+
+        // Compute centroid vector (average of all member embeddings)
+        const centroid = new Float32Array(DIM);
+        for (const idx of memberIndices) {
+            const offset = idx * DIM;
+            for (let d = 0; d < DIM; d++) centroid[d] += this._matrix[offset + d];
+        }
+        const n = memberIndices.length;
+        for (let d = 0; d < DIM; d++) centroid[d] /= n;
+
+        // L2-normalize the centroid
+        let sumSq = 0;
+        for (let d = 0; d < DIM; d++) sumSq += centroid[d] * centroid[d];
+        const mag = Math.sqrt(sumSq);
+        if (mag > 0) for (let d = 0; d < DIM; d++) centroid[d] /= mag;
+
+        // Dot product against all vectors, excluding collection members
+        const pairs = [];
+        for (let i = 0; i < this._count; i++) {
+            if (colSet.has(this._paths[i])) continue;
+            const offset = i * DIM;
+            let dot = 0;
+            for (let d = 0; d < DIM; d++) dot += centroid[d] * this._matrix[offset + d];
+            pairs.push({ idx: i, score: dot });
+        }
+
+        pairs.sort((a, b) => b.score - a.score);
+        const k = Math.min(topK, pairs.length);
+        const results = new Array(k);
+        for (let i = 0; i < k; i++) {
+            results[i] = { path: this._paths[pairs[i].idx], score: pairs[i].score };
+        }
+
+        console.log(`[SemanticEngine] Suggest: ${memberIndices.length} members → ${k} suggestions in ${Date.now() - t0}ms`);
+        return results;
+    }
 }
 
 module.exports = new SemanticEngine();

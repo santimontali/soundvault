@@ -63,13 +63,77 @@ function crc32(buf) {
   return (crc ^ 0xFFFFFFFF) | 0;
 }
 
-// ═══ Collections — stored in a JSON file inside the library ═══
-function getCollectionsPath() { return path.join(getConfig().libraryPath, '.soundvault-collections.json'); }
-function loadCollections() {
-  try { const p = getCollectionsPath(); if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p,'utf-8')); } catch(e){}
-  return {}; // { "Collection Name": ["path1", "path2", ...] }
+// ═══ Vaults System ═══
+// Vaults are curatorial layers over the shared library. Each vault has its own collections.
+// The library (libraryPath) is shared — vaults only differ in which collections they hold.
+const VAULTS_PATH = path.join(app.getPath('userData'), 'soundvault-vaults.json');
+
+function loadVaultsData() {
+  try { if (fs.existsSync(VAULTS_PATH)) return JSON.parse(fs.readFileSync(VAULTS_PATH, 'utf-8')); } catch(e){}
+  return null;
 }
-function saveCollections(cols) { fs.writeFileSync(getCollectionsPath(), JSON.stringify(cols, null, 2)); }
+function saveVaultsData(data) { fs.writeFileSync(VAULTS_PATH, JSON.stringify(data, null, 2)); }
+
+function generateVaultId() {
+  return 'v_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+function initVaults() {
+  let data = loadVaultsData();
+  if (data && data.vaults && data.vaults.length > 0) return data;
+  // First run or migration: create default vault, migrate old collections if they exist
+  const defaultId = generateVaultId();
+  let collections = {};
+  let collectionColors = {};
+  // Migrate from old .soundvault-collections.json
+  const oldColPath = path.join(getConfig().libraryPath, '.soundvault-collections.json');
+  try {
+    if (fs.existsSync(oldColPath)) {
+      const old = JSON.parse(fs.readFileSync(oldColPath, 'utf-8'));
+      collectionColors = old.__colors || {};
+      delete old.__colors;
+      collections = old;
+    }
+  } catch(e) {}
+  data = {
+    activeVaultId: defaultId,
+    vaults: [{
+      id: defaultId,
+      name: 'Main Vault',
+      color: '#c8f76d',
+      description: '',
+      createdAt: Date.now(),
+      collections: collections,
+      collectionColors: collectionColors
+    }]
+  };
+  saveVaultsData(data);
+  return data;
+}
+
+function getActiveVault() {
+  const data = initVaults();
+  return data.vaults.find(v => v.id === data.activeVaultId) || data.vaults[0];
+}
+
+// Collections now read/write from active vault
+function loadCollections() {
+  const vault = getActiveVault();
+  if (!vault) return {};
+  const result = { ...vault.collections };
+  result.__colors = vault.collectionColors || {};
+  return result;
+}
+function saveCollections(cols) {
+  const data = initVaults();
+  const vault = data.vaults.find(v => v.id === data.activeVaultId);
+  if (!vault) return;
+  const colors = cols.__colors || {};
+  delete cols.__colors;
+  vault.collections = cols;
+  vault.collectionColors = colors;
+  saveVaultsData(data);
+}
 
 let mainWindow;
 function createWindow() {
@@ -136,6 +200,9 @@ app.whenReady().then(async () => {
   createWindow();
   ensureDir(getConfig().libraryPath);
   
+  // Initialize Vaults system (migrates old collections if needed)
+  initVaults();
+  
   // Initialize Cache in background
   initSoundCache();
   
@@ -183,6 +250,95 @@ ipcMain.handle('remove-from-collection', (_, name, filePath) => { const c=loadCo
 ipcMain.handle('get-collection-sounds', (_, name) => {
   const c=loadCollections(); const paths=(c[name]&&name!=='__colors'?c[name]:[]);
   return paths.filter(p=>fs.existsSync(p)).map(p=>{const st=fs.statSync(p);return{name:path.basename(p),path:p,size:st.size,dateAdded:st.mtimeMs};});
+});
+
+// ═══ Vault IPC ═══
+ipcMain.handle('get-vaults', () => {
+  const data = initVaults();
+  return {
+    activeVaultId: data.activeVaultId,
+    vaults: data.vaults.map(v => ({
+      id: v.id,
+      name: v.name,
+      color: v.color,
+      description: v.description || '',
+      createdAt: v.createdAt,
+      collectionCount: Object.keys(v.collections || {}).length,
+      soundCount: Object.values(v.collections || {}).reduce((sum, arr) => sum + arr.length, 0)
+    }))
+  };
+});
+ipcMain.handle('create-vault', (_, name, color) => {
+  const data = initVaults();
+  const id = generateVaultId();
+  data.vaults.push({
+    id,
+    name: name || 'New Vault',
+    color: color || '#c8f76d',
+    description: '',
+    createdAt: Date.now(),
+    collections: {},
+    collectionColors: {}
+  });
+  saveVaultsData(data);
+  return id;
+});
+ipcMain.handle('switch-vault', (_, id) => {
+  const data = initVaults();
+  const vault = data.vaults.find(v => v.id === id);
+  if (!vault) return false;
+  data.activeVaultId = id;
+  saveVaultsData(data);
+  return true;
+});
+ipcMain.handle('rename-vault', (_, id, newName) => {
+  const data = initVaults();
+  const vault = data.vaults.find(v => v.id === id);
+  if (!vault) return false;
+  vault.name = newName;
+  saveVaultsData(data);
+  return true;
+});
+ipcMain.handle('set-vault-color', (_, id, color) => {
+  const data = initVaults();
+  const vault = data.vaults.find(v => v.id === id);
+  if (!vault) return false;
+  vault.color = color;
+  saveVaultsData(data);
+  return true;
+});
+ipcMain.handle('delete-vault', (_, id) => {
+  const data = initVaults();
+  if (data.vaults.length <= 1) return false; // always keep at least one vault
+  data.vaults = data.vaults.filter(v => v.id !== id);
+  if (data.activeVaultId === id) data.activeVaultId = data.vaults[0].id;
+  saveVaultsData(data);
+  return true;
+});
+ipcMain.handle('duplicate-vault', (_, id) => {
+  const data = initVaults();
+  const source = data.vaults.find(v => v.id === id);
+  if (!source) return null;
+  const newId = generateVaultId();
+  data.vaults.push({
+    id: newId,
+    name: source.name + ' (copy)',
+    color: source.color,
+    description: source.description || '',
+    createdAt: Date.now(),
+    collections: JSON.parse(JSON.stringify(source.collections)),
+    collectionColors: JSON.parse(JSON.stringify(source.collectionColors || {}))
+  });
+  saveVaultsData(data);
+  return newId;
+});
+ipcMain.handle('set-vault-description', (_, id, description) => {
+  const data = initVaults();
+  const vault = data.vaults.find(v => v.id === id);
+  if (!vault) return false;
+  vault.description = description || '';
+  saveVaultsData(data);
+  return true;
 });
 
 // Render selection WAV
@@ -269,28 +425,55 @@ ipcMain.handle('semantic-start-indexing', () => {
 ipcMain.handle('semantic-search', async (_, queryText, weights) => {
     if (!semanticEngine.isReady) return { results: [], words: [] };
     
-    // Pass optional weights to the search engine map
-    const res = await semanticEngine.search(queryText, weights);
-    
-    // Build a fast lookup from soundCache (already in memory, no I/O)
-    // This avoids 200× fs.existsSync + fs.statSync calls
-    const cacheMap = new Map();
-    for (const s of soundCache) cacheMap.set(s.path, s);
-    
-    const finalResults = [];
-    for (const r of res.results) {
-        const cached = cacheMap.get(r.path);
-        if (cached) {
-            finalResults.push({
-                name: cached.name,
-                path: cached.path,
-                folder: cached.folder,
-                size: cached.size,
-                dateAdded: cached.dateAdded,
-                score: r.score
-            });
+    try {
+        const res = await semanticEngine.search(queryText, weights);
+        if (!res || !Array.isArray(res.results)) return { results: [], words: res?.words || [] };
+        
+        const cacheMap = new Map();
+        for (const s of soundCache) cacheMap.set(s.path, s);
+        
+        const finalResults = [];
+        for (const r of res.results) {
+            const cached = cacheMap.get(r.path);
+            if (cached) {
+                finalResults.push({
+                    name: cached.name,
+                    path: cached.path,
+                    folder: cached.folder,
+                    size: cached.size,
+                    dateAdded: cached.dateAdded,
+                    score: r.score
+                });
+            }
         }
+        return { results: finalResults, words: res.words || [] };
+    } catch(e) {
+        console.error('semantic-search error:', e);
+        return { results: [], words: [] };
     }
-    return { results: finalResults, words: res.words };
+});
+
+// Semantic suggestions for a collection (centroid-based)
+ipcMain.handle('semantic-suggest', async (_, collectionName) => {
+    if (!semanticEngine.isReady) return [];
+    try {
+        const cols = loadCollections();
+        const paths = (cols[collectionName] && collectionName !== '__colors') ? cols[collectionName] : [];
+        if (!paths.length) return [];
+        
+        const suggestions = semanticEngine.suggestForCollection(paths, 12);
+        
+        const cacheMap = new Map();
+        for (const s of soundCache) cacheMap.set(s.path, s);
+        
+        return suggestions.map(r => {
+            const cached = cacheMap.get(r.path);
+            if (!cached) return null;
+            return { name: cached.name, path: cached.path, folder: cached.folder, size: cached.size, dateAdded: cached.dateAdded, score: r.score };
+        }).filter(Boolean);
+    } catch(e) {
+        console.error('semantic-suggest error:', e);
+        return [];
+    }
 });
 
