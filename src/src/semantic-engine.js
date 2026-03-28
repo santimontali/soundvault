@@ -253,16 +253,6 @@ class SemanticEngine {
         `);
         this.db.exec(`CREATE INDEX IF NOT EXISTS idx_spectral_path ON spectral_index(file_path)`);
 
-        // Create peaks cache table
-        this.db.exec(`
-            CREATE TABLE IF NOT EXISTS peaks_cache (
-                file_path TEXT PRIMARY KEY,
-                mtime INTEGER,
-                peaks BLOB,
-                duration_ms INTEGER
-            )
-        `);
-
         // Create global CMVN stats table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS spectral_stats (
@@ -293,8 +283,6 @@ class SemanticEngine {
             insertSpectral:        this.db.prepare('INSERT OR REPLACE INTO spectral_index (file_path, mtime, feature_matrix, summary_vector, duration_ms, window_count) VALUES (?, ?, ?, ?, ?, ?)'),
             selectSpectralFeatures: this.db.prepare('SELECT feature_matrix, window_count, duration_ms FROM spectral_index WHERE file_path = ?'),
             selectGlobalStats:     this.db.prepare('SELECT global_mean, global_std, total_windows FROM spectral_stats WHERE id = 1'),
-            selectPeaks:       this.db.prepare('SELECT peaks, duration_ms FROM peaks_cache WHERE file_path = ? AND mtime = ?'),
-            insertPeaks:       this.db.prepare('INSERT OR REPLACE INTO peaks_cache (file_path, mtime, peaks, duration_ms) VALUES (?, ?, ?, ?)'),
         };
 
         // Load CLAP models — FP32 is FASTER than INT8 on CPUs without VNNI (i5-9400)
@@ -906,26 +894,6 @@ class SemanticEngine {
             candidates = candidates.filter(c => c.path !== sourceFilePath);
         }
 
-        // ── Adaptive candidate pruning ──
-        // If coarse scores drop sharply, trim candidates to avoid wasted spectral computation.
-        // Only evaluate candidates whose coarse score is within 40% of the top score.
-        if (candidates.length > 50) {
-            const topCoarseScore = candidates[0].score;
-            const coarseThreshold = topCoarseScore * 0.6; // 60% of top score
-            const minCandidates = 50; // always evaluate at least 50
-            let cutoff = candidates.length;
-            for (let i = minCandidates; i < candidates.length; i++) {
-                if (candidates[i].score < coarseThreshold) {
-                    cutoff = i;
-                    break;
-                }
-            }
-            if (cutoff < candidates.length) {
-                console.log(`[Echo] Adaptive pruning: ${candidates.length} → ${cutoff} candidates (threshold: ${coarseThreshold.toFixed(3)})`);
-                candidates = candidates.slice(0, cutoff);
-            }
-        }
-
         const t2 = Date.now();
 
         // ── Stage 2: Spectral Fingerprint Fine Search ──
@@ -1039,26 +1007,6 @@ class SemanticEngine {
         // Extract query vector from flat cache
         const queryVec = this._matrix.subarray(fileIdx * DIM, (fileIdx + 1) * DIM);
         const candidates = this._searchFlat(queryVec, 200).filter(c => c.path !== filePath);
-
-        // ── Adaptive candidate pruning ──
-        // If coarse scores drop sharply, trim candidates to avoid wasted spectral computation.
-        // Only evaluate candidates whose coarse score is within 40% of the top score.
-        if (candidates.length > 50) {
-            const topCoarseScore = candidates[0].score;
-            const coarseThreshold = topCoarseScore * 0.6; // 60% of top score
-            const minCandidates = 50; // always evaluate at least 50
-            let cutoff = candidates.length;
-            for (let i = minCandidates; i < candidates.length; i++) {
-                if (candidates[i].score < coarseThreshold) {
-                    cutoff = i;
-                    break;
-                }
-            }
-            if (cutoff < candidates.length) {
-                console.log(`[Echo] Adaptive pruning: ${candidates.length} → ${cutoff} candidates (threshold: ${coarseThreshold.toFixed(3)})`);
-                candidates = candidates.slice(0, cutoff);
-            }
-        }
 
         const t1 = Date.now();
 
@@ -1287,19 +1235,6 @@ class SemanticEngine {
         }
 
         console.log(`[Watcher] Removed from caches: ${path.basename(filePath)}`);
-    }
-
-    // ── Peak data from DB cache ──
-    getPeaksFromDB(filePath) {
-        try {
-            const stat = fs.statSync(filePath);
-            const row = this._stmts.selectPeaks.get(filePath, stat.mtimeMs);
-            if (!row) return null;
-            const peaks = new Float32Array(row.peaks.buffer, row.peaks.byteOffset, row.peaks.byteLength / 4);
-            return { peaks, duration: row.duration_ms / 1000 };
-        } catch(e) {
-            return null;
-        }
     }
 }
 

@@ -260,10 +260,10 @@
     /* Underline indicator — slides between SOUND and VAULT */
     .logo-indicator {
       position: absolute;
-      bottom: -2px;
-      height: 2.5px;
-      border-radius: 2px;
-      opacity: .75;
+      bottom: -1px;
+      height: 1.5px;
+      border-radius: 1px;
+      opacity: .6;
       transition: left .3s cubic-bezier(.4, 0, .2, 1), width .3s cubic-bezier(.4, 0, .2, 1), background .3s;
     }
 
@@ -712,38 +712,6 @@
     .btn-small svg {
       fill: none;
       stroke: currentColor
-    }
-
-    /* Icon-only small button (no text label) */
-    .btn-small.btn-icon {
-      padding: 5px 7px;
-    }
-
-    /* Watcher toggle button */
-    #watcher-btn {
-      position: relative;
-    }
-    #watcher-btn.watching {
-      border-color: rgba(200, 247, 109, .35);
-      color: var(--accent);
-      background: rgba(200, 247, 109, .07);
-    }
-    #watcher-btn.watching svg {
-      stroke: var(--accent);
-    }
-    #watcher-btn.watching::after {
-      content: '';
-      position: absolute;
-      bottom: 3px;
-      right: 3px;
-      width: 4px;
-      height: 4px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 5px var(--accent);
-    }
-    #watcher-btn:not(.watching) {
-      opacity: .6;
     }
 
     #sound-list {
@@ -2480,31 +2448,15 @@
         <div id="panel-header">
           <div><span class="panel-title" id="current-folder-name">Select a folder</span><span class="panel-subtitle"
               id="sound-count"></span></div>
-          <div class="panel-actions">
-            <button class="btn-small" id="add-col-btn" title="Add to collection" style="display:none">
-              <svg width="13" height="13" viewBox="0 0 16 16" stroke-width="1.5" stroke-linecap="round">
+          <div class="panel-actions"><button class="btn-small" id="add-col-btn" title="Add to collection"
+              style="display:none"><svg width="13" height="13" viewBox="0 0 16 16" stroke-width="1.5"
+                stroke-linecap="round">
                 <path d="M12 8H4M8 4v8" />
-              </svg>Collection
-            </button>
-            <button class="btn-small" id="refresh-btn" title="Refresh">
-              <svg width="13" height="13" viewBox="0 0 16 16" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              </svg>Collection</button><button class="btn-small" id="refresh-btn" title="Refresh"><svg width="13"
+                height="13" viewBox="0 0 16 16" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M2 8a6 6 0 0 1 10.3-4.2M14 2v4h-4" />
                 <path d="M14 8a6 6 0 0 1-10.3 4.2M2 14v-4h4" />
-              </svg>
-            </button>
-            <button class="btn-small btn-icon" id="import-btn" title="Import files into folder">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2"/>
-                <path d="M8 2v8M5 7l3 3 3-3"/>
-              </svg>
-            </button>
-            <button class="btn-small btn-icon watching" id="watcher-btn" title="Folder watcher: ON — auto-detects new files">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/>
-                <circle cx="8" cy="8" r="2"/>
-              </svg>
-            </button>
-          </div>
+              </svg></button><button class="btn-small" id="import-btn">+ Import</button></div>
         </div>
         <div id="collect-target-bar">
           <span class="ct-label">Collecting to</span>
@@ -2728,18 +2680,6 @@
     const bufferCache = new Map, peakCache = new Map;
     let selection = null;
     let sidebarMode = 'vault'; // 'vault' = show collections, 'sounds' = show folders
-
-    // ═══ Virtual List State ═══
-    const ITEM_HEIGHT = 57;        // px — measured height of .sound-item
-    const BUFFER_COUNT = 10;       // extra items above/below viewport
-    let vList = {
-      data: [],                    // full data array (sound objects)
-      pool: [],                    // DOM node pool: { el, canvasEl, idx }
-      poolSize: 0,
-      scrollTop: 0,
-      containerHeight: 0,
-      sentinel: null,              // spacer div for total scroll height
-    };
     let activeVaultData = null; // { id, name, color }
 
     function getCtx() { if (!audioContext) { audioContext = new AudioContext; gainNode = audioContext.createGain(); gainNode.gain.value = volume; gainNode.connect(audioContext.destination) } if (audioContext.state === 'suspended') audioContext.resume(); return audioContext }
@@ -2770,13 +2710,27 @@
     async function loadPeaks(fp) {
       if (peakCache.has(fp)) return peakCache.get(fp);
       try {
-        const data = await window.api.getPeaks(fp);
-        if (!data || !data.peaks) return null;
-        // Reconstruct Float32Array from IPC transfer
-        const peaks = (data.peaks instanceof Float32Array)
-          ? data.peaks
-          : new Float32Array(Object.values(data.peaks));
-        const res = { peaks, duration: data.duration };
+        const raw = await window.api.readAudioFile(fp);
+        if (!raw) return null;
+        let arr;
+        if (raw instanceof Uint8Array) arr = raw;
+        else if (raw && raw.type === 'Buffer' && Array.isArray(raw.data)) arr = new Uint8Array(raw.data);
+        else if (raw instanceof ArrayBuffer) arr = new Uint8Array(raw);
+        else arr = new Uint8Array(raw);
+        if (!arr.length) return null;
+        const ab = arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength);
+        const dec = await getDecodeCtx().decodeAudioData(ab);
+        const d = dec.getChannelData(0), n = 4000,
+              spp = Math.max(1, Math.floor(d.length / n)),
+              pks = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+           let max = 0, o = i * spp;
+           for (let j = 0; j < spp && o + j < d.length; j++) {
+              const v = Math.abs(d[o + j]); if (v > max) max = v;
+           }
+           pks[i] = max;
+        }
+        const res = { peaks: pks, duration: dec.duration };
         peakCache.set(fp, res);
         return res;
       } catch (err) {
@@ -2816,7 +2770,7 @@
       gtb.classList.add('visible');
     }
     // Reposition on scroll of sound-list
-    // document.getElementById(\'sound-list\').addEventListener(\'scroll\', () => { if (selection) positionGlobalToolbar() }); // Migrated
+    document.getElementById('sound-list').addEventListener('scroll', () => { if (selection) positionGlobalToolbar() });
 
     function updateSelUI(fp) {
       const it = document.querySelector(`.sound-item[data-path="${CSS.escape(fp)}"]`); if (!it) return;
@@ -2870,262 +2824,113 @@
     async function deleteFolder(n) { if (await window.api.deleteFolder(n)) { if (currentFolder === n) { currentFolder = null; document.getElementById('current-folder-name').textContent = 'Select a folder'; document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>' } await loadFolders() } }
 
     // Sound list
-
-    function fadeDrag(ev, side, snd, wc2) {
-      if (!selection || selection.path !== snd.path) return;
-      const pc = peakCache.get(snd.path); if (!pc) return;
-      const rect = wc2.getBoundingClientRect();
-      const selDur = (selection.end - selection.start) * pc.duration;
-      const onM = me => {
-        const fr = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width));
-        if (side === 'left') selection.fadeIn = Math.max(0, Math.min(selDur * .8, (fr - selection.start) * pc.duration));
-        else selection.fadeOut = Math.max(0, Math.min(selDur * .8, (selection.end - fr) * pc.duration));
-        redrawWf(snd.path);
-      };
-      const onU = () => { document.removeEventListener('mousemove', onM); document.removeEventListener('mouseup', onU) };
-      document.addEventListener('mousemove', onM); document.addEventListener('mouseup', onU);
-    }
-
-    function createSoundItemElement() {
-      const div = document.createElement('div');
-      div.className = 'sound-item';
-      div.innerHTML = `<button class="play-btn"><svg class="play-icon" width="11" height="13" viewBox="0 0 12 14"><polygon points="2,0 12,7 2,14"/></svg></button><div class="sound-info"><div class="sound-name"></div><div class="sound-meta">WAV · ...</div></div><div class="waveform-container"><canvas class="waveform-canvas"></canvas><div class="sel-overlay"><div class="sel-resize left"></div><div class="sel-resize right"></div></div></div><span class="sound-duration">...</span><div class="full-drag" draggable="true" title="Drag to DAW"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="4.5" cy="4" r="1.2" fill="currentColor"/><circle cx="4.5" cy="8" r="1.2" fill="currentColor"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor"/><circle cx="9.5" cy="4" r="1.2" fill="currentColor"/><circle cx="9.5" cy="8" r="1.2" fill="currentColor"/><circle cx="9.5" cy="12" r="1.2" fill="currentColor"/></svg></div>`;
-      return div;
-    }
-
-    function bindSoundItem(poolEntry, sound, index) {
-      const { el } = poolEntry;
-      const prevIdx = poolEntry.idx;
-      poolEntry.idx = index;
-
-      // Position
-      el.style.top = (index * ITEM_HEIGHT) + 'px';
-
-      // Data binding
-      el.dataset.path = sound.path;
-      const isActive = currentSound?.path === sound.path;
-      const isThisPlaying = isActive && isPlaying;
-      el.classList.toggle('playing', isActive);
-
-      // Name
-      const nameEl = el.querySelector('.sound-name');
-      const nm = sound.name.replace(/\.wav$/i, '');
-      const ft = sound.folder ? `<span style="color:var(--text-muted);margin-right:3px;font-size:11px">${sound.folder}/</span>` : '';
-      const scoreUi = sound.score !== undefined ? `<span style="background:var(--accent-dim); color:var(--accent); padding:1px 5px; border-radius:4px; font-size:10px; margin-left:6px">${Math.round(sound.score*100)}% match</span>` : '';
-      nameEl.innerHTML = ft + nm + scoreUi;
-
-      // Duration & meta
-      const c = peakCache.get(sound.path);
-      const dur = c ? formatTime(c.duration) : '...';
-      el.querySelector('.sound-meta').textContent = 'WAV · ' + dur;
-      el.querySelector('.sound-duration').textContent = dur;
-
-      // Play button
-      const btn = el.querySelector('.play-btn');
-      btn.innerHTML = isThisPlaying
-        ? '<svg class="play-icon" width="11" height="13" viewBox="0 0 12 14"><rect x="1" y="0" width="3.5" height="14" rx="1" fill="currentColor"/><rect x="7.5" y="0" width="3.5" height="14" rx="1" fill="currentColor"/></svg>'
-        : '<svg class="play-icon" width="11" height="13" viewBox="0 0 12 14"><polygon points="2,0 12,7 2,14"/></svg>';
-
-      // Rebind events (remove old listeners via cloneNode trick)
-      const newBtn = btn.cloneNode(true);
-      btn.parentNode.replaceChild(newBtn, btn);
-      newBtn.addEventListener('click', e => { e.stopPropagation(); playSoundItem(sound) });
-
-      // Waveform container events
-      const wc = el.querySelector('.waveform-container');
-      const newWc = wc.cloneNode(true);
-      wc.parentNode.replaceChild(newWc, wc);
-
-      newWc.addEventListener('mousedown', e => {
-        if (e.button !== 0 || e.target.closest('.sel-resize')) return;
-        e.preventDefault(); e.stopPropagation();
-        const rect = newWc.getBoundingClientRect();
-        const startFrac = (e.clientX - rect.left) / rect.width;
-        const startX = e.clientX, startY = e.clientY;
-        let dragMode = false;
-        const onM = me => {
-          if (!dragMode) {
-            if (Math.abs(me.clientX - startX) > 5 || Math.abs(me.clientY - startY) > 5) {
-              dragMode = true; clearSelection();
-            } else return;
-          }
-          const fr = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width));
-          setSelection(sound.path, startFrac, fr);
-        };
-        const onU = async me => {
-          document.removeEventListener('mousemove', onM);
-          document.removeEventListener('mouseup', onU);
-          if (!dragMode) {
-            const clickFrac = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width));
-            clearSelection();
-            if (!currentSound || currentSound.path !== sound.path) {
-              stopAudio(); currentSound = sound;
-              document.getElementById('player-name').textContent = sound.name.replace(/\.wav$/i, '');
-              refreshPlaying();
-              const buf = await decodeFile(sound.path);
-              if (!buf) { currentSound = null; refreshPlaying(); return }
-              audioBuffer = buf;
-            }
-            if (audioBuffer) {
-              const t = clickFrac * audioBuffer.duration;
-              playOffset = t; stopAudio();
-              playAudio(t, audioBuffer.duration); refreshPlaying();
-            }
-          }
-        };
-        document.addEventListener('mousemove', onM);
-        document.addEventListener('mouseup', onU);
-      });
-
-      // Resize handles
-      const lh = newWc.querySelector('.sel-resize.left');
-      const rh = newWc.querySelector('.sel-resize.right');
-      function resize(ev, side) {
-        if (ev.button !== 0 || !selection || selection.path !== sound.path) return;
-        ev.preventDefault(); ev.stopPropagation();
-        if (ev.shiftKey) { fadeDrag(ev, side, sound, newWc); return }
-        const rect = newWc.getBoundingClientRect();
-        const onM = me => {
-          const fr = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width));
-          if (side === 'left') selection.start = Math.min(fr, selection.end - .01);
-          else selection.end = Math.max(fr, selection.start + .01);
-          updateSelUI(sound.path); redrawWf(sound.path);
-        };
-        const onU = () => { document.removeEventListener('mousemove', onM); document.removeEventListener('mouseup', onU) };
-        document.addEventListener('mousemove', onM); document.addEventListener('mouseup', onU);
-      }
-      lh.addEventListener('mousedown', e => resize(e, 'left'));
-      rh.addEventListener('mousedown', e => resize(e, 'right'));
-
-      // Full file drag
-      const fdEl = el.querySelector('.full-drag');
-      const newFd = fdEl.cloneNode(true);
-      fdEl.parentNode.replaceChild(newFd, fdEl);
-      newFd.addEventListener('dragstart', e => { e.preventDefault(); window.api.startDrag(sound.path) });
-
-      // Context menu
-      const newEl = el; // el reference stays the same
-      newEl.oncontextmenu = e => { e.preventDefault(); showCtx(e.clientX, e.clientY, sound) };
-
-      // Draw waveform
-      const cv = newWc.querySelector('.waveform-canvas');
-      if (c) {
-        requestAnimationFrame(() => {
-          const sel = selection?.path === sound.path ? selection : null;
-          drawWf(cv, c.peaks, {
-            selStart: sel?.start, selEnd: sel?.end,
-            fiF: sel ? sel.fadeIn / c.duration : 0,
-            foF: sel ? sel.fadeOut / c.duration : 0
-          });
-          updateSelUI(sound.path);
-        });
-      } else {
-        queueWf(el, sound);
-      }
-
-      // Selection overlay
-      updateSelUI(sound.path);
-    }
-
-    function updateVirtualList() {
-      if (!vList.data.length || !vList.pool.length) return;
-
-      const ct = document.getElementById('sound-list');
-      const scrollTop = ct.scrollTop;
-      const viewHeight = ct.clientHeight;
-
-      // Calculate visible range
-      const firstVisible = Math.floor(scrollTop / ITEM_HEIGHT);
-      const lastVisible = Math.ceil((scrollTop + viewHeight) / ITEM_HEIGHT);
-
-      // Add buffer
-      const rangeStart = Math.max(0, firstVisible - BUFFER_COUNT);
-      const rangeEnd = Math.min(vList.data.length - 1, lastVisible + BUFFER_COUNT);
-
-      // Build set of indices that need to be rendered
-      const needed = new Set();
-      for (let i = rangeStart; i <= rangeEnd; i++) needed.add(i);
-
-      // Find pool nodes that are outside the needed range → available for recycling
-      const available = [];
-      for (const entry of vList.pool) {
-        if (entry.idx === -1 || !needed.has(entry.idx)) {
-          available.push(entry);
-        } else {
-          needed.delete(entry.idx); // already rendered
-        }
-      }
-
-      // Assign available pool nodes to needed indices
-      for (const idx of needed) {
-        if (!available.length) break;
-        const entry = available.pop();
-        entry.el.style.display = '';
-        bindSoundItem(entry, vList.data[idx], idx);
-      }
-
-      // Hide surplus pool nodes that have no assigned index
-      for (const entry of available) {
-        entry.el.style.display = 'none';
-        entry.idx = -1;
-      }
-    }
+    let currentRenderList = [];
+    let currentRenderCount = 0;
 
     function renderSounds(list) {
-      const ct = document.getElementById('sound-list');
-      const dz = document.getElementById('drop-zone');
-
-      // Clear previous state
-      wfQ = []; // discard pending waveform loads from previous view
-      vList.data = list || [];
-      document.getElementById('sound-count').textContent =
-        vList.data.length + ' sound' + (vList.data.length !== 1 ? 's' : '');
-
-      if (!vList.data.length) {
-        ct.innerHTML = '';
-        ct.appendChild(dz);
-        ct.insertAdjacentHTML('beforeend',
-          '<div class="empty-state"><div style="font-size:36px;opacity:.3">🔇</div><div style="font-size:13px">No sounds</div></div>');
-        vList.pool = [];
-        vList.poolSize = 0;
-        vList.sentinel = null;
-        return;
-      }
-
-      // Clear DOM — this destroys sentinel and pool nodes from the DOM tree
-      ct.innerHTML = '';
-      ct.appendChild(dz);
-
-      // Always recreate sentinel (innerHTML destroyed it)
-      vList.sentinel = document.createElement('div');
-      vList.sentinel.style.cssText = 'position:relative;width:100%;';
-      vList.sentinel.style.height = (vList.data.length * ITEM_HEIGHT) + 'px';
-      ct.appendChild(vList.sentinel);
-
-      // Calculate pool size: visible items + 2x buffer
-      vList.containerHeight = ct.clientHeight;
-      const visibleCount = Math.ceil(vList.containerHeight / ITEM_HEIGHT);
-      const neededPool = visibleCount + BUFFER_COUNT * 2;
-      const poolSize = Math.min(neededPool, vList.data.length);
-
-      // Always recreate pool nodes (innerHTML destroyed previous ones)
-      vList.pool = [];
-      for (let i = 0; i < poolSize; i++) {
-        const el = createSoundItemElement();
-        el.style.position = 'absolute';
-        el.style.left = '0';
-        el.style.right = '0';
-        el.style.height = ITEM_HEIGHT + 'px';
-        el.style.display = 'none';
-        vList.sentinel.appendChild(el);
-        vList.pool.push({ el, idx: -1 });
-      }
-      vList.poolSize = poolSize;
-
+      const ct = document.getElementById('sound-list'), dz = document.getElementById('drop-zone'); ct.innerHTML = ''; ct.appendChild(dz);
+      if (!list) list = [];
+      document.getElementById('sound-count').textContent = list.length + ' sound' + (list.length !== 1 ? 's' : '');
+      if (!list.length) { ct.insertAdjacentHTML('beforeend', '<div class="empty-state"><div style="font-size:36px;opacity:.3">🔇</div><div style="font-size:13px">No sounds</div></div>'); return; }
+      currentRenderList = list;
+      currentRenderCount = 0;
       ct.scrollTop = 0;
-      vList.scrollTop = 0;
-      updateVirtualList();
+      renderMoreSounds();
     }
+
+    function renderMoreSounds() {
+      const ct = document.getElementById('sound-list');
+      const fragment = document.createDocumentFragment();
+      const end = Math.min(currentRenderCount + 20, currentRenderList.length);
+      const batchWf = [];
+      
+      for (let i = currentRenderCount; i < end; i++) {
+        const sound = currentRenderList[i];
+        const div = document.createElement('div'); div.className = 'sound-item' + (currentSound?.path === sound.path ? ' playing' : ''); div.dataset.path = sound.path;
+        const c = peakCache.get(sound.path), dur = c ? formatTime(c.duration) : '...', nm = sound.name.replace(/\.wav$/i, ''), ft = sound.folder ? `<span style="color:var(--text-muted);margin-right:3px;font-size:11px">${sound.folder}/</span>` : '';
+        const scoreUi = sound.score !== undefined ? `<span style="background:var(--accent-dim); color:var(--accent); padding:1px 5px; border-radius:4px; font-size:10px; margin-left:6px">${Math.round(sound.score*100)}% match</span>` : '';
+        const isThisPlaying = currentSound?.path === sound.path && isPlaying;
+        div.innerHTML = `<button class="play-btn">${isThisPlaying ? '<svg class="play-icon" width="11" height="13" viewBox="0 0 12 14"><rect x="1" y="0" width="3.5" height="14" rx="1" fill="currentColor"/><rect x="7.5" y="0" width="3.5" height="14" rx="1" fill="currentColor"/></svg>' : '<svg class="play-icon" width="11" height="13" viewBox="0 0 12 14"><polygon points="2,0 12,7 2,14"/></svg>'}</button><div class="sound-info"><div class="sound-name">${ft}${nm}${scoreUi}</div><div class="sound-meta">WAV · ${dur}</div></div><div class="waveform-container"><canvas class="waveform-canvas"></canvas><div class="sel-overlay"><div class="sel-resize left"></div><div class="sel-resize right"></div></div></div><span class="sound-duration">${dur}</span><div class="full-drag" draggable="true" title="Drag to DAW"><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="4.5" cy="4" r="1.2" fill="currentColor"/><circle cx="4.5" cy="8" r="1.2" fill="currentColor"/><circle cx="4.5" cy="12" r="1.2" fill="currentColor"/><circle cx="9.5" cy="4" r="1.2" fill="currentColor"/><circle cx="9.5" cy="8" r="1.2" fill="currentColor"/><circle cx="9.5" cy="12" r="1.2" fill="currentColor"/></svg></div>`;
+
+        div.querySelector('.play-btn').addEventListener('click', e => { e.stopPropagation(); playSoundItem(sound) });
+        fragment.appendChild(div);
+        batchWf.push({ div, sound, c });
+
+        // Waveform interaction: click → seek, drag → select
+        const wc = div.querySelector('.waveform-container');
+        wc.addEventListener('mousedown', e => {
+          if (e.button !== 0 || e.target.closest('.sel-resize')) return;
+          e.preventDefault(); e.stopPropagation();
+          const rect = wc.getBoundingClientRect();
+          const startFrac = (e.clientX - rect.left) / rect.width;
+          const startX = e.clientX, startY = e.clientY;
+          let dragMode = false; // true once mouse moves enough to be a drag
+
+          const onM = me => {
+            if (!dragMode) {
+              if (Math.abs(me.clientX - startX) > 5 || Math.abs(me.clientY - startY) > 5) {
+                dragMode = true;
+                clearSelection();
+              } else return;
+            }
+            const fr = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width));
+            setSelection(sound.path, startFrac, fr);
+          };
+
+          const onU = async me => {
+            document.removeEventListener('mousemove', onM);
+            document.removeEventListener('mouseup', onU);
+            if (!dragMode) {
+              const clickFrac = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width));
+              clearSelection();
+              if (!currentSound || currentSound.path !== sound.path) {
+                stopAudio(); currentSound = sound;
+                document.getElementById('player-name').textContent = sound.name.replace(/\.wav$/i, '');
+                refreshPlaying();
+                const buf = await decodeFile(sound.path);
+                if (!buf) { currentSound = null; refreshPlaying(); return }
+                audioBuffer = buf;
+              }
+              if (audioBuffer) {
+                const t = clickFrac * audioBuffer.duration;
+                playOffset = t;
+                stopAudio();
+                playAudio(t, audioBuffer.duration);
+                refreshPlaying();
+              }
+            }
+          };
+
+          document.addEventListener('mousemove', onM);
+          document.addEventListener('mouseup', onU);
+        });
+
+        // Resize handles
+        const lh = div.querySelector('.sel-resize.left'), rh = div.querySelector('.sel-resize.right');
+        function resize(ev, side) { if (ev.button !== 0 || !selection || selection.path !== sound.path) return; ev.preventDefault(); ev.stopPropagation(); if (ev.shiftKey) { fadeDrag(ev, side, sound, wc); return } const rect = wc.getBoundingClientRect(); const onM = me => { const fr = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width)); if (side === 'left') selection.start = Math.min(fr, selection.end - .01); else selection.end = Math.max(fr, selection.start + .01); updateSelUI(sound.path); redrawWf(sound.path) }; const onU = () => { document.removeEventListener('mousemove', onM); document.removeEventListener('mouseup', onU) }; document.addEventListener('mousemove', onM); document.addEventListener('mouseup', onU) }
+        lh.addEventListener('mousedown', e => resize(e, 'left')); rh.addEventListener('mousedown', e => resize(e, 'right'));
+
+        function fadeDrag(ev, side, snd, wc2) { if (!selection || selection.path !== snd.path) return; const pc = peakCache.get(snd.path); if (!pc) return; const rect = wc2.getBoundingClientRect(); const selDur = (selection.end - selection.start) * pc.duration; const onM = me => { const fr = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width)); if (side === 'left') selection.fadeIn = Math.max(0, Math.min(selDur * .8, (fr - selection.start) * pc.duration)); else selection.fadeOut = Math.max(0, Math.min(selDur * .8, (selection.end - fr) * pc.duration)); redrawWf(snd.path) }; const onU = () => { document.removeEventListener('mousemove', onM); document.removeEventListener('mouseup', onU) }; document.addEventListener('mousemove', onM); document.addEventListener('mouseup', onU) }
+
+        // Full file drag
+        const fdEl = div.querySelector('.full-drag');
+        fdEl.addEventListener('dragstart', e => { e.preventDefault(); window.api.startDrag(sound.path) });
+
+        div.addEventListener('contextmenu', e => { e.preventDefault(); showCtx(e.clientX, e.clientY, sound) });
+      }
+      
+      // Append to the actual DOM so element widths and isConnected evaluates to true!
+      ct.appendChild(fragment);
+      currentRenderCount = end;
+      
+      // Queue Waveform drawing AFTER DOM insertion
+      for (const { div, sound, c } of batchWf) {
+        const cv = div.querySelector('.waveform-canvas');
+        if (c) requestAnimationFrame(() => { const sel = selection?.path === sound.path ? selection : null; drawWf(cv, c.peaks, { selStart: sel?.start, selEnd: sel?.end, fiF: sel ? sel.fadeIn / c.duration : 0, foF: sel ? sel.fadeOut / c.duration : 0 }); updateSelUI(sound.path) });
+        else queueWf(div, sound);
+      }
+    }
+
     async function playSelOf(s) { if (!selection || selection.path !== s.path) return; stopAudio(); currentSound = s; document.getElementById('player-name').textContent = s.name.replace(/\.wav$/i, ''); refreshPlaying(); const buf = await decodeFile(s.path); if (!buf) return; audioBuffer = buf; playAudio(selection.start * buf.duration, selection.end * buf.duration); refreshPlaying() }
     let playAttemptId = 0;
     
@@ -3164,15 +2969,16 @@
       refreshPlaying();
     }
 
-    let wfQ = [], wfActive = 0;
-    const WF_CONCURRENCY = 4; // process up to 4 waveforms simultaneously
-    function queueWf(d, s) { wfQ.push({ d, s }); drainWfQ() }
-    function drainWfQ() {
-      while (wfActive < WF_CONCURRENCY && wfQ.length) {
+    let wfQ = [], wfL = false;
+    function queueWf(d, s) { wfQ.push({ d, s }); processWfQ() }
+    async function processWfQ() {
+      if (wfL || !wfQ.length) return;
+      wfL = true;
+      while (wfQ.length) {
         const { d, s } = wfQ.shift();
         if (!d.isConnected) continue;
-        wfActive++;
-        loadPeaks(s.path).then(c => {
+        try {
+          const c = await loadPeaks(s.path);
           if (c && d.isConnected) {
             const cv = d.querySelector('.waveform-canvas');
             if (cv) requestAnimationFrame(() => drawWf(cv, c.peaks, {}));
@@ -3180,11 +2986,10 @@
             if (m) m.textContent = 'WAV \u00b7 ' + formatTime(c.duration);
             if (du) du.textContent = formatTime(c.duration);
           }
-        }).catch(() => {}).finally(() => {
-          wfActive--;
-          drainWfQ();
-        });
+        } catch (e) { }
+        await new Promise(r => setTimeout(r, 5));
       }
+      wfL = false;
     }
 
     // Context menu
@@ -3510,31 +3315,6 @@
 
     // Import, drop, refresh
     document.getElementById('import-btn').addEventListener('click', async () => { if (!currentFolder) return; if ((await window.api.importFiles(currentFolder)).length) { await loadSounds(); await loadFolders() } });
-
-    // ── Watcher toggle ──
-    let watcherEnabled = true;
-    const watcherBtn = document.getElementById('watcher-btn');
-    function updateWatcherBtn() {
-      if (watcherEnabled) {
-        watcherBtn.classList.add('watching');
-        watcherBtn.title = 'Folder watcher: ON — auto-detects new files';
-        watcherBtn.querySelector('svg').innerHTML = `
-          <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/>
-          <circle cx="8" cy="8" r="2"/>`;
-      } else {
-        watcherBtn.classList.remove('watching');
-        watcherBtn.title = 'Folder watcher: OFF — click to enable';
-        watcherBtn.querySelector('svg').innerHTML = `
-          <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/>
-          <circle cx="8" cy="8" r="2"/>
-          <line x1="2" y1="2" x2="14" y2="14"/>`;
-      }
-    }
-    watcherBtn.addEventListener('click', async () => {
-      watcherEnabled = !watcherEnabled;
-      await window.api.setWatcher(watcherEnabled);
-      updateWatcherBtn();
-    });
     document.getElementById('refresh-btn').addEventListener('click', async () => { wfQ = []; if (currentCollection) await loadCollectionSounds(); else if (currentFolder) await loadSounds(); await loadFolders(); await loadCollections() });
     const sle = document.getElementById('sound-list');
     sle.addEventListener('dragover', e => { e.preventDefault(); document.getElementById('drop-zone').classList.add('active') });
@@ -3853,9 +3633,11 @@
     document.getElementById('sound-list').addEventListener('click', e => { if (!e.target.closest('.sound-item')) clearSelection() });
     
     // Lazy loading scroll
-    document.getElementById('sound-list').addEventListener('scroll', () => {
-      updateVirtualList();
-      if (selection) positionGlobalToolbar();
+    document.getElementById('sound-list').addEventListener('scroll', e => {
+      const ct = e.currentTarget;
+      if (ct.scrollTop + ct.clientHeight >= ct.scrollHeight - 200) {
+        if (currentRenderCount < currentRenderList.length) renderMoreSounds();
+      }
     });
     document.getElementById('panel-header').addEventListener('click', e => { if (!e.target.closest('.btn-small')) clearSelection() });
 
@@ -4834,7 +4616,8 @@
         Object.assign(echoState.weights, ECHO_DEFAULTS);
         renderEchoAxes();
         if (echoState.lastSearchParams) {
-          rerunLastSearch();
+          echoState.lastSearchParams.weights = { ...echoState.weights };
+          runEchoSearch(echoState.lastSearchParams);
         }
       });
 
@@ -4854,7 +4637,8 @@
           echoState.weights[axis] = ECHO_DEFAULTS[axis];
           d.style.color = getAxisColor(echoState.weights[axis]);
           if (echoState.lastSearchParams) {
-            rerunLastSearch();
+            echoState.lastSearchParams.weights = { ...echoState.weights };
+            runEchoSearch(echoState.lastSearchParams);
           }
         });
 
@@ -4882,7 +4666,8 @@
             clearTimeout(searchDebounce);
             searchDebounce = setTimeout(() => {
               if (echoState.lastSearchParams) {
-                rerunLastSearch();
+                echoState.lastSearchParams.weights = { ...echoState.weights };
+                runEchoSearch(echoState.lastSearchParams);
               }
             }, 200);
           };
@@ -4897,7 +4682,8 @@
             // Final search
             clearTimeout(searchDebounce);
             if (echoState.lastSearchParams) {
-              rerunLastSearch();
+              echoState.lastSearchParams.weights = { ...echoState.weights };
+              runEchoSearch(echoState.lastSearchParams);
             }
           };
           document.addEventListener('mousemove', onM);
@@ -4976,28 +4762,6 @@
       }
     }
 
-    // Re-run the last search with the current weights, routing correctly by type.
-    // Replaces the pattern: echoState.lastSearchParams.weights = {...}; runEchoSearch(lastSearchParams)
-    // which crashed when lastSearchParams was of type 'file' (no pcmData) or when the
-    // ArrayBuffer backing the Float32Array had been neuterized by a previous IPC transfer.
-    function rerunLastSearch() {
-      if (!echoState.lastSearchParams) return;
-      const p = echoState.lastSearchParams;
-      // Always inject the latest weights before re-searching
-      p.weights = { ...echoState.weights };
-      if (p.type === 'file') {
-        // File-based search has no pcmData — call echoFile directly instead of runEchoSearch
-        window.api.echoFile(p.filePath, p.weights).then(res => {
-          echoState.results = res.results || [];
-          document.getElementById('echo-stats').textContent = `${res.totalMatches} matches · ${res.searchTimeMs}ms`;
-          renderEchoResults();
-        }).catch(e => console.error('Echo re-search (file) error:', e));
-      } else {
-        // Fragment-based search — pcmData is kept as a fresh copy in lastSearchParams
-        runEchoSearch(p);
-      }
-    }
-
     // Run echo search (fragment)
     async function runEchoSearch(params) {
       openEchoPanel();
@@ -5005,31 +4769,15 @@
       renderEchoChain();
 
       try {
-        // Always send a brand-new Float32Array copy so the ArrayBuffer is never detached
-        // by Electron’s structured clone on repeated IPC calls.
-        const pcmCopy = params.pcmData instanceof Float32Array
-          ? new Float32Array(params.pcmData)
-          : params.pcmData;
-
         const searchParams = {
-          pcmData: pcmCopy,
+          pcmData: params.pcmData,
           sampleRate: params.sampleRate,
           duration: params.duration,
           weights: params.weights,
           maxResults: 50,
           sourceFilePath: params.sourceFilePath || null,
         };
-
-        // Store a separate copy of pcmData so re-searches after weight changes always
-        // have a valid, non-detached Float32Array to work from.
-        echoState.lastSearchParams = {
-          type: 'fragment',
-          pcmData: new Float32Array(pcmCopy),
-          sampleRate: params.sampleRate,
-          duration: params.duration,
-          weights: { ...params.weights },
-          sourceFilePath: params.sourceFilePath || null,
-        };
+        echoState.lastSearchParams = { type: 'fragment', ...params };
 
         const res = await window.api.echoSearch(searchParams);
         echoState.results = res.results || [];

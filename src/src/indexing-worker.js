@@ -85,19 +85,9 @@ async function initWorker(dbPath, ffmpegPath) {
     db.pragma('cache_size = -32000');
     db.pragma('temp_store = MEMORY');
 
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS peaks_cache (
-            file_path TEXT PRIMARY KEY,
-            mtime INTEGER,
-            peaks BLOB,
-            duration_ms INTEGER
-        )
-    `);
-
     stmts = {
         insertEmbedding: db.prepare('INSERT OR REPLACE INTO embeddings (file_path, mtime, vector) VALUES (?, ?, ?)'),
         insertSpectral:  db.prepare('INSERT OR REPLACE INTO spectral_index (file_path, mtime, feature_matrix, summary_vector, duration_ms, window_count) VALUES (?, ?, ?, ?, ?, ?)'),
-        insertPeaks:     db.prepare('INSERT OR REPLACE INTO peaks_cache (file_path, mtime, peaks, duration_ms) VALUES (?, ?, ?, ?)'),
     };
 
     // Load CLAP audio model — FP32 is FASTER than INT8 on CPUs without VNNI (i5-9400)
@@ -309,7 +299,6 @@ async function processSpectralBatch(files) {
                 stmts.insertSpectral.run(
                     item.path, item.mtime, item.matrix, item.summary, item.durationMs, item.windowCount
                 );
-                stmts.insertPeaks.run(item.path, item.mtime, item.peaksBuf, item.durationMs);
             }
         })();
         batch = [];
@@ -322,21 +311,6 @@ async function processSpectralBatch(files) {
             const { matrix, numWindows } = fingerprinter.extractRaw(audioData, 48000);
             const summary = fingerprinter.computeSummary(matrix, numWindows);
             const durationMs = Math.round(audioData.length / 48000 * 1000);
-
-            // Extract peaks while we have the decoded audio in memory
-            const NUM_PEAKS = 4000;
-            const spp = Math.max(1, Math.floor(audioData.length / NUM_PEAKS));
-            const peaksArr = new Float32Array(NUM_PEAKS);
-            for (let i = 0; i < NUM_PEAKS; i++) {
-                let max = 0;
-                const off = i * spp;
-                for (let j = 0; j < spp && off + j < audioData.length; j++) {
-                    const v = Math.abs(audioData[off + j]);
-                    if (v > max) max = v;
-                }
-                peaksArr[i] = max;
-            }
-            const peaksBuf = Buffer.from(peaksArr.buffer, peaksArr.byteOffset, peaksArr.byteLength);
 
             // ── Accumulate running stats for global CMVN ──
             for (let w = 0; w < numWindows; w++) {
@@ -356,7 +330,6 @@ async function processSpectralBatch(files) {
                 summary: Buffer.from(summary.buffer, summary.byteOffset, summary.byteLength),
                 durationMs,
                 windowCount: numWindows,
-                peaksBuf, // ← NEW
             });
 
             if (batch.length >= BATCH_SIZE) flushBatch();
