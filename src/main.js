@@ -210,6 +210,9 @@ app.whenReady().then(async () => {
   try {
     await semanticEngine.init();
     console.log("Semantic Engine initialized in main process.");
+    // Start watching library for incremental indexing (Phase C — fs.watch recursive)
+    const lib = getConfig().libraryPath;
+    if (lib) semanticEngine.startWatching(lib);
   } catch(e) {
     console.error("Failed to initialize Semantic Engine:", e);
   }
@@ -219,7 +222,7 @@ app.on('activate', () => { if(BrowserWindow.getAllWindows().length===0) createWi
 
 // ═══ IPC ═══
 ipcMain.handle('get-library-path', ()=>getConfig().libraryPath);
-ipcMain.handle('set-library-path', async()=>{const r=await dialog.showOpenDialog(mainWindow,{properties:['openDirectory']});if(!r.canceled&&r.filePaths[0]){const c=getConfig();c.libraryPath=r.filePaths[0];saveConfig(c);ensureDir(c.libraryPath);initSoundCache();return c.libraryPath;}return null;});
+ipcMain.handle('set-library-path', async()=>{const r=await dialog.showOpenDialog(mainWindow,{properties:['openDirectory']});if(!r.canceled&&r.filePaths[0]){const c=getConfig();c.libraryPath=r.filePaths[0];saveConfig(c);ensureDir(c.libraryPath);initSoundCache();if(semanticEngine.isReady) semanticEngine.startWatching(c.libraryPath);return c.libraryPath;}return null;});
 ipcMain.handle('get-folders', async ()=>{ 
     while(!soundCacheReady) await new Promise(r=>setTimeout(r,50));
     const counts = {};
@@ -236,7 +239,7 @@ ipcMain.handle('get-sounds', async (_,f)=>{
 ipcMain.handle('delete-sound',async(_,fp)=>{const r=await dialog.showMessageBox(mainWindow,{type:'warning',buttons:['Cancel','Delete'],defaultId:0,message:'Delete this sound?',detail:'Cannot be undone.'});if(r.response===1&&fs.existsSync(fp)){fs.unlinkSync(fp);soundCache=soundCache.filter(s=>s.path!==fp);return true;}return false;});
 ipcMain.handle('move-sound',(_,fp,tf)=>{const d=path.join(getConfig().libraryPath,tf,path.basename(fp));if(fs.existsSync(fp)&&!fs.existsSync(d)){fs.renameSync(fp,d);initSoundCache();return true;}return false;});
 ipcMain.handle('import-files',async(_,tf)=>{const r=await dialog.showOpenDialog(mainWindow,{properties:['openFile','multiSelections'],filters:[{name:'WAV',extensions:['wav']}]});if(!r.canceled){const tp=path.join(getConfig().libraryPath,tf);ensureDir(tp);const res=r.filePaths.map(fp=>{const d=path.join(tp,path.basename(fp));fs.copyFileSync(fp,d);return d;});initSoundCache();return res;}return[];});
-ipcMain.handle('drop-files',(_,fps,tf)=>{const tp=path.join(getConfig().libraryPath,tf);ensureDir(tp);const res=fps.filter(fp=>fp.toLowerCase().endsWith('.wav')&&fs.existsSync(fp)).map(fp=>{const d=path.join(tp,path.basename(fp));fs.copyFileSync(fp,d);return d;});initSoundCache();return res;});
+ipcMain.handle('drop-files',(_,fps,tf)=>{console.log('[IPC] drop-files called, fps:', JSON.stringify(fps), 'tf:', tf);const tp=path.join(getConfig().libraryPath,tf);ensureDir(tp);const res=(fps||[]).filter(fp=>fp&&typeof fp==='string'&&fp.toLowerCase().endsWith('.wav')&&fs.existsSync(fp)).map(fp=>{const d=path.join(tp,path.basename(fp));fs.copyFileSync(fp,d);console.log('[IPC] Copied',fp,'->',d);return d;});initSoundCache();return res;});
 ipcMain.handle('read-audio-file',(_,fp)=>{try{if(!fp||!fs.existsSync(fp)||!fp.toLowerCase().endsWith('.wav'))return null;return fs.readFileSync(fp);}catch(e){return null;}});
 
 // Collections
@@ -476,4 +479,70 @@ ipcMain.handle('semantic-suggest', async (_, collectionName) => {
         return [];
     }
 });
+
+// ═══ Echo Vault IPC ═══
+ipcMain.handle('echo-search', async (_, params) => {
+    if (!semanticEngine.isReady) return { results: [], searchTimeMs: 0, totalCandidates: 0, totalMatches: 0 };
+    try {
+        // Reconstruct Float32Array from transferred buffer
+        const pcmData = new Float32Array(params.pcmData.buffer, params.pcmData.byteOffset, params.pcmData.byteLength / 4);
+        const res = await semanticEngine.echoSearch({
+            pcmData,
+            sampleRate: params.sampleRate,
+            duration: params.duration,
+            weights: params.weights || null,
+            maxResults: params.maxResults || 50,
+            sourceFilePath: params.sourceFilePath || null,
+        });
+
+        // Enrich results with sound cache metadata
+        const cacheMap = new Map();
+        for (const s of soundCache) cacheMap.set(s.path, s);
+
+        res.results = res.results.map(r => {
+            const cached = cacheMap.get(r.path);
+            return {
+                ...r,
+                name: cached ? cached.name : path.basename(r.path),
+                folder: cached ? cached.folder : '',
+                topLevel: cached ? cached.topLevel : '',
+                size: cached ? cached.size : 0,
+                dateAdded: cached ? cached.dateAdded : 0,
+            };
+        });
+        return res;
+    } catch(e) {
+        console.error('echo-search error:', e);
+        return { results: [], searchTimeMs: 0, totalCandidates: 0, totalMatches: 0 };
+    }
+});
+
+ipcMain.handle('echo-file', async (_, filePath, weights) => {
+    if (!semanticEngine.isReady) return { results: [], searchTimeMs: 0, totalCandidates: 0, totalMatches: 0 };
+    try {
+        const res = await semanticEngine.echoFile(filePath, weights || null);
+
+        const cacheMap = new Map();
+        for (const s of soundCache) cacheMap.set(s.path, s);
+
+        res.results = res.results.map(r => {
+            const cached = cacheMap.get(r.path);
+            return {
+                ...r,
+                name: cached ? cached.name : path.basename(r.path),
+                folder: cached ? cached.folder : '',
+                topLevel: cached ? cached.topLevel : '',
+                size: cached ? cached.size : 0,
+                dateAdded: cached ? cached.dateAdded : 0,
+            };
+        });
+        return res;
+    } catch(e) {
+        console.error('echo-file error:', e);
+        return { results: [], searchTimeMs: 0, totalCandidates: 0, totalMatches: 0 };
+    }
+});
+
+ipcMain.handle('spectral-is-ready', () => semanticEngine.spectralReady);
+ipcMain.handle('spectral-get-progress', () => semanticEngine.spectralProgress);
 

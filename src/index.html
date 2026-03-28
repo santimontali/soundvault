@@ -2088,6 +2088,197 @@
     .vault-edit-actions {
       display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;
     }
+
+    /* ═══ Echo Vault — Results Panel ═══ */
+    #echo-panel {
+      position: fixed;
+      top: 0; right: 0; bottom: 0;
+      width: 380px;
+      background: #131316;
+      border-left: .5px solid var(--border);
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform .25s cubic-bezier(.4, 0, .2, 1);
+      box-shadow: -8px 0 32px rgba(0,0,0,.5);
+    }
+    #echo-panel.visible {
+      transform: translateX(0);
+    }
+    #echo-panel,
+    #echo-panel * {
+      -webkit-app-region: no-drag;
+    }
+    .echo-header {
+      padding: 14px 16px 10px;
+      border-bottom: .5px solid var(--border);
+      flex-shrink: 0;
+    }
+    .echo-header-top {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    }
+    .echo-title {
+      font-size: 11px; font-weight: 600; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--accent); flex: 1;
+    }
+    .echo-query-info {
+      font-size: 10px; color: var(--text-muted);
+      margin-bottom: 6px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .echo-close {
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 16px; padding: 0 2px;
+      border-radius: 4px;
+    }
+    .echo-close:hover {
+      background: rgba(255,255,255,.1); color: var(--text-primary);
+    }
+    .echo-stats {
+      font-size: 10px; color: var(--text-muted);
+    }
+    .echo-axes {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      padding: 8px 16px;
+      border-bottom: .5px solid var(--border);
+      flex-shrink: 0;
+    }
+    .echo-axis {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 9px; text-transform: uppercase; letter-spacing: .3px;
+      color: var(--text-muted); cursor: ns-resize;
+      padding: 3px 8px; background: var(--bg-hover);
+      border-radius: 4px; border: .5px solid var(--border);
+      user-select: none; transition: border-color .15s, color .2s, background .2s;
+      position: relative;
+    }
+    .echo-axis:hover { border-color: var(--text-muted); }
+    .echo-axis.dragging {
+      background: rgba(255,255,255,.08);
+      border-color: var(--text-secondary);
+    }
+    .echo-axis .axis-val {
+      display: none;
+    }
+    /* Weight popup — appears during drag */
+    .echo-weight-popup {
+      position: fixed;
+      background: rgba(20, 20, 24, .95);
+      border: .5px solid var(--border);
+      border-radius: 5px;
+      padding: 3px 8px;
+      font-size: 11px; font-weight: 600;
+      color: var(--accent);
+      pointer-events: none;
+      z-index: 10001;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity .15s;
+      box-shadow: 0 4px 12px rgba(0,0,0,.5);
+      font-variant-numeric: tabular-nums;
+    }
+    .echo-weight-popup.visible { opacity: 1; }
+    .echo-axes-header {
+      display: flex; align-items: center; width: 100%;
+      margin-bottom: 2px;
+    }
+    .echo-axes-label {
+      font-size: 8px; letter-spacing: 1px; text-transform: uppercase;
+      color: var(--text-muted); flex: 1;
+    }
+    .echo-axes-reset {
+      background: none; border: none; color: var(--text-muted);
+      font-size: 9px; cursor: pointer;
+      padding: 1px 4px; border-radius: 3px;
+      transition: color .1s;
+    }
+    .echo-axes-reset:hover { color: var(--text-primary); }
+    .echo-results {
+      flex: 1; overflow-y: auto; padding: 8px;
+    }
+    .echo-result {
+      background: var(--bg-surface);
+      border: .5px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 6px;
+      transition: border-color .15s;
+    }
+    .echo-result:hover {
+      border-color: var(--text-muted);
+    }
+    .echo-result-header {
+      display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+    }
+    .echo-result-name {
+      flex: 1; font-size: 12px; color: var(--text-primary);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      cursor: pointer;
+    }
+    .echo-result-name:hover { color: var(--accent); }
+    .echo-result-score {
+      font-size: 10px; padding: 1px 6px; border-radius: 4px;
+      font-weight: 600; flex-shrink: 0;
+    }
+    .echo-result-folder {
+      font-size: 10px; color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .echo-wf-wrap {
+      height: 32px; background: #0e0e11; border-radius: 4px;
+      position: relative; margin-bottom: 6px; overflow: hidden;
+      cursor: pointer;
+    }
+    .echo-wf-wrap canvas {
+      width: 100%; height: 100%; display: block;
+    }
+    .echo-match-overlay {
+      position: absolute; top: 0; height: 100%;
+      background: rgba(200, 247, 109, .12);
+      border-left: 1.5px solid var(--accent);
+      border-right: 1.5px solid var(--accent);
+      pointer-events: none;
+      transition: opacity .2s;
+    }
+    .echo-wf-wrap:hover .echo-match-overlay {
+      background: rgba(200, 247, 109, .2);
+    }
+    .echo-result-actions {
+      display: flex; gap: 4px;
+    }
+    .echo-action-btn {
+      background: var(--bg-hover); border: .5px solid var(--border);
+      color: var(--text-muted); border-radius: 4px;
+      padding: 3px 8px; font-size: 10px; cursor: pointer;
+      display: flex; align-items: center; gap: 3px;
+      transition: border-color .1s, color .1s;
+    }
+    .echo-action-btn:hover {
+      border-color: var(--accent); color: var(--accent);
+    }
+    .echo-chain-trail {
+      display: flex; align-items: center; gap: 4px;
+      padding: 0 16px 6px; flex-shrink: 0;
+      overflow-x: auto; font-size: 10px; color: var(--text-muted);
+    }
+    .echo-chain-item {
+      padding: 2px 6px; background: var(--bg-hover);
+      border-radius: 3px; cursor: pointer; white-space: nowrap;
+      max-width: 120px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .echo-chain-item:hover { color: var(--text-primary); }
+    .echo-chain-sep { opacity: .4; }
+    .echo-empty {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; height: 100%;
+      color: var(--text-muted); gap: 8px; text-align: center;
+      padding: 40px;
+    }
+    .echo-loading {
+      display: flex; align-items: center; justify-content: center;
+      padding: 40px; color: var(--text-muted); font-size: 12px;
+    }
   </style>
 </head>
 
@@ -2167,8 +2358,84 @@
         </div>
         <div class="sidebar-bottom">
           <div class="sidebar-bottom-content" style="display:flex; flex-direction:column; gap:6px">
-            <button id="semantic-index-btn" class="btn-small" style="justify-content:center; width:100%">Index AI</button>
-            <div id="semantic-progress" style="font-size:10px; color:var(--accent); display:none; text-align:center">Indexing: 0/0</div>
+            <button id="semantic-index-btn" class="btn-small" style="justify-content:center; width:100%">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="margin-right:4px">
+                <path d="M2 3h12M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                <circle cx="13" cy="13" r="2.5" stroke="currentColor" stroke-width="1.2"/>
+                <path d="M13 11.5v3M11.5 13h3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+              </svg>Catalog Library</button>
+            <div id="index-progress-panel" style="display:none">
+              <style>
+                #index-progress-panel {
+                  margin-top: 6px;
+                  padding: 8px 10px;
+                  background: rgba(255,255,255,0.03);
+                  border: 1px solid rgba(255,255,255,0.06);
+                  border-radius: 6px;
+                  font-size: 10px;
+                  color: #ccc;
+                  animation: ipanelIn 0.3s ease;
+                }
+                @keyframes ipanelIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+                .idx-phase { margin-bottom: 6px; }
+                .idx-phase:last-child { margin-bottom: 0; }
+                .idx-phase-header { display:flex; justify-content:space-between; margin-bottom: 3px; }
+                .idx-phase-label { font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; font-size: 9px; }
+                .idx-phase-label.active { color: var(--accent); }
+                .idx-phase-label.done { color: #5a5; }
+                .idx-phase-count { color: #888; font-size: 9px; font-variant-numeric: tabular-nums; }
+                .idx-bar-track {
+                  width: 100%;
+                  height: 4px;
+                  background: rgba(255,255,255,0.06);
+                  border-radius: 2px;
+                  overflow: hidden;
+                }
+                .idx-bar-fill {
+                  height: 100%;
+                  width: 0%;
+                  border-radius: 2px;
+                  transition: width 0.5s ease;
+                }
+                .idx-bar-fill.semantic { background: linear-gradient(90deg, #6366f1, #a78bfa); }
+                .idx-bar-fill.spectral { background: linear-gradient(90deg, #f59e0b, #f97316); }
+                .idx-bar-fill.done { background: #5a5 !important; }
+                .idx-bar-fill.active {
+                  background-size: 20px 20px;
+                  background-image: linear-gradient(
+                    135deg,
+                    rgba(255,255,255,0.1) 25%, transparent 25%,
+                    transparent 50%, rgba(255,255,255,0.1) 50%,
+                    rgba(255,255,255,0.1) 75%, transparent 75%
+                  );
+                  animation: idx-stripe 0.8s linear infinite;
+                }
+                @keyframes idx-stripe { from { background-position: 0 0; } to { background-position: 20px 0; } }
+                .idx-status { text-align: center; color: #888; font-size: 9px; margin-top: 4px; font-style: italic; }
+              </style>
+              <div class="idx-phase" id="idx-clap-phase">
+                <div class="idx-phase-header">
+                  <span class="idx-phase-label" id="idx-clap-label">Quick Semantic</span>
+                  <span class="idx-phase-count" id="idx-clap-count">0 / 0</span>
+                </div>
+                <div class="idx-bar-track"><div class="idx-bar-fill semantic" id="idx-clap-bar"></div></div>
+              </div>
+              <div class="idx-phase" id="idx-deep-phase">
+                <div class="idx-phase-header">
+                  <span class="idx-phase-label" id="idx-deep-label">Deep Semantic</span>
+                  <span class="idx-phase-count" id="idx-deep-count">–</span>
+                </div>
+                <div class="idx-bar-track"><div class="idx-bar-fill semantic" id="idx-deep-bar"></div></div>
+              </div>
+              <div class="idx-phase" id="idx-spectral-phase">
+                <div class="idx-phase-header">
+                  <span class="idx-phase-label" id="idx-spectral-label">Echo Spectral</span>
+                  <span class="idx-phase-count" id="idx-spectral-count">–</span>
+                </div>
+                <div class="idx-bar-track"><div class="idx-bar-fill spectral" id="idx-spectral-bar"></div></div>
+              </div>
+              <div class="idx-status" id="idx-status-text">Scanning library...</div>
+            </div>
             <button id="settings-btn"><svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.2" />
                 <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M3 13l1.5-1.5M11.5 4.5L13 3"
@@ -2291,6 +2558,11 @@
         <circle cx="4" cy="3" r="1.2" fill="currentColor"/><circle cx="4" cy="7" r="1.2" fill="currentColor"/><circle cx="4" cy="11" r="1.2" fill="currentColor"/>
         <circle cx="9" cy="3" r="1.2" fill="currentColor"/><circle cx="9" cy="7" r="1.2" fill="currentColor"/><circle cx="9" cy="11" r="1.2" fill="currentColor"/>
       </svg></div>
+    <button class="sel-btn" id="gtb-echo" title="Echo — Find similar sounds (Ctrl+E)"><svg viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3"/>
+        <path d="M4.5 4.5C3.2 5.8 2.5 7.5 2.5 8s.7 2.2 2 3.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity=".6"/>
+        <path d="M11.5 4.5c1.3 1.3 2 3 2 3.5s-.7 2.2-2 3.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity=".6"/>
+      </svg></button>
     <button class="sel-btn" id="gtb-clear" title="Clear selection"><svg viewBox="0 0 14 14">
         <path d="M3 3l8 8M11 3l-8 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
       </svg></button>
@@ -2386,6 +2658,21 @@
   </div>
 
   <div id="collect-toast"></div>
+
+  <!-- Echo Vault Results Panel -->
+  <div id="echo-panel">
+    <div class="echo-header">
+      <div class="echo-header-top">
+        <span class="echo-title">◉ Echo Vault</span>
+        <span class="echo-stats" id="echo-stats"></span>
+        <button class="echo-close" id="echo-close">×</button>
+      </div>
+      <div class="echo-query-info" id="echo-query-info"></div>
+    </div>
+    <div class="echo-axes" id="echo-axes"></div>
+    <div class="echo-chain-trail" id="echo-chain" style="display:none"></div>
+    <div class="echo-results" id="echo-results"></div>
+  </div>
 
   <script>
     let currentFolder = null, currentCollection = null, sounds = [], currentSound = null, isPlaying = false, playOffset = 0, playStartTime = 0, playEndTime = Infinity, animFrameId = null, volume = .8, contextMenuTarget = null, searchMode = false;
@@ -2712,10 +2999,13 @@
       let html = `<div class="context-menu-item" id="ctx-reveal">Show in Explorer</div><div class="context-menu-item" id="ctx-move">Move to folder...</div>`;
       if (colNames.length) { html += `<div class="context-menu-sub">Add to collection ▸<div class="sub-menu">${colNames.map(n => `<div class="sub-menu-item" data-col="${n}"><span style="display:inline-block;width:7px;height:7px;border-radius:3px;margin-right:6px;background:${colColors[n] || 'var(--bg-hover)'};border:.5px solid rgba(255,255,255,.15)"></span>${n}</div>`).join('')}</div></div>` }
       html += `<div class="context-menu-sep"></div>`;
+      html += `<div class="context-menu-item" id="ctx-echo-file">◉ Echo — Find similar</div>`;
       if (currentCollection) { html += `<div class="context-menu-item" id="ctx-remove-col">Remove from collection</div>` }
+      html += `<div class="context-menu-sep"></div>`;
       html += `<div class="context-menu-item danger" id="ctx-delete">Delete file</div>`;
       m.innerHTML = html; m.style.left = Math.min(x, innerWidth - 220) + 'px'; m.style.top = Math.min(y, innerHeight - 220) + 'px'; m.classList.add('active');
       m.querySelector('#ctx-reveal')?.addEventListener('click', () => { window.api.revealInFinder(sound.path); m.classList.remove('active') });
+      m.querySelector('#ctx-echo-file')?.addEventListener('click', () => { m.classList.remove('active'); triggerEchoFile(sound.path, sound.name) });
       m.querySelector('#ctx-move')?.addEventListener('click', async () => { m.classList.remove('active'); const folders = (await window.api.getFolders()).filter(f => f.name !== currentFolder).map(f => f.name); if (!folders.length) return; showListModal('Move to folder', folders, async t => { if (t) { await window.api.moveSound(sound.path, t); await loadSounds(); await loadFolders() } }) });
       m.querySelector('#ctx-delete')?.addEventListener('click', async () => { m.classList.remove('active'); if (await window.api.deleteSound(sound.path)) { if (currentSound?.path === sound.path) { stopAudio(); currentSound = null; audioBuffer = null; updatePlayerUI(); document.getElementById('player-name').textContent = 'No sound loaded'; updateProgressBar(0) } bufferCache.delete(sound.path); peakCache.delete(sound.path); if (selection?.path === sound.path) clearSelection(); if (currentCollection) await loadCollectionSounds(); else await loadSounds(); await loadFolders(); await loadCollections() } });
       m.querySelector('#ctx-remove-col')?.addEventListener('click', async () => { m.classList.remove('active'); await window.api.removeFromCollection(currentCollection, sound.path); await loadCollectionSounds(); await loadCollections() });
@@ -3210,40 +3500,127 @@
     
     document.getElementById('semantic-index-btn').addEventListener('click', async () => {
         const btn = document.getElementById('semantic-index-btn');
-        btn.textContent = 'Starting...';
+        const panel = document.getElementById('index-progress-panel');
         btn.disabled = true;
+        btn.style.opacity = '0.6';
         
         const started = await window.api.semanticStartIndex();
         if (!started) {
-            btn.textContent = 'Engine Loading (Wait...)';
-            setTimeout(() => { btn.textContent = 'Index AI'; btn.disabled = false; }, 3000);
+            btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="margin-right:4px"><path d="M2 3h12M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="13" cy="13" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M13 11.5v3M11.5 13h3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>Engine Loading...';
+            setTimeout(() => {
+                btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="margin-right:4px"><path d="M2 3h12M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="13" cy="13" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M13 11.5v3M11.5 13h3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>Catalog Library';
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            }, 3000);
             return;
         }
         
-        btn.textContent = 'Indexing...';
-        document.getElementById('semantic-progress').style.display = 'block';
+        // Show progress panel
+        panel.style.display = 'block';
+        document.getElementById('idx-status-text').textContent = 'Scanning library...';
+        document.getElementById('idx-clap-bar').style.width = '0%';
+        document.getElementById('idx-deep-bar').style.width = '0%';
+        document.getElementById('idx-spectral-bar').style.width = '0%';
+        document.getElementById('idx-clap-bar').className = 'idx-bar-fill semantic';
+        document.getElementById('idx-deep-bar').className = 'idx-bar-fill semantic';
+        document.getElementById('idx-spectral-bar').className = 'idx-bar-fill spectral';
+        document.getElementById('idx-clap-label').className = 'idx-phase-label';
+        document.getElementById('idx-deep-label').className = 'idx-phase-label';
+        document.getElementById('idx-spectral-label').className = 'idx-phase-label';
+        document.getElementById('idx-clap-count').textContent = '–';
+        document.getElementById('idx-deep-count').textContent = '–';
+        document.getElementById('idx-spectral-count').textContent = '–';
+        
+        let lastPhase = 'scanning';
         
         const progIv = setInterval(async () => {
             const p = await window.api.semanticGetProgress();
-            if (p.total > 0) {
-                document.getElementById('semantic-progress').textContent = `Indexing AI: ${p.current} / ${p.total}`;
-                if (p.current >= p.total) {
-                    clearInterval(progIv);
-                    document.getElementById('semantic-progress').textContent = 'AI Ready';
-                    btn.textContent = 'Index AI';
-                    btn.disabled = false;
-                    setTimeout(() => document.getElementById('semantic-progress').style.display='none', 3000);
+
+            // ── Tier 0: Quick CLAP ──
+            if (p.phase === 'clap-quick') {
+                document.getElementById('idx-clap-label').className = 'idx-phase-label active';
+                document.getElementById('idx-clap-bar').className = 'idx-bar-fill semantic active';
+                if (p.phaseTotal > 0) {
+                    const pct = Math.round(p.phaseCurrent / p.phaseTotal * 100);
+                    document.getElementById('idx-clap-bar').style.width = pct + '%';
+                    document.getElementById('idx-clap-count').textContent = `${p.phaseCurrent} / ${p.phaseTotal}`;
                 }
+                document.getElementById('idx-status-text').textContent = 'Quick semantic scan — search available soon...';
             }
-        }, 1000);
+
+            // ── Tier 1: Deep CLAP ──
+            if (p.phase === 'clap-deep') {
+                // Mark quick as done
+                document.getElementById('idx-clap-label').className = 'idx-phase-label done';
+                document.getElementById('idx-clap-bar').className = 'idx-bar-fill semantic done';
+                document.getElementById('idx-clap-bar').style.width = '100%';
+                document.getElementById('idx-clap-count').textContent = `${p.clapTotal} ✓`;
+                // Activate deep
+                document.getElementById('idx-deep-label').className = 'idx-phase-label active';
+                document.getElementById('idx-deep-bar').className = 'idx-bar-fill semantic active';
+                if (p.phaseTotal > 0) {
+                    const pct = Math.round(p.phaseCurrent / p.phaseTotal * 100);
+                    document.getElementById('idx-deep-bar').style.width = pct + '%';
+                    document.getElementById('idx-deep-count').textContent = `${p.phaseCurrent} / ${p.phaseTotal}`;
+                }
+                document.getElementById('idx-status-text').textContent = 'Refining long file signatures...';
+            }
+
+            // ── Tier 2: Spectral ──
+            if (p.phase === 'spectral') {
+                // Mark previous tiers as done
+                document.getElementById('idx-clap-label').className = 'idx-phase-label done';
+                document.getElementById('idx-clap-bar').className = 'idx-bar-fill semantic done';
+                document.getElementById('idx-clap-bar').style.width = '100%';
+                document.getElementById('idx-deep-label').className = 'idx-phase-label done';
+                document.getElementById('idx-deep-bar').className = 'idx-bar-fill semantic done';
+                document.getElementById('idx-deep-bar').style.width = '100%';
+                // Activate spectral
+                document.getElementById('idx-spectral-label').className = 'idx-phase-label active';
+                document.getElementById('idx-spectral-bar').className = 'idx-bar-fill spectral active';
+                if (p.phaseTotal > 0) {
+                    const pct = Math.round(p.phaseCurrent / p.phaseTotal * 100);
+                    document.getElementById('idx-spectral-bar').style.width = pct + '%';
+                    document.getElementById('idx-spectral-count').textContent = `${p.phaseCurrent} / ${p.phaseTotal}`;
+                }
+                document.getElementById('idx-status-text').textContent = 'Extracting Echo spectral fingerprints...';
+            }
+
+            // ── Done ──
+            if (p.phase === 'done') {
+                clearInterval(progIv);
+                document.getElementById('idx-clap-label').className = 'idx-phase-label done';
+                document.getElementById('idx-deep-label').className = 'idx-phase-label done';
+                document.getElementById('idx-spectral-label').className = 'idx-phase-label done';
+                document.getElementById('idx-clap-bar').className = 'idx-bar-fill semantic done';
+                document.getElementById('idx-deep-bar').className = 'idx-bar-fill semantic done';
+                document.getElementById('idx-spectral-bar').className = 'idx-bar-fill spectral done';
+                document.getElementById('idx-clap-bar').style.width = '100%';
+                document.getElementById('idx-deep-bar').style.width = '100%';
+                document.getElementById('idx-spectral-bar').style.width = '100%';
+                document.getElementById('idx-clap-count').textContent = p.clapTotal > 0 ? `${p.clapTotal} ✓` : '–';
+                document.getElementById('idx-spectral-count').textContent = p.spectralTotal > 0 ? `${p.spectralTotal} ✓` : '–';
+                document.getElementById('idx-status-text').textContent = 'Library cataloged ✓';
+                document.getElementById('idx-status-text').style.color = '#5a5';
+
+                btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="margin-right:4px"><path d="M2 3h12M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="13" cy="13" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M13 11.5v3M11.5 13h3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>Catalog Library';
+                btn.disabled = false;
+                btn.style.opacity = '1';
+
+                setTimeout(() => {
+                    panel.style.display = 'none';
+                    document.getElementById('idx-status-text').style.color = '';
+                }, 5000);
+            }
+        }, 800);
     });
     
-    // Status checker for AI readiness
+    // Status checker for engine readiness
     setInterval(async () => {
         if (!useSemanticSearch) {
             const ready = await window.api.semanticIsReady();
             const sBtn = document.getElementById('semantic-toggle');
-            sBtn.title = ready ? 'Toggle Semantic Search (AI)' : 'AI Engine loading...';
+            sBtn.title = ready ? 'Toggle Semantic Search' : 'Engine loading...';
             sBtn.style.opacity = ready ? '1' : '0.5';
             sBtn.style.pointerEvents = ready ? 'auto' : 'none';
         }
@@ -4182,6 +4559,376 @@
       document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
     }
     init();
+
+    // ══════════════════════════════════════════════
+    // ECHO VAULT — Fragment-Level Audio Similarity
+    // ══════════════════════════════════════════════
+    let echoState = {
+      open: false,
+      results: [],
+      chain: [],  // breadcrumb chain for Echo Again
+      weights: { timbre: 1, brightness: 1, texture: 1, energy: 0.5, transient: 0.8 },
+      lastSearchParams: null,
+    };
+
+    function openEchoPanel() {
+      echoState.open = true;
+      document.getElementById('echo-panel').classList.add('visible');
+    }
+    function closeEchoPanel() {
+      echoState.open = false;
+      document.getElementById('echo-panel').classList.remove('visible');
+    }
+    document.getElementById('echo-close').addEventListener('click', closeEchoPanel);
+
+    // Render similarity axes controls
+    const ECHO_DEFAULTS = { timbre: 1, brightness: 1, texture: 1, energy: 0.5, transient: 0.8 };
+
+    // Shared weight popup element
+    const echoWeightPopup = document.createElement('div');
+    echoWeightPopup.className = 'echo-weight-popup';
+    document.body.appendChild(echoWeightPopup);
+
+    function getAxisColor(weight) {
+      // 0 → dim grey, 1 → white, 2 → accent green
+      let r, g, b;
+      if (weight <= 1) {
+        const t = weight;
+        r = g = b = Math.round(85 + (240 - 85) * t);
+      } else {
+        const t = weight - 1;
+        r = Math.round(240 + (200 - 240) * t);
+        g = Math.round(240 + (247 - 240) * t);
+        b = Math.round(240 + (109 - 240) * t);
+      }
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    function renderEchoAxes() {
+      const ct = document.getElementById('echo-axes');
+      ct.innerHTML = '';
+      // Header row with reset button
+      const hdr = document.createElement('div');
+      hdr.className = 'echo-axes-header';
+      hdr.innerHTML = `<span class="echo-axes-label">Similarity Axes</span><button class="echo-axes-reset" id="echo-axes-reset-btn" title="Reset all axes to defaults">↺ reset</button>`;
+      ct.appendChild(hdr);
+      hdr.querySelector('#echo-axes-reset-btn').addEventListener('click', () => {
+        Object.assign(echoState.weights, ECHO_DEFAULTS);
+        renderEchoAxes();
+        if (echoState.lastSearchParams) {
+          echoState.lastSearchParams.weights = { ...echoState.weights };
+          runEchoSearch(echoState.lastSearchParams);
+        }
+      });
+
+      const axes = ['timbre', 'brightness', 'texture', 'energy', 'transient'];
+      axes.forEach(axis => {
+        const d = document.createElement('div');
+        d.className = 'echo-axis';
+        d.textContent = axis;
+        d.style.color = getAxisColor(echoState.weights[axis]);
+        d.title = `Drag up/down to adjust · Double-click to reset`;
+        let dragging = false, startY = 0, startW = 1;
+        let searchDebounce = null;
+
+        // Double-click to reset this axis
+        d.addEventListener('dblclick', e => {
+          e.preventDefault();
+          echoState.weights[axis] = ECHO_DEFAULTS[axis];
+          d.style.color = getAxisColor(echoState.weights[axis]);
+          if (echoState.lastSearchParams) {
+            echoState.lastSearchParams.weights = { ...echoState.weights };
+            runEchoSearch(echoState.lastSearchParams);
+          }
+        });
+
+        d.addEventListener('mousedown', e => {
+          if (e.detail >= 2) return; // skip double-click
+          dragging = true; startY = e.clientY; startW = echoState.weights[axis];
+          e.preventDefault();
+          d.classList.add('dragging');
+          // Show popup near element
+          const rect = d.getBoundingClientRect();
+          echoWeightPopup.style.left = (rect.left + rect.width / 2 - 20) + 'px';
+          echoWeightPopup.style.top = (rect.top - 28) + 'px';
+          echoWeightPopup.textContent = Math.round(echoState.weights[axis] * 100) + '%';
+          echoWeightPopup.classList.add('visible');
+          // Hide cursor by moving it nowhere — freeze by warping
+          document.body.style.cursor = 'none';
+
+          const onM = me => {
+            if (!dragging) return;
+            const delta = (startY - me.clientY) / 100;
+            echoState.weights[axis] = Math.max(0, Math.min(2, startW + delta));
+            d.style.color = getAxisColor(echoState.weights[axis]);
+            echoWeightPopup.textContent = Math.round(echoState.weights[axis] * 100) + '%';
+            // Debounced live search
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(() => {
+              if (echoState.lastSearchParams) {
+                echoState.lastSearchParams.weights = { ...echoState.weights };
+                runEchoSearch(echoState.lastSearchParams);
+              }
+            }, 200);
+          };
+          const onU = () => {
+            dragging = false;
+            d.classList.remove('dragging');
+            document.removeEventListener('mousemove', onM);
+            document.removeEventListener('mouseup', onU);
+            document.body.style.cursor = '';
+            // Fade out popup
+            echoWeightPopup.classList.remove('visible');
+            // Final search
+            clearTimeout(searchDebounce);
+            if (echoState.lastSearchParams) {
+              echoState.lastSearchParams.weights = { ...echoState.weights };
+              runEchoSearch(echoState.lastSearchParams);
+            }
+          };
+          document.addEventListener('mousemove', onM);
+          document.addEventListener('mouseup', onU);
+        });
+        ct.appendChild(d);
+      });
+    }
+    renderEchoAxes();
+
+    // Render echo chain breadcrumbs
+    function renderEchoChain() {
+      const ct = document.getElementById('echo-chain');
+      if (echoState.chain.length <= 1) { ct.style.display = 'none'; return; }
+      ct.style.display = 'flex';
+      ct.innerHTML = '';
+      echoState.chain.forEach((item, i) => {
+        if (i > 0) { const sep = document.createElement('span'); sep.className = 'echo-chain-sep'; sep.textContent = '→'; ct.appendChild(sep); }
+        const d = document.createElement('span');
+        d.className = 'echo-chain-item';
+        d.textContent = item.label;
+        d.title = item.label;
+        ct.appendChild(d);
+      });
+    }
+
+    // Trigger Echo from selection
+    async function triggerEchoSelection() {
+      if (!selection) return;
+      const snd = sounds.find(x => x.path === selection.path);
+      if (!snd) return;
+
+      // Get decoded audio buffer
+      const buf = bufferCache.get(selection.path) || await decodeFile(selection.path);
+      if (!buf) return;
+
+      // Extract selected PCM data (mono, first channel)
+      const ch = buf.getChannelData(0);
+      const start = Math.floor(selection.start * ch.length);
+      const end = Math.floor(selection.end * ch.length);
+      const pcmSlice = ch.slice(start, end);
+      const duration = (end - start) / buf.sampleRate;
+      const label = snd.name.replace(/\.wav$/i, '') + ' [' + formatTime(start / buf.sampleRate) + '–' + formatTime(end / buf.sampleRate) + ']';
+
+      echoState.chain = [{ label, type: 'selection' }];
+
+      await runEchoSearch({
+        pcmData: pcmSlice,
+        sampleRate: buf.sampleRate,
+        duration,
+        weights: { ...echoState.weights },
+        sourceFilePath: selection.path,
+      });
+    }
+
+    // Trigger Echo File (right-click → Find similar)
+    async function triggerEchoFile(filePath, fileName) {
+      const label = fileName ? fileName.replace(/\.wav$/i, '') : filePath.split(/[/\\]/).pop().replace(/\.wav$/i, '');
+      echoState.chain = [{ label, type: 'file' }];
+
+      openEchoPanel();
+      document.getElementById('echo-query-info').textContent = `Finding sounds similar to "${label}"...`;
+      document.getElementById('echo-results').innerHTML = '<div class="echo-loading">Searching...</div>';
+      renderEchoChain();
+
+      try {
+        const res = await window.api.echoFile(filePath, echoState.weights);
+        echoState.results = res.results || [];
+        echoState.lastSearchParams = { type: 'file', filePath, weights: { ...echoState.weights } };
+        document.getElementById('echo-stats').textContent = `${res.totalMatches} matches · ${res.searchTimeMs}ms`;
+        document.getElementById('echo-query-info').textContent = `Similar to "${label}"`;
+        renderEchoResults();
+      } catch (e) {
+        console.error('Echo file error:', e);
+        document.getElementById('echo-results').innerHTML = '<div class="echo-empty"><div style="font-size:24px;opacity:.3">⚠</div><div>Search failed</div></div>';
+      }
+    }
+
+    // Run echo search (fragment)
+    async function runEchoSearch(params) {
+      openEchoPanel();
+      document.getElementById('echo-results').innerHTML = '<div class="echo-loading">Searching...</div>';
+      renderEchoChain();
+
+      try {
+        const searchParams = {
+          pcmData: params.pcmData,
+          sampleRate: params.sampleRate,
+          duration: params.duration,
+          weights: params.weights,
+          maxResults: 50,
+          sourceFilePath: params.sourceFilePath || null,
+        };
+        echoState.lastSearchParams = { type: 'fragment', ...params };
+
+        const res = await window.api.echoSearch(searchParams);
+        echoState.results = res.results || [];
+        document.getElementById('echo-stats').textContent = `${res.totalMatches} matches · ${res.searchTimeMs}ms`;
+        document.getElementById('echo-query-info').textContent = `${echoState.chain[echoState.chain.length - 1]?.label || 'Echo'} · ${Math.round(params.duration * 1000)}ms fragment`;
+        renderEchoResults();
+      } catch (e) {
+        console.error('Echo search error:', e);
+        document.getElementById('echo-results').innerHTML = '<div class="echo-empty"><div style="font-size:24px;opacity:.3">⚠</div><div>Search failed</div></div>';
+      }
+    }
+
+    // Render echo results
+    function renderEchoResults() {
+      const ct = document.getElementById('echo-results');
+      ct.innerHTML = '';
+      if (!echoState.results.length) {
+        ct.innerHTML = '<div class="echo-empty"><div style="font-size:24px;opacity:.3">◉</div><div>No similar sounds found</div></div>';
+        return;
+      }
+
+      for (const r of echoState.results) {
+        const d = document.createElement('div');
+        d.className = 'echo-result';
+        const scorePct = Math.round(r.score * 100);
+        const scoreColor = scorePct >= 80 ? 'var(--accent)' : scorePct >= 50 ? 'var(--text-secondary)' : 'var(--text-muted)';
+        const scoreBg = scorePct >= 80 ? 'var(--accent-dim)' : 'rgba(255,255,255,.06)';
+        const name = r.name ? r.name.replace(/\.wav$/i, '') : r.path.split(/[/\\]/).pop().replace(/\.wav$/i, '');
+        const folder = r.folder || '';
+
+        d.innerHTML = `
+          <div class="echo-result-header">
+            <span class="echo-result-name" title="${name}">${name}</span>
+            <span class="echo-result-score" style="background:${scoreBg};color:${scoreColor}">${scorePct}%</span>
+          </div>
+          ${folder ? `<div class="echo-result-folder">${folder}</div>` : ''}
+          <div class="echo-wf-wrap">
+            <canvas class="echo-wf-canvas"></canvas>
+            <div class="echo-match-overlay" style="display:none"></div>
+          </div>
+          <div class="echo-result-actions">
+            <button class="echo-action-btn echo-play-btn">▶ Play</button>
+            <button class="echo-action-btn echo-again-btn">◉ Echo Again</button>
+            <button class="echo-action-btn echo-locate-btn">→ Locate</button>
+          </div>
+        `;
+
+        // Play matched segment
+        d.querySelector('.echo-play-btn').addEventListener('click', async () => {
+          const buf = await decodeFile(r.path);
+          if (!buf) return;
+          stopAudio();
+          currentSound = { name: r.name || r.path.split(/[/\\]/).pop(), path: r.path };
+          audioBuffer = buf;
+          document.getElementById('player-name').textContent = name;
+          refreshPlaying();
+          const startT = (r.matchOffsetMs || 0) / 1000;
+          const endT = startT + (r.matchDurationMs || buf.duration * 1000) / 1000;
+          playAudio(Math.min(startT, buf.duration), Math.min(endT, buf.duration));
+        });
+
+        // Echo Again — use matched segment as new query
+        d.querySelector('.echo-again-btn').addEventListener('click', async () => {
+          const buf = await decodeFile(r.path);
+          if (!buf) return;
+          const ch = buf.getChannelData(0);
+          const startSample = Math.floor((r.matchOffsetMs || 0) / 1000 * buf.sampleRate);
+          const durSamples = Math.floor((r.matchDurationMs || 500) / 1000 * buf.sampleRate);
+          const endSample = Math.min(startSample + durSamples, ch.length);
+          const pcm = ch.slice(startSample, endSample);
+          const dur = (endSample - startSample) / buf.sampleRate;
+
+          echoState.chain.push({ label: name, type: 'echo-again' });
+
+          await runEchoSearch({
+            pcmData: pcm,
+            sampleRate: buf.sampleRate,
+            duration: dur,
+            weights: { ...echoState.weights },
+            sourceFilePath: r.path,
+          });
+        });
+
+        // Locate sound in main interface
+        d.querySelector('.echo-locate-btn').addEventListener('click', () => {
+          locateEchoResult(r);
+        });
+
+        // Click on name to play
+        d.querySelector('.echo-result-name').addEventListener('click', () => {
+          const snd = { name: r.name || r.path.split(/[/\\]/).pop(), path: r.path, folder: r.folder || '', size: r.size || 0, dateAdded: r.dateAdded || 0 };
+          playSoundItem(snd);
+        });
+
+        ct.appendChild(d);
+
+        // Draw mini waveform + match overlay
+        (async () => {
+          const pk = await loadPeaks(r.path);
+          if (!pk) return;
+          const cv = d.querySelector('.echo-wf-canvas');
+          if (cv) requestAnimationFrame(() => drawWf(cv, pk.peaks, {}));
+          // Show match overlay
+          if (r.matchOffsetMs !== undefined && r.matchDurationMs && pk.duration) {
+            const ov = d.querySelector('.echo-match-overlay');
+            const startPct = (r.matchOffsetMs / 1000) / pk.duration * 100;
+            const widthPct = (r.matchDurationMs / 1000) / pk.duration * 100;
+            ov.style.left = startPct + '%';
+            ov.style.width = Math.min(widthPct, 100 - startPct) + '%';
+            ov.style.display = 'block';
+          }
+        })();
+      }
+    }
+
+    // Echo toolbar button
+    document.getElementById('gtb-echo').addEventListener('click', e => {
+      e.stopPropagation();
+      if (selection) triggerEchoSelection();
+    });
+
+    // Keyboard shortcut: Ctrl+E for Echo
+    document.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+        e.preventDefault();
+        if (selection) triggerEchoSelection();
+      }
+    });
+
+    // Locate an Echo result in the main interface
+    async function locateEchoResult(r) {
+      const folder = r.topLevel || r.folder || '';
+      closeEchoPanel();
+      // Switch to sounds mode and navigate to the top-level folder
+      setSidebarMode('sounds');
+      if (folder && folder !== currentFolder) {
+        await selectFolder(folder);
+      }
+      // Wait for DOM to render
+      await new Promise(resolve => setTimeout(resolve, 150));
+      // Find and scroll to the sound item
+      const escapedPath = CSS.escape(r.path);
+      const item = document.querySelector(`.sound-item[data-path="${escapedPath}"]`);
+      if (item) {
+        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Flash highlight
+        item.style.transition = 'background .15s';
+        item.style.background = 'rgba(200, 247, 109, .12)';
+        setTimeout(() => { item.style.background = ''; }, 1500);
+      }
+    }
   </script>
 </body>
 
