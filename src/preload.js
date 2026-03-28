@@ -42,4 +42,9 @@ contextBridge.exposeInMainWorld('api', {
   semanticStartIndex: ()=>ipcRenderer.invoke('semantic-start-indexing'),
   semanticSearch: (q, w)=>ipcRenderer.invoke('semantic-search', q, w),
   semanticSuggest: n=>ipcRenderer.invoke('semantic-suggest', n),
+  // Echo Vault
+  echoSearch: params=>ipcRenderer.invoke('echo-search', params),
+  echoFile: (fp, w)=>ipcRenderer.invoke('echo-file', fp, w),
+  spectralIsReady: ()=>ipcRenderer.invoke('spectral-is-ready'),
+  spectralGetProgress: ()=>ipcRenderer.invoke('spectral-get-progress'),
 });
