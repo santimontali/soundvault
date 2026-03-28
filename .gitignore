@@ -143,3 +143,4 @@ out/
 soundvault-semantic.db
 soundvault-config.json
 *.db
+.soundvault-collections.json

@@ -484,37 +484,82 @@ function computeGlobalStats(sumPerDim, sumSqPerDim, totalWindows) {
  * @returns {{ score: number, offsetWindows: number }}
  */
 function findBestSegment(queryMatrix, queryLen, fileMatrix, fileLen, featureWeights = null) {
-    // If file is shorter than query, compare what we can
     const effectiveQueryLen = Math.min(queryLen, fileLen);
     const maxOffset = Math.max(0, fileLen - effectiveQueryLen);
 
     let bestScore = -Infinity;
     let bestOffset = 0;
 
+    // Pre-apply weights to query matrix for speed (avoid per-iteration branching)
+    let weightedQuery = queryMatrix;
+    let useWeights = false;
+    if (featureWeights) {
+        // Check if weights are non-uniform
+        let allOne = true;
+        for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
+            if (featureWeights[d] !== 1) { allOne = false; break; }
+        }
+        if (!allOne) {
+            useWeights = true;
+            weightedQuery = new Float32Array(effectiveQueryLen * FEATURES_PER_WINDOW);
+            for (let w = 0; w < effectiveQueryLen; w++) {
+                const off = w * FEATURES_PER_WINDOW;
+                for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
+                    weightedQuery[off + d] = queryMatrix[off + d] * featureWeights[d];
+                }
+            }
+        }
+    }
+
     for (let offset = 0; offset <= maxOffset; offset++) {
         let score = 0;
+        let earlyExit = false;
+
         for (let w = 0; w < effectiveQueryLen; w++) {
             const qOff = w * FEATURES_PER_WINDOW;
             const fOff = (offset + w) * FEATURES_PER_WINDOW;
 
             let dot = 0, qNorm = 0, fNorm = 0;
-            for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
-                const qVal = queryMatrix[qOff + d];
-                const fVal = fileMatrix[fOff + d];
-                const weight = featureWeights ? featureWeights[d] : 1;
-                const qw = qVal * weight;
-                const fw = fVal * weight;
-                dot += qw * fw;
-                qNorm += qw * qw;
-                fNorm += fw * fw;
+
+            if (useWeights) {
+                for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
+                    const qw = weightedQuery[qOff + d];
+                    const fw = fileMatrix[fOff + d] * featureWeights[d];
+                    dot += qw * fw;
+                    qNorm += qw * qw;
+                    fNorm += fw * fw;
+                }
+            } else {
+                for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
+                    const qVal = queryMatrix[qOff + d];
+                    const fVal = fileMatrix[fOff + d];
+                    dot += qVal * fVal;
+                    qNorm += qVal * qVal;
+                    fNorm += fVal * fVal;
+                }
             }
             score += dot / (Math.sqrt(qNorm * fNorm) + 1e-8);
-        }
-        score /= effectiveQueryLen;
 
-        if (score > bestScore) {
-            bestScore = score;
-            bestOffset = offset;
+            // ── Early exit: if remaining windows all scored 1.0 (perfect),
+            // would the average still beat bestScore? If not, skip this offset.
+            if (w >= 3 && bestScore > -Infinity) {
+                const windowsDone = w + 1;
+                const windowsLeft = effectiveQueryLen - windowsDone;
+                const optimisticTotal = score + windowsLeft; // max possible remaining (each window ≤ 1.0)
+                const optimisticAvg = optimisticTotal / effectiveQueryLen;
+                if (optimisticAvg <= bestScore) {
+                    earlyExit = true;
+                    break;
+                }
+            }
+        }
+
+        if (!earlyExit) {
+            score /= effectiveQueryLen;
+            if (score > bestScore) {
+                bestScore = score;
+                bestOffset = offset;
+            }
         }
     }
 

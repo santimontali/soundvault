@@ -223,6 +223,7 @@ app.on('activate', () => { if(BrowserWindow.getAllWindows().length===0) createWi
 // ═══ IPC ═══
 ipcMain.handle('get-library-path', ()=>getConfig().libraryPath);
 ipcMain.handle('set-library-path', async()=>{const r=await dialog.showOpenDialog(mainWindow,{properties:['openDirectory']});if(!r.canceled&&r.filePaths[0]){const c=getConfig();c.libraryPath=r.filePaths[0];saveConfig(c);ensureDir(c.libraryPath);initSoundCache();if(semanticEngine.isReady) semanticEngine.startWatching(c.libraryPath);return c.libraryPath;}return null;});
+ipcMain.handle('set-watcher', (_,enabled)=>{ const lib=getConfig().libraryPath; if(!lib||!semanticEngine.isReady) return; if(enabled) semanticEngine.startWatching(lib); else semanticEngine.stopWatching(); return enabled; });
 ipcMain.handle('get-folders', async ()=>{ 
     while(!soundCacheReady) await new Promise(r=>setTimeout(r,50));
     const counts = {};
@@ -241,6 +242,212 @@ ipcMain.handle('move-sound',(_,fp,tf)=>{const d=path.join(getConfig().libraryPat
 ipcMain.handle('import-files',async(_,tf)=>{const r=await dialog.showOpenDialog(mainWindow,{properties:['openFile','multiSelections'],filters:[{name:'WAV',extensions:['wav']}]});if(!r.canceled){const tp=path.join(getConfig().libraryPath,tf);ensureDir(tp);const res=r.filePaths.map(fp=>{const d=path.join(tp,path.basename(fp));fs.copyFileSync(fp,d);return d;});initSoundCache();return res;}return[];});
 ipcMain.handle('drop-files',(_,fps,tf)=>{console.log('[IPC] drop-files called, fps:', JSON.stringify(fps), 'tf:', tf);const tp=path.join(getConfig().libraryPath,tf);ensureDir(tp);const res=(fps||[]).filter(fp=>fp&&typeof fp==='string'&&fp.toLowerCase().endsWith('.wav')&&fs.existsSync(fp)).map(fp=>{const d=path.join(tp,path.basename(fp));fs.copyFileSync(fp,d);console.log('[IPC] Copied',fp,'->',d);return d;});initSoundCache();return res;});
 ipcMain.handle('read-audio-file',(_,fp)=>{try{if(!fp||!fs.existsSync(fp)||!fp.toLowerCase().endsWith('.wav'))return null;return fs.readFileSync(fp);}catch(e){return null;}});
+
+// ═══ Peak Extraction (optimized) ═══
+// Three-tier peak extraction:
+//   1. SQLite DB cache (populated during indexing) — instant
+//   2. Direct WAV parser (reads PCM bytes from disk, no ffmpeg) — ~1-5ms
+//   3. ffmpeg fallback (for non-WAV formats: FLAC, AIFF, OGG, MP3) — ~30-80ms
+const NUM_PEAKS = 4000;
+const WAV_EXTENSIONS = new Set(['.wav']);
+
+/**
+ * Parse a WAV file header and extract peaks directly from PCM data.
+ * Reads raw bytes from disk — no subprocess, no decode overhead.
+ * Supports 16-bit, 24-bit, and 32-bit PCM (format tag 1) and
+ * 32-bit IEEE float (format tag 3).
+ * @param {string} fp - Absolute path to .wav file
+ * @returns {Promise<{peaks: Float32Array, duration: number}|null>}
+ */
+async function extractPeaksFromWAV(fp) {
+    const fd = await fs.promises.open(fp, 'r');
+    try {
+        // Read first 128 bytes to parse header (handles extended headers)
+        const headerBuf = Buffer.alloc(128);
+        await fd.read(headerBuf, 0, 128, 0);
+
+        // Validate RIFF/WAVE
+        if (headerBuf.toString('ascii', 0, 4) !== 'RIFF' || headerBuf.toString('ascii', 8, 12) !== 'WAVE') {
+            return null;
+        }
+
+        // Find 'fmt ' and 'data' chunks by scanning
+        let fmtOffset = -1, dataOffset = -1, dataSize = 0;
+        let pos = 12;
+        // Need to scan potentially large headers — read up to 4KB
+        const scanBuf = Buffer.alloc(4096);
+        await fd.read(scanBuf, 0, 4096, 0);
+        const scanLen = 4096;
+
+        while (pos < scanLen - 8) {
+            const chunkId = scanBuf.toString('ascii', pos, pos + 4);
+            const chunkSize = scanBuf.readUInt32LE(pos + 4);
+
+            if (chunkId === 'fmt ') {
+                fmtOffset = pos + 8;
+            } else if (chunkId === 'data') {
+                dataOffset = pos + 8;
+                dataSize = chunkSize;
+                break;
+            }
+            pos += 8 + chunkSize;
+            // Chunks are word-aligned
+            if (chunkSize % 2 !== 0) pos++;
+        }
+
+        if (fmtOffset === -1 || dataOffset === -1 || dataSize === 0) return null;
+
+        const audioFormat = scanBuf.readUInt16LE(fmtOffset);      // 1 = PCM, 3 = IEEE float
+        const numChannels = scanBuf.readUInt16LE(fmtOffset + 2);
+        const sampleRate = scanBuf.readUInt32LE(fmtOffset + 4);
+        const bitsPerSample = scanBuf.readUInt16LE(fmtOffset + 14);
+        const bytesPerSample = bitsPerSample / 8;
+        const blockAlign = numChannels * bytesPerSample;
+
+        if (audioFormat !== 1 && audioFormat !== 3) return null;  // unsupported compression
+        if (numChannels < 1 || sampleRate < 1) return null;
+
+        const totalSamples = Math.floor(dataSize / blockAlign);
+        const duration = totalSamples / sampleRate;
+
+        // Read PCM data — only channel 0 (mono-mix by taking first channel)
+        const dataBuf = Buffer.alloc(dataSize);
+        const { bytesRead } = await fd.read(dataBuf, 0, dataSize, dataOffset);
+        const actualSamples = Math.floor(bytesRead / blockAlign);
+
+        // Extract peaks from raw PCM
+        const spp = Math.max(1, Math.floor(actualSamples / NUM_PEAKS));
+        const peaks = new Float32Array(NUM_PEAKS);
+
+        if (audioFormat === 3 && bitsPerSample === 32) {
+            // IEEE 32-bit float
+            for (let i = 0; i < NUM_PEAKS; i++) {
+                let max = 0;
+                const startSample = i * spp;
+                for (let j = 0; j < spp && (startSample + j) < actualSamples; j++) {
+                    const byteOff = (startSample + j) * blockAlign;
+                    const v = Math.abs(dataBuf.readFloatLE(byteOff));
+                    if (v > max) max = v;
+                }
+                peaks[i] = max;
+            }
+        } else if (bitsPerSample === 16) {
+            for (let i = 0; i < NUM_PEAKS; i++) {
+                let max = 0;
+                const startSample = i * spp;
+                for (let j = 0; j < spp && (startSample + j) < actualSamples; j++) {
+                    const byteOff = (startSample + j) * blockAlign;
+                    const v = Math.abs(dataBuf.readInt16LE(byteOff) / 32768);
+                    if (v > max) max = v;
+                }
+                peaks[i] = max;
+            }
+        } else if (bitsPerSample === 24) {
+            for (let i = 0; i < NUM_PEAKS; i++) {
+                let max = 0;
+                const startSample = i * spp;
+                for (let j = 0; j < spp && (startSample + j) < actualSamples; j++) {
+                    const byteOff = (startSample + j) * blockAlign;
+                    let val = dataBuf[byteOff] | (dataBuf[byteOff + 1] << 8) | (dataBuf[byteOff + 2] << 16);
+                    if (val & 0x800000) val |= ~0xFFFFFF; // sign extend
+                    const v = Math.abs(val / 8388608);
+                    if (v > max) max = v;
+                }
+                peaks[i] = max;
+            }
+        } else if (bitsPerSample === 32 && audioFormat === 1) {
+            // 32-bit integer PCM
+            for (let i = 0; i < NUM_PEAKS; i++) {
+                let max = 0;
+                const startSample = i * spp;
+                for (let j = 0; j < spp && (startSample + j) < actualSamples; j++) {
+                    const byteOff = (startSample + j) * blockAlign;
+                    const v = Math.abs(dataBuf.readInt32LE(byteOff) / 2147483648);
+                    if (v > max) max = v;
+                }
+                peaks[i] = max;
+            }
+        } else {
+            return null; // unsupported bit depth
+        }
+
+        return { peaks, duration };
+    } catch (e) {
+        return null;
+    } finally {
+        await fd.close();
+    }
+}
+
+/**
+ * ffmpeg fallback for non-WAV formats (FLAC, AIFF, OGG, MP3, etc.)
+ * Spawns ffmpeg to decode to f32le and extracts peaks from the stream.
+ */
+function extractPeaksWithFFmpeg(fp) {
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        let settled = false;
+        const doResolve = () => {
+            if (settled) return;
+            settled = true;
+            const buf = Buffer.concat(chunks);
+            if (buf.byteLength < 4) { reject(new Error('No audio data')); return; }
+            const samples = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+            const duration = samples.length / 48000;
+            const spp = Math.max(1, Math.floor(samples.length / NUM_PEAKS));
+            const peaks = new Float32Array(NUM_PEAKS);
+            for (let i = 0; i < NUM_PEAKS; i++) {
+                let max = 0;
+                const offset = i * spp;
+                for (let j = 0; j < spp && offset + j < samples.length; j++) {
+                    const v = Math.abs(samples[offset + j]);
+                    if (v > max) max = v;
+                }
+                peaks[i] = max;
+            }
+            resolve({ peaks, duration });
+        };
+        const ffmpegStatic = require('ffmpeg-static');
+        require('fluent-ffmpeg')(fp)
+            .setFfmpegPath(ffmpegStatic)
+            .audioFrequency(48000)
+            .audioChannels(1)
+            .format('f32le')
+            .on('error', err => {
+                if (err.message && err.message.includes('Output stream closed')) { doResolve(); return; }
+                if (!settled) { settled = true; reject(err); }
+            })
+            .on('end', () => doResolve())
+            .pipe()
+            .on('data', chunk => chunks.push(chunk));
+    });
+}
+
+ipcMain.handle('get-peaks', async (_, fp) => {
+    try {
+        if (!fp || !fs.existsSync(fp)) return null;
+
+        // Tier 1: SQLite DB cache (instant — populated during indexing)
+        if (semanticEngine.isReady) {
+            const dbPeaks = semanticEngine.getPeaksFromDB(fp);
+            if (dbPeaks) return dbPeaks;
+        }
+
+        // Tier 2: Direct WAV parser (fast — no subprocess)
+        const ext = path.extname(fp).toLowerCase();
+        if (WAV_EXTENSIONS.has(ext)) {
+            const result = await extractPeaksFromWAV(fp);
+            if (result) return result;
+            // If WAV parsing failed (corrupted header), fall through to ffmpeg
+        }
+
+        // Tier 3: ffmpeg fallback (for non-WAV or corrupted WAV files)
+        return await extractPeaksWithFFmpeg(fp);
+    } catch (e) {
+        console.error('get-peaks error:', e.message);
+        return null;
+    }
+});
 
 // Collections
 ipcMain.handle('get-collections', () => loadCollections());
@@ -409,11 +616,18 @@ ipcMain.on('ondragstart', (event, filePath) => {
 
 ipcMain.handle('reveal-in-finder',(_,fp)=>shell.showItemInFolder(fp));
 
-ipcMain.handle('search-all-sounds', async (_, q) => {
+ipcMain.handle('search-all-sounds', async (_, q, limit) => {
     while(!soundCacheReady) await new Promise(r=>setTimeout(r,50));
     const ql = q.toLowerCase();
-    // Match by filename, file path, top level folder, or subdirectories included in `folder` string
-    return soundCache.filter(c => c.name.toLowerCase().includes(ql) || c.folder.toLowerCase().includes(ql) || c.topLevel.toLowerCase().includes(ql));
+    const maxResults = limit || 200;
+    const results = [];
+    for (const c of soundCache) {
+        if (c.name.toLowerCase().includes(ql) || c.folder.toLowerCase().includes(ql) || c.topLevel.toLowerCase().includes(ql)) {
+            results.push(c);
+            if (results.length >= maxResults) break;
+        }
+    }
+    return results;
 });
 
 // ═══ Semantic Search IPC ═══
@@ -484,8 +698,32 @@ ipcMain.handle('semantic-suggest', async (_, collectionName) => {
 ipcMain.handle('echo-search', async (_, params) => {
     if (!semanticEngine.isReady) return { results: [], searchTimeMs: 0, totalCandidates: 0, totalMatches: 0 };
     try {
-        // Reconstruct Float32Array from transferred buffer
-        const pcmData = new Float32Array(params.pcmData.buffer, params.pcmData.byteOffset, params.pcmData.byteLength / 4);
+        // Reconstruct Float32Array robustly.
+        // Electron's contextBridge serializes TypedArrays via structured clone, which means
+        // a Float32Array from the renderer may arrive as a Uint8Array, a Node Buffer, or in
+        // rare edge-cases as a plain object (e.g. when the ArrayBuffer was already detached).
+        // We must handle all cases to avoid "Cannot read properties of undefined (reading 'buffer')".
+        const raw = params.pcmData;
+        if (!raw) throw new Error('echo-search: pcmData is missing. lastSearchParams must be of type "fragment".');
+        let pcmData;
+        if (raw instanceof Float32Array) {
+            // Already correct (same-process path or future Electron behaviour)
+            pcmData = raw;
+        } else if (raw.buffer instanceof ArrayBuffer && raw.byteLength > 0) {
+            // Standard IPC path: arrives as Uint8Array with a valid backing ArrayBuffer
+            pcmData = new Float32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
+        } else if (Buffer.isBuffer(raw)) {
+            // Node Buffer — copy into a fresh Float32Array to avoid alignment issues
+            const ab = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+            pcmData = new Float32Array(ab);
+        } else {
+            // Fallback: plain/array-like object (detached buffer, or unusual serialisation).
+            // Copy values element-by-element into a new Float32Array.
+            const len = raw.length ?? (raw.byteLength != null ? Math.floor(raw.byteLength / 4) : 0);
+            if (!len) throw new Error('echo-search: pcmData has zero length or unrecognised format.');
+            pcmData = new Float32Array(len);
+            for (let i = 0; i < len; i++) pcmData[i] = raw[i] ?? 0;
+        }
         const res = await semanticEngine.echoSearch({
             pcmData,
             sampleRate: params.sampleRate,

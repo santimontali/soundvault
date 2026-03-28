@@ -47,4 +47,6 @@ contextBridge.exposeInMainWorld('api', {
   echoFile: (fp, w)=>ipcRenderer.invoke('echo-file', fp, w),
   spectralIsReady: ()=>ipcRenderer.invoke('spectral-is-ready'),
   spectralGetProgress: ()=>ipcRenderer.invoke('spectral-get-progress'),
+  getPeaks: p=>ipcRenderer.invoke('get-peaks', p),
+  setWatcher: enabled=>ipcRenderer.invoke('set-watcher', enabled),
 });
