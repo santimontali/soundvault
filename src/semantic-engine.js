@@ -32,6 +32,11 @@ const {
     SAMPLE_RATE: SPECTRAL_SR,
 } = require('./spectral-engine');
 
+// Pure cosine top-K + similarity-threshold primitives (Phase 2.2 refactor).
+// The engine delegates its brute-force ranking here so the math is unit-
+// testable in plain Node (tests/vector-search.test.js) without the CLAP model.
+const { bruteCosineTopK, applyThreshold } = require('./search/vector-search');
+
 ffmpeg.setFfmpegPath(ffmpegStatic);
 
 const DIM = 512; // CLAP embedding dimensionality
@@ -80,6 +85,12 @@ class SemanticEngine {
         // ═══ HNSW Index (Phase 6) ═══
         this._hnsw = null; // Built lazily when vector count > HNSW_THRESHOLD
 
+        // ── Similarity threshold (Phase 2.2) ──
+        // Cosine floor for `search()` results; 0 = disabled (preserves legacy
+        // "always top-200" behaviour). Tune at runtime without touching code:
+        //   SOUNVAULT_SEMANTIC_THRESHOLD=0.15 npm start
+        this._similarityThreshold = parseFloat(process.env.SOUNVAULT_SEMANTIC_THRESHOLD || '0');
+
         // ═══ File Watcher (Phase C) ═══
         this._watcher = null;
         this._indexQueue = [];
@@ -101,8 +112,27 @@ class SemanticEngine {
     }
 
     _appendToCache(filePath, vectorBuffer) {
-        this._ensureCapacity(this._count + 1);
+        // Root-cause fix for the "explorer shows the same file twice" bug.
+        // Previously this method blindly `push()`ed `filePath` on every call,
+        // so a watcher-triggered re-index of an already-cached file appended
+        // a SECOND row to `_paths`/`_matrix` with a freshly re-computed vector.
+        // The DB stayed deduped (`INSERT OR REPLACE` + `UNIQUE` at the call
+        // site), but the in-memory cache diverged — and `_searchFlat`/`_paths`
+        // fed both rows to the renderer as duplicate result entries.
+        //
+        // Now: if `filePath` already has a row, REPLACE its vector in place and
+        // leave `_count`/`_paths.length` unchanged. The O(N) `indexOf` cost is
+        // bounded — this method is only called from `_indexFileFull`, which is
+        // only invoked by the file watcher's 3 s-debounced queue (one file at
+        // a time); the bulk indexer path uses the worker + `_loadCacheFromDB`
+        // full reset, never this method.
+        const existing = this._paths.indexOf(filePath);
         const vec = new Float32Array(vectorBuffer.buffer, vectorBuffer.byteOffset, vectorBuffer.byteLength / 4);
+        if (existing !== -1) {
+            this._matrix.set(vec, existing * DIM);
+            return;
+        }
+        this._ensureCapacity(this._count + 1);
         this._matrix.set(vec, this._count * DIM);
         this._paths.push(filePath);
         this._count++;
@@ -178,39 +208,9 @@ class SemanticEngine {
         }
 
         // ── Brute-force fallback (~5-8ms for 70k × 512) ──
-        const n = this._count;
-        const m = this._matrix;
-
-        // Phase 1: Compute all dot products (~3-5ms for 70k × 512)
-        const pairs = new Array(n);
-        for (let i = 0; i < n; i++) {
-            const offset = i * DIM;
-            let dot = 0;
-            let j = 0;
-            for (; j <= DIM - 8; j += 8) {
-                dot += queryVec[j]     * m[offset + j]
-                     + queryVec[j + 1] * m[offset + j + 1]
-                     + queryVec[j + 2] * m[offset + j + 2]
-                     + queryVec[j + 3] * m[offset + j + 3]
-                     + queryVec[j + 4] * m[offset + j + 4]
-                     + queryVec[j + 5] * m[offset + j + 5]
-                     + queryVec[j + 6] * m[offset + j + 6]
-                     + queryVec[j + 7] * m[offset + j + 7];
-            }
-            for (; j < DIM; j++) dot += queryVec[j] * m[offset + j];
-            pairs[i] = { idx: i, score: dot };
-        }
-
-        // Phase 2: Sort descending using V8's optimized TimSort (~2ms for 70k)
-        pairs.sort((a, b) => b.score - a.score);
-
-        // Phase 3: Return only top-K
-        const k = Math.min(topK, n);
-        const results = new Array(k);
-        for (let i = 0; i < k; i++) {
-            results[i] = { path: this._paths[pairs[i].idx], score: pairs[i].score };
-        }
-        return results;
+        // Delegated to the pure, unit-tested `bruteCosineTopK` (8x loop unroll
+        // + TimSort top-K). Single source of truth for the cosine ranking math.
+        return bruteCosineTopK(queryVec, this._matrix, this._paths, this._count, DIM, topK);
     }
 
     // ── Init ──────────────────────────────────────────────────────────
@@ -713,11 +713,15 @@ class SemanticEngine {
 
         const t1 = Date.now();
 
-        // 2. Flat brute-force dot product over contiguous cache (~5-8ms for 70k)
-        const results = this._searchFlat(queryVec);
+        // 2. Flat brute-force / HNSW top-K over the contiguous cache.
+        const rawResults = this._searchFlat(queryVec);
+        // Phase 2.2: drop sub-threshold (weak/irrelevant) hits. With the
+        // default threshold of 0 this is a no-op, preserving legacy behaviour.
+        const results = applyThreshold(rawResults, this._similarityThreshold);
 
         const t2 = Date.now();
-        console.log(`[SemanticEngine] Search "${queryText}": inference=${t1-t0}ms, vectorSearch=${t2-t1}ms, total=${t2-t0}ms (${this._count} vectors)`);
+        const dropped = rawResults.length - results.length;
+        console.log(`[SemanticEngine] Search "${queryText}": inference=${t1-t0}ms, vectorSearch=${t2-t1}ms, total=${t2-t0}ms (${this._count} vectors, threshold=${this._similarityThreshold}, dropped=${dropped})`);
 
         return { results, words: words.length > 1 ? words : [] };
     }
@@ -1225,11 +1229,24 @@ class SemanticEngine {
             if (queue.length === 0 || !this.isReady || this.isIndexing) return;
 
             console.log(`[Watcher] Incremental indexing ${queue.length} file(s)...`);
+            // CPU optimization: skip per-file work if the DB already holds the
+            // same mtime for BOTH CLAP and spectral. `fs.watch` can fire on
+            // benign events (antivirus scan, editor touch, access-time updates)
+            // that don't change the file content — we don't want to re-run
+            // CLAP inference (~50ms each) for those. Mirrors the bulk indexer's
+            // mtime-skip pattern at the top of `startIndexing`.
+            const getClapMtime = this.db.prepare('SELECT mtime FROM embeddings WHERE file_path = ?');
+            const getSpectralMtime = this.db.prepare('SELECT mtime FROM spectral_index WHERE file_path = ?');
             for (const fp of queue) {
                 try {
                     if (!fs.existsSync(fp)) continue; // Re-check: file may be gone
                     const stat = fs.statSync(fp);
-                    await this._indexFileFull(fp, stat.mtimeMs, true, true);
+                    const storedClap = getClapMtime.get(fp);
+                    const storedSpec = getSpectralMtime.get(fp);
+                    const needsClap = !storedClap || storedClap.mtime !== stat.mtimeMs;
+                    const needsSpectral = !storedSpec || storedSpec.mtime !== stat.mtimeMs;
+                    if (!needsClap && !needsSpectral) continue; // benign event, skip
+                    await this._indexFileFull(fp, stat.mtimeMs, needsClap, needsSpectral);
                 } catch (e) {
                     console.warn(`[Watcher] Skip ${path.basename(fp)}: ${e.message}`);
                 }

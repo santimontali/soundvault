@@ -24,5 +24,11 @@ Check the `docs/architecture/` folder for RFCs and previous implementation plans
 
 ## Current Setup & Testing
 - Start app with `npm run dev` or `npm start` (defined in `package.json`).
-- Run tests in the `tests/` folder directly via node, e.g. `node tests/test-engine.js`.
+- Test scripts (Node's built-in test runner — no extra deps):
+  - `npm test` — full fast suite (lexical + vector + audio + semantic contract).
+  - `npm run test:fast` — lexical + vector + semantic contract only (skips ffmpeg).
+  - `npm run test:audio` — audio peak-extraction profiling + baseline regression guard.
+  - `npm run test:semantic` — live CLAP precision/recall + latency harness (spawns Electron; downloads ONNX weights on first run).
+- Plain-Node test files live in `tests/*.test.js`; legacy ad-hoc scripts remain as `tests/test-*.js`.
+- Pure, Electron-free logic lives in `src/search/` (lexical + vector search) and `src/audio/peaks.js` so it can be unit-tested without the Electron `app` singleton.
 - Always use the provided documents and historical context before modifying core components.

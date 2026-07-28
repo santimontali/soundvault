@@ -6,7 +6,11 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "postinstall": "electron-rebuild --only=better-sqlite3"
+    "postinstall": "electron-rebuild --only=better-sqlite3",
+    "test": "node --test tests/lexical-search.test.js tests/vector-search.test.js tests/audio-peaks.test.js tests/semantic-e2e.test.js",
+    "test:fast": "node --test tests/lexical-search.test.js tests/vector-search.test.js tests/semantic-e2e.test.js",
+    "test:audio": "node --test tests/audio-peaks.test.js",
+    "test:semantic": "electron tests/semantic-live.js"
   },
   "dependencies": {
     "@xenova/transformers": "^2.17.2",
@@ -19,5 +23,8 @@
   "license": "MIT",
   "devDependencies": {
     "@electron/rebuild": "^4.0.3"
+  },
+  "optionalDependencies": {
+    "hnswlib-node": "^3.0.0"
   }
 }

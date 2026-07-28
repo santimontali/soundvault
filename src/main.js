@@ -4,6 +4,13 @@ const fs = require('fs');
 const os = require('os');
 const zlib = require('zlib');
 const semanticEngine = require('./semantic-engine');
+// Pure, Electron-free search/audio modules (Phase 2/3 refactor: extracted so
+// the logic is unit-testable in plain Node and has a single source of truth).
+const { searchSounds } = require('./search/lexical-search');
+const { dedupeByPath } = require('./search/vector-search');
+const audioPeaks = require('./audio/peaks');
+const extractPeaksFromWAV = audioPeaks.extractPeaksFromWAV;
+const extractPeaksWithFFmpeg = audioPeaks.extractPeaksWithFFmpeg;
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'soundvault-config.json');
 
@@ -241,187 +248,20 @@ ipcMain.handle('delete-sound',async(_,fp)=>{const r=await dialog.showMessageBox(
 ipcMain.handle('move-sound',(_,fp,tf)=>{const d=path.join(getConfig().libraryPath,tf,path.basename(fp));if(fs.existsSync(fp)&&!fs.existsSync(d)){fs.renameSync(fp,d);initSoundCache();return true;}return false;});
 ipcMain.handle('import-files',async(_,tf)=>{const r=await dialog.showOpenDialog(mainWindow,{properties:['openFile','multiSelections'],filters:[{name:'WAV',extensions:['wav']}]});if(!r.canceled){const tp=path.join(getConfig().libraryPath,tf);ensureDir(tp);const res=r.filePaths.map(fp=>{const d=path.join(tp,path.basename(fp));fs.copyFileSync(fp,d);return d;});initSoundCache();return res;}return[];});
 ipcMain.handle('drop-files',(_,fps,tf)=>{console.log('[IPC] drop-files called, fps:', JSON.stringify(fps), 'tf:', tf);const tp=path.join(getConfig().libraryPath,tf);ensureDir(tp);const res=(fps||[]).filter(fp=>fp&&typeof fp==='string'&&fp.toLowerCase().endsWith('.wav')&&fs.existsSync(fp)).map(fp=>{const d=path.join(tp,path.basename(fp));fs.copyFileSync(fp,d);console.log('[IPC] Copied',fp,'->',d);return d;});initSoundCache();return res;});
-ipcMain.handle('read-audio-file',(_,fp)=>{try{if(!fp||!fs.existsSync(fp)||!fp.toLowerCase().endsWith('.wav'))return null;return fs.readFileSync(fp);}catch(e){return null;}});
+ipcMain.handle('read-audio-file',async(_,fp)=>{try{if(!fp||!fs.existsSync(fp)||!fp.toLowerCase().endsWith('.wav'))return null;return await fs.promises.readFile(fp);}catch(e){return null;}});
 
 // ═══ Peak Extraction (optimized) ═══
 // Three-tier peak extraction:
 //   1. SQLite DB cache (populated during indexing) — instant
 //   2. Direct WAV parser (reads PCM bytes from disk, no ffmpeg) — ~1-5ms
 //   3. ffmpeg fallback (for non-WAV formats: FLAC, AIFF, OGG, MP3) — ~30-80ms
-const NUM_PEAKS = 4000;
 const WAV_EXTENSIONS = new Set(['.wav']);
 
-/**
- * Parse a WAV file header and extract peaks directly from PCM data.
- * Reads raw bytes from disk — no subprocess, no decode overhead.
- * Supports 16-bit, 24-bit, and 32-bit PCM (format tag 1) and
- * 32-bit IEEE float (format tag 3).
- * @param {string} fp - Absolute path to .wav file
- * @returns {Promise<{peaks: Float32Array, duration: number}|null>}
- */
-async function extractPeaksFromWAV(fp) {
-    const fd = await fs.promises.open(fp, 'r');
-    try {
-        // Read first 128 bytes to parse header (handles extended headers)
-        const headerBuf = Buffer.alloc(128);
-        await fd.read(headerBuf, 0, 128, 0);
-
-        // Validate RIFF/WAVE
-        if (headerBuf.toString('ascii', 0, 4) !== 'RIFF' || headerBuf.toString('ascii', 8, 12) !== 'WAVE') {
-            return null;
-        }
-
-        // Find 'fmt ' and 'data' chunks by scanning
-        let fmtOffset = -1, dataOffset = -1, dataSize = 0;
-        let pos = 12;
-        // Need to scan potentially large headers — read up to 4KB
-        const scanBuf = Buffer.alloc(4096);
-        await fd.read(scanBuf, 0, 4096, 0);
-        const scanLen = 4096;
-
-        while (pos < scanLen - 8) {
-            const chunkId = scanBuf.toString('ascii', pos, pos + 4);
-            const chunkSize = scanBuf.readUInt32LE(pos + 4);
-
-            if (chunkId === 'fmt ') {
-                fmtOffset = pos + 8;
-            } else if (chunkId === 'data') {
-                dataOffset = pos + 8;
-                dataSize = chunkSize;
-                break;
-            }
-            pos += 8 + chunkSize;
-            // Chunks are word-aligned
-            if (chunkSize % 2 !== 0) pos++;
-        }
-
-        if (fmtOffset === -1 || dataOffset === -1 || dataSize === 0) return null;
-
-        const audioFormat = scanBuf.readUInt16LE(fmtOffset);      // 1 = PCM, 3 = IEEE float
-        const numChannels = scanBuf.readUInt16LE(fmtOffset + 2);
-        const sampleRate = scanBuf.readUInt32LE(fmtOffset + 4);
-        const bitsPerSample = scanBuf.readUInt16LE(fmtOffset + 14);
-        const bytesPerSample = bitsPerSample / 8;
-        const blockAlign = numChannels * bytesPerSample;
-
-        if (audioFormat !== 1 && audioFormat !== 3) return null;  // unsupported compression
-        if (numChannels < 1 || sampleRate < 1) return null;
-
-        const totalSamples = Math.floor(dataSize / blockAlign);
-        const duration = totalSamples / sampleRate;
-
-        // Read PCM data — only channel 0 (mono-mix by taking first channel)
-        const dataBuf = Buffer.alloc(dataSize);
-        const { bytesRead } = await fd.read(dataBuf, 0, dataSize, dataOffset);
-        const actualSamples = Math.floor(bytesRead / blockAlign);
-
-        // Extract peaks from raw PCM
-        const spp = Math.max(1, Math.floor(actualSamples / NUM_PEAKS));
-        const peaks = new Float32Array(NUM_PEAKS);
-
-        if (audioFormat === 3 && bitsPerSample === 32) {
-            // IEEE 32-bit float
-            for (let i = 0; i < NUM_PEAKS; i++) {
-                let max = 0;
-                const startSample = i * spp;
-                for (let j = 0; j < spp && (startSample + j) < actualSamples; j++) {
-                    const byteOff = (startSample + j) * blockAlign;
-                    const v = Math.abs(dataBuf.readFloatLE(byteOff));
-                    if (v > max) max = v;
-                }
-                peaks[i] = max;
-            }
-        } else if (bitsPerSample === 16) {
-            for (let i = 0; i < NUM_PEAKS; i++) {
-                let max = 0;
-                const startSample = i * spp;
-                for (let j = 0; j < spp && (startSample + j) < actualSamples; j++) {
-                    const byteOff = (startSample + j) * blockAlign;
-                    const v = Math.abs(dataBuf.readInt16LE(byteOff) / 32768);
-                    if (v > max) max = v;
-                }
-                peaks[i] = max;
-            }
-        } else if (bitsPerSample === 24) {
-            for (let i = 0; i < NUM_PEAKS; i++) {
-                let max = 0;
-                const startSample = i * spp;
-                for (let j = 0; j < spp && (startSample + j) < actualSamples; j++) {
-                    const byteOff = (startSample + j) * blockAlign;
-                    let val = dataBuf[byteOff] | (dataBuf[byteOff + 1] << 8) | (dataBuf[byteOff + 2] << 16);
-                    if (val & 0x800000) val |= ~0xFFFFFF; // sign extend
-                    const v = Math.abs(val / 8388608);
-                    if (v > max) max = v;
-                }
-                peaks[i] = max;
-            }
-        } else if (bitsPerSample === 32 && audioFormat === 1) {
-            // 32-bit integer PCM
-            for (let i = 0; i < NUM_PEAKS; i++) {
-                let max = 0;
-                const startSample = i * spp;
-                for (let j = 0; j < spp && (startSample + j) < actualSamples; j++) {
-                    const byteOff = (startSample + j) * blockAlign;
-                    const v = Math.abs(dataBuf.readInt32LE(byteOff) / 2147483648);
-                    if (v > max) max = v;
-                }
-                peaks[i] = max;
-            }
-        } else {
-            return null; // unsupported bit depth
-        }
-
-        return { peaks, duration };
-    } catch (e) {
-        return null;
-    } finally {
-        await fd.close();
-    }
-}
-
-/**
- * ffmpeg fallback for non-WAV formats (FLAC, AIFF, OGG, MP3, etc.)
- * Spawns ffmpeg to decode to f32le and extracts peaks from the stream.
- */
-function extractPeaksWithFFmpeg(fp) {
-    return new Promise((resolve, reject) => {
-        const chunks = [];
-        let settled = false;
-        const doResolve = () => {
-            if (settled) return;
-            settled = true;
-            const buf = Buffer.concat(chunks);
-            if (buf.byteLength < 4) { reject(new Error('No audio data')); return; }
-            const samples = new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
-            const duration = samples.length / 48000;
-            const spp = Math.max(1, Math.floor(samples.length / NUM_PEAKS));
-            const peaks = new Float32Array(NUM_PEAKS);
-            for (let i = 0; i < NUM_PEAKS; i++) {
-                let max = 0;
-                const offset = i * spp;
-                for (let j = 0; j < spp && offset + j < samples.length; j++) {
-                    const v = Math.abs(samples[offset + j]);
-                    if (v > max) max = v;
-                }
-                peaks[i] = max;
-            }
-            resolve({ peaks, duration });
-        };
-        const ffmpegStatic = require('ffmpeg-static');
-        require('fluent-ffmpeg')(fp)
-            .setFfmpegPath(ffmpegStatic)
-            .audioFrequency(48000)
-            .audioChannels(1)
-            .format('f32le')
-            .on('error', err => {
-                if (err.message && err.message.includes('Output stream closed')) { doResolve(); return; }
-                if (!settled) { settled = true; reject(err); }
-            })
-            .on('end', () => doResolve())
-            .pipe()
-            .on('data', chunk => chunks.push(chunk));
-    });
-}
+// The Tier-2 (direct WAV parser) and Tier-3 (ffmpeg fallback) implementations
+// live in `./audio/peaks` — pure, unit-tested, and now also support
+// WAVE_FORMAT_EXTENSIBLE 24-bit / 32-bit-float WAVs (which previously fell
+// through to the slow ffmpeg subprocess). See `tests/audio-peaks.test.js`.
+// `extractPeaksFromWAV` / `extractPeaksWithFFmpeg` are imported above.
 
 ipcMain.handle('get-peaks', async (_, fp) => {
     try {
@@ -618,16 +458,11 @@ ipcMain.handle('reveal-in-finder',(_,fp)=>shell.showItemInFolder(fp));
 
 ipcMain.handle('search-all-sounds', async (_, q, limit) => {
     while(!soundCacheReady) await new Promise(r=>setTimeout(r,50));
-    const ql = q.toLowerCase();
-    const maxResults = limit || 200;
-    const results = [];
-    for (const c of soundCache) {
-        if (c.name.toLowerCase().includes(ql) || c.folder.toLowerCase().includes(ql) || c.topLevel.toLowerCase().includes(ql)) {
-            results.push(c);
-            if (results.length >= maxResults) break;
-        }
-    }
-    return results;
+    // Tokenized AND search over name/folder/topLevel with relevance ranking,
+    // routed through the pure `src/search/lexical-search` module. Fixes the
+    // multi-word query bug (e.g. "kick drum") that the old whole-query literal
+    // substring match silently dropped. See tests/lexical-search.test.js.
+    return searchSounds(soundCache, q, { limit: limit || 200 });
 });
 
 // ═══ Semantic Search IPC ═══
@@ -645,12 +480,21 @@ ipcMain.handle('semantic-search', async (_, queryText, weights) => {
     try {
         const res = await semanticEngine.search(queryText, weights);
         if (!res || !Array.isArray(res.results)) return { results: [], words: res?.words || [] };
-        
+
+        // Defense-in-depth: collapse duplicate-path rows so the renderer never
+        // sees the same file twice. The engine's in-memory `_paths[]` cache can
+        // duplicate entries on watcher-triggered re-index (see the root-cause
+        // fix in `SemanticEngine._appendToCache`); even with that fix, this
+        // guard protects against any cache drift across releases/sessions.
+        // `res.results` is already sorted desc by score, so the FIRST copy of
+        // any duplicate path is the highest-score one and is the one kept.
+        const ranked = dedupeByPath(res.results);
+
         const cacheMap = new Map();
         for (const s of soundCache) cacheMap.set(s.path, s);
-        
+
         const finalResults = [];
-        for (const r of res.results) {
+        for (const r of ranked) {
             const cached = cacheMap.get(r.path);
             if (cached) {
                 finalResults.push({
@@ -737,7 +581,10 @@ ipcMain.handle('echo-search', async (_, params) => {
         const cacheMap = new Map();
         for (const s of soundCache) cacheMap.set(s.path, s);
 
-        res.results = res.results.map(r => {
+        // Defense-in-depth: dedup by path (same root-cause / engine cache drift
+        // pattern as `semantic-search`). Echo results render in the #echo-results
+        // panel, not the explorer grid, but the same guard belongs here.
+        res.results = dedupeByPath(res.results).map(r => {
             const cached = cacheMap.get(r.path);
             return {
                 ...r,
@@ -763,7 +610,8 @@ ipcMain.handle('echo-file', async (_, filePath, weights) => {
         const cacheMap = new Map();
         for (const s of soundCache) cacheMap.set(s.path, s);
 
-        res.results = res.results.map(r => {
+        // Defense-in-depth: dedup by path — see `semantic-search` for rationale.
+        res.results = dedupeByPath(res.results).map(r => {
             const cached = cacheMap.get(r.path);
             return {
                 ...r,

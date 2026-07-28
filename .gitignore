@@ -144,3 +144,7 @@ soundvault-semantic.db
 soundvault-config.json
 *.db
 .soundvault-collections.json
+
+# Agent workspace metadata (not part of the app)
+.claude/
+

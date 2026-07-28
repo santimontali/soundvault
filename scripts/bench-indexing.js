@@ -259,7 +259,7 @@ async function runBenchmark() {
 
     // ═══ Test 4: Spectral extraction ═══
     console.log('══ TEST 4: Spectral Extraction ══');
-    const { SpectralFingerprinter, compressMatrix } = require('./spectral-engine');
+    const { SpectralFingerprinter, compressMatrix } = require('../src/spectral-engine');
     const fp = new SpectralFingerprinter();
     const spectralTimes = [];
     
