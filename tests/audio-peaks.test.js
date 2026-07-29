@@ -150,6 +150,7 @@ test('extractPeaksFromWAV returns null for a non-WAV file and for malformed byte
 });
 
 test('records a performance baseline JSON for regression tracking', async () => {
+    const RECORD = process.env.RECORD_BASELINE === '1';
     const wav16 = [...generated.entries()].find(([k]) => k.startsWith('.wav|pcm_s16le|'));
     if (!wav16) { console.warn('SKIP baseline: no 16-bit WAV'); return; }
     const fp = wav16[1];
@@ -182,9 +183,9 @@ test('records a performance baseline JSON for regression tracking', async () => 
                 : null,
         },
     };
-    fs.writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2));
+    if (RECORD) fs.writeFileSync(BASELINE_PATH, JSON.stringify(baseline, null, 2));
     assert.ok(mean > 0 && p50 > 0);
-    console.log('BASELINE recorded:', baseline.extractPeaksFromWAV_ms_16bit_3s_48k);
+    console.log(RECORD ? 'BASELINE recorded:' : 'BASELINE measured (RECORD_BASELINE=1 to write):', baseline.extractPeaksFromWAV_ms_16bit_3s_48k);
     // Loose regression guard so a 10x slowdown gets caught by CI.
     if (before.extractPeaksFromWAV_ms_16bit_3s_48k) {
         const prev = before.extractPeaksFromWAV_ms_16bit_3s_48k.p50;
