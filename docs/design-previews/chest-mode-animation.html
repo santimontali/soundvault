@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SoundVault — Chest Mode Animation Study</title>
+<style>
+:root{
+  --bg:#111114;
+  --main:#1a1a1e;
+  --surface:#17171b;
+  --border:#2a2a30;
+  --text:#e0ddd5;
+  --text-2:#999;
+  --text-3:#666;
+  --accent:#c8f76d;
+  --vault:#6dd5f7;
+  --vault-glow:#6dd5f755;
+  --vault-strong:#6dd5f799;
+  --speed-inv:1;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:-apple-system,'Segoe UI',sans-serif;
+  -webkit-font-smoothing:antialiased;
+  min-height:100vh;
+}
+body{--mode-color:var(--accent);--mode-glow:rgba(200,247,109,.32)}
+body[data-mode="vault"]{--mode-color:var(--vault);--mode-glow:var(--vault-glow)}
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  background:
+    radial-gradient(760px 420px at 50% -6%, var(--mode-glow), transparent 70%),
+    radial-gradient(1100px 700px at 50% 30%, #18181d 0%, var(--bg) 62%);
+  opacity:.55;
+  pointer-events:none;
+  transition:background .6s ease;
+  z-index:0;
+}
+.mono{font-family:ui-monospace,'SF Mono','Cascadia Mono',Consolas,monospace}
+.wrap{max-width:660px;margin:0 auto;padding:46px 22px 30px;position:relative;z-index:1}
+
+header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:18px;gap:12px}
+.overline{font-size:10px;font-weight:700;letter-spacing:2.2px;text-transform:uppercase;color:var(--text-3);margin-bottom:7px}
+.overline::before{content:'';display:inline-block;width:18px;height:2px;background:var(--accent);vertical-align:middle;margin-right:9px;transition:background .35s}
+body[data-mode="vault"] .overline::before{background:var(--vault)}
+h1{margin:0;font-size:21px;line-height:1.2;font-weight:800;letter-spacing:-.01em;color:var(--text)}
+.readout{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--text-3);letter-spacing:.6px;white-space:nowrap;padding-bottom:3px}
+.ro-dot{width:7px;height:7px;border-radius:50%;background:var(--mode-color);box-shadow:0 0 10px var(--mode-glow);transition:background .35s,box-shadow .35s}
+
+.window{border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden;box-shadow:0 30px 80px -24px rgba(0,0,0,.65)}
+.titlebar{height:44px;display:flex;align-items:center;gap:11px;padding:0 14px;background:var(--main);border-bottom:1px solid var(--border)}
+.mini-logo{display:flex;line-height:0}
+.mini-logo svg{color:var(--mode-color);filter:drop-shadow(0 0 7px var(--mode-glow));transition:color .35s,filter .35s}
+.scene.open .mini-logo svg{animation:pop-a calc(430ms*var(--speed-inv)) cubic-bezier(.3,1.4,.4,1) both}
+.scene.has-interacted:not(.open) .mini-logo svg{animation:pop-b calc(430ms*var(--speed-inv)) cubic-bezier(.3,1.4,.4,1) both}
+@keyframes pop-a{0%{transform:scale(1)}45%{transform:scale(1.22)}100%{transform:scale(1)}}
+@keyframes pop-b{0%{transform:scale(1)}45%{transform:scale(1.22)}100%{transform:scale(1)}}
+.mini-word{position:relative;width:66px;height:12px}
+.mw{position:absolute;inset:0;font-size:10px;font-weight:700;letter-spacing:2.5px;line-height:12px;opacity:0;transform:translateY(5px);transition:opacity calc(240ms*var(--speed-inv)) ease,transform calc(320ms*var(--speed-inv)) cubic-bezier(.22,1.3,.36,1)}
+.mw-sound{color:var(--accent)}
+.mw-vault{color:var(--vault)}
+body[data-mode="sound"] .mw-sound,body[data-mode="vault"] .mw-vault{opacity:1;transform:none}
+body[data-mode="vault"] .mw-sound{transform:translateY(-5px)}
+.dots{margin-left:auto;display:flex;gap:6px}
+.dots i{width:8px;height:8px;border-radius:50%;background:var(--border)}
+
+.stage{position:relative;height:436px;padding-top:30px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+.stage::before{
+  content:'';position:absolute;inset:0;
+  background-image:radial-gradient(rgba(255,255,255,.035) 1px,transparent 1.4px);
+  background-size:20px 20px;
+  -webkit-mask-image:radial-gradient(72% 72% at 50% 44%,#000 26%,transparent 100%);
+  mask-image:radial-gradient(72% 72% at 50% 44%,#000 26%,transparent 100%);
+}
+.stage::after{content:'';position:absolute;inset:0;background:radial-gradient(130% 95% at 50% 40%,transparent 52%,rgba(0,0,0,.45) 100%);pointer-events:none}
+
+.chest-area{position:relative;width:240px;height:212px;cursor:pointer}
+.halo{position:absolute;inset:-64px -84px;opacity:0;transition:opacity calc(360ms*var(--speed-inv)) ease}
+.scene:not(.open) .halo{opacity:1}
+.halo i{position:absolute;inset:0;background:radial-gradient(50% 46% at 50% 46%,rgba(200,247,109,.14),transparent 70%);filter:blur(6px);animation:breathe 3.8s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.045)}}
+
+.floor-shadow{position:absolute;left:-12px;right:-12px;bottom:-32px;height:52px;background:radial-gradient(50% 50% at 50% 50%,rgba(0,0,0,.55),transparent 72%);opacity:.95;transform:scaleX(1);transition:opacity calc(420ms*var(--speed-inv)) ease,transform calc(420ms*var(--speed-inv)) ease}
+.scene.open .floor-shadow{opacity:.5;transform:scaleX(1.08)}
+.scene.has-interacted:not(.open) .floor-shadow{animation:shadow-pulse calc(320ms*var(--speed-inv)) ease-out calc(330ms*var(--speed-inv)) both}
+@keyframes shadow-pulse{0%,100%{transform:scaleX(1)}40%{transform:scaleX(1.12)}}
+
+.floor-glow{position:absolute;left:-46px;right:-46px;bottom:-40px;height:74px;background:radial-gradient(50% 50% at 50% 50%,var(--vault-glow),transparent 72%);filter:blur(12px);mix-blend-mode:screen;opacity:0;transform:scale(.8);transition:opacity calc(220ms*var(--speed-inv)) ease-in,transform calc(220ms*var(--speed-inv)) ease-in}
+.scene.open .floor-glow{opacity:.95;transform:scale(1);transition:opacity calc(420ms*var(--speed-inv)) ease-out calc(320ms*var(--speed-inv)),transform calc(480ms*var(--speed-inv)) cubic-bezier(.22,1.1,.36,1) calc(320ms*var(--speed-inv))}
+
+.chest{position:relative;width:240px;height:212px;perspective:860px;perspective-origin:50% -14%}
+
+.cavity{position:absolute;left:16px;right:16px;top:64px;height:26px;background:#0a0a0d;border:1px solid #060608;border-radius:5px;overflow:hidden;box-shadow:inset 0 3px 8px #000}
+.core{position:absolute;left:50%;top:50%;width:180px;height:64px;background:radial-gradient(50% 50% at 50% 50%,var(--vault) 0%,var(--vault-strong) 36%,transparent 74%);filter:blur(7px);opacity:0;transform:translate(-50%,-50%) scale(.5);transition:opacity calc(200ms*var(--speed-inv)) ease-in,transform calc(200ms*var(--speed-inv)) ease-in}
+.scene.open .core{opacity:1;transform:translate(-50%,-50%) scale(1);transition:opacity calc(420ms*var(--speed-inv)) ease-out calc(150ms*var(--speed-inv)),transform calc(540ms*var(--speed-inv)) cubic-bezier(.26,1.45,.4,1) calc(150ms*var(--speed-inv))}
+.scene:not(.open) .chest-area:hover .core{opacity:.45;transition:opacity calc(240ms*var(--speed-inv)) ease-out calc(60ms*var(--speed-inv))}
+.mini-eq{position:absolute;left:50%;bottom:3px;transform:translateX(-50%);display:flex;align-items:flex-end;gap:5px;height:15px}
+.mini-eq .bar{width:5px;height:100%;border-radius:2px;background:var(--vault);box-shadow:0 0 8px var(--vault-glow);transform-origin:bottom}
+
+.body{position:absolute;left:0;right:0;top:88px;bottom:0;background:linear-gradient(180deg,#1f1f25 0%,#1a1a20 60%,#17171c 100%);border:1px solid var(--border);border-radius:8px 8px 20px 20px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04),inset 14px 0 22px -18px #000,inset -14px 0 22px -18px #000}
+.body::before{content:'';position:absolute;left:0;right:0;top:0;height:9px;background:#232329;border-bottom:1px solid #131316;border-radius:7px 7px 0 0}
+.grille{position:absolute;left:50%;transform:translateX(-50%);top:22px;width:146px;height:74px;display:flex;align-items:flex-end;justify-content:center;gap:7px}
+.grille .bar{width:10px;height:100%;border-radius:4px;background:var(--mode-color);box-shadow:0 0 10px var(--mode-glow);transform-origin:bottom;transform:scaleY(var(--r));transition:background calc(340ms*var(--speed-inv)) ease,box-shadow calc(340ms*var(--speed-inv)) ease}
+.scene:not(.open) .grille .bar{animation:bars-idle calc(3400ms*var(--speed-inv)) ease-in-out calc(var(--i)*-260ms) infinite alternate}
+.scene.open .grille .bar{animation:eq-dance calc((560ms + var(--dj))*var(--speed-inv)) ease-in-out calc(var(--i)*-90ms) infinite alternate}
+.scene.has-interacted:not(.open) .grille .bar{animation:eq-settle calc(320ms*var(--speed-inv)) cubic-bezier(.22,.6,.3,1) calc(var(--i)*16ms*var(--speed-inv)) both}
+@keyframes bars-idle{from{transform:scaleY(var(--r))}to{transform:scaleY(calc(var(--r)*1.14))}}
+@keyframes eq-dance{
+  0%{transform:scaleY(var(--r))}
+  30%{transform:scaleY(var(--p))}
+  55%{transform:scaleY(calc(var(--r) + (var(--p) - var(--r))*.4))}
+  80%{transform:scaleY(calc(var(--p)*.85))}
+  100%{transform:scaleY(var(--r))}
+}
+@keyframes eq-settle{0%{transform:scaleY(calc(var(--p)*.7))}100%{transform:scaleY(var(--r))}}
+
+.lid{position:absolute;left:0;right:0;top:0;height:96px;background:linear-gradient(180deg,#292930 0%,#212128 55%,#1c1c22 100%);border:1px solid var(--border);border-radius:36px 36px 10px 10px;box-shadow:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -16px 26px -20px #000;transform:rotateX(0deg);transform-origin:50% 0%;transition:transform calc(480ms*var(--speed-inv)) cubic-bezier(.5,.08,.42,1)}
+.lid::after{content:'';position:absolute;left:-1px;right:-1px;bottom:-1px;height:12px;background:#17171c;border:1px solid var(--border);border-radius:0 0 10px 10px}
+.scene.open .lid{transform:rotateX(-106deg);transition:transform calc(600ms*var(--speed-inv)) cubic-bezier(.3,1.5,.42,1) calc(90ms*var(--speed-inv))}
+.scene:not(.open) .chest-area:hover .lid{transform:rotateX(-9deg)}
+.scene.has-interacted:not(.open) .lid{animation:lid-close calc(520ms*var(--speed-inv)) both calc(70ms*var(--speed-inv))}
+@keyframes lid-close{
+  0%{transform:rotateX(-106deg);animation-timing-function:cubic-bezier(.52,.04,.56,.96)}
+  56%{transform:rotateX(0deg);animation-timing-function:cubic-bezier(.18,.6,.36,1)}
+  74%{transform:rotateX(-7deg);animation-timing-function:cubic-bezier(.4,.1,.6,1)}
+  100%{transform:rotateX(0deg)}
+}
+
+.lock-wrap{position:absolute;left:50%;top:141px;width:48px;height:53px;transform:translateX(-50%)}
+.lock{display:block;width:48px;height:53px;fill:var(--mode-color);filter:drop-shadow(0 3px 6px rgba(0,0,0,.55)) drop-shadow(0 0 9px var(--mode-glow));transition:fill calc(320ms*var(--speed-inv)) ease,filter calc(320ms*var(--speed-inv)) ease}
+.scene.open .lock{animation:lock-open calc(430ms*var(--speed-inv)) both}
+.scene.has-interacted:not(.open) .lock{animation:lock-close calc(380ms*var(--speed-inv)) both calc(430ms*var(--speed-inv))}
+@keyframes lock-open{
+  0%{transform:none;opacity:1;animation-timing-function:cubic-bezier(.3,.4,.4,1)}
+  22%{transform:translateY(-5px) rotate(5deg);opacity:1;animation-timing-function:cubic-bezier(.5,.05,.7,.5)}
+  100%{transform:translateY(38px) rotate(-20deg) scale(.9);opacity:0}
+}
+@keyframes lock-close{
+  0%{transform:translateY(34px) rotate(-16deg) scale(.92);opacity:0;animation-timing-function:cubic-bezier(.2,.7,.3,1)}
+  55%{transform:translateY(-4px) rotate(2deg) scale(1);opacity:1;animation-timing-function:cubic-bezier(.34,.6,.4,1)}
+  80%{transform:translateY(1px) rotate(0deg) scale(1.05,.94)}
+  100%{transform:none;opacity:1}
+}
+.scene.has-interacted:not(.open) .chest{animation:thunk calc(300ms*var(--speed-inv)) ease-out calc(330ms*var(--speed-inv)) both}
+@keyframes thunk{0%,100%{transform:none}40%{transform:translateY(2px) scale(1.014,.98)}}
+
+.beam{position:absolute;left:-34px;right:-34px;top:-96px;height:110px;clip-path:polygon(13% 100%,87% 100%,100% 0,0 0);background:linear-gradient(to top,var(--vault-strong) 0%,var(--vault-glow) 40%,transparent 82%);filter:blur(14px);mix-blend-mode:screen;transform-origin:50% 100%;opacity:0;transform:scaleY(.3);transition:opacity calc(180ms*var(--speed-inv)) ease-in,transform calc(180ms*var(--speed-inv)) ease-in;pointer-events:none}
+.scene.open .beam{opacity:.9;transform:scaleY(1);transition:opacity calc(380ms*var(--speed-inv)) ease-out calc(260ms*var(--speed-inv)),transform calc(480ms*var(--speed-inv)) cubic-bezier(.22,1.1,.36,1) calc(260ms*var(--speed-inv))}
+
+.mode-word{position:relative;height:38px;min-width:190px;margin-top:32px}
+.w{position:absolute;inset:0;display:flex;justify-content:center;font-size:27px;font-weight:800;letter-spacing:2.5px;line-height:38px}
+.w-sound{color:var(--accent);text-shadow:0 0 24px rgba(200,247,109,.3)}
+.w-vault{color:var(--vault);text-shadow:0 0 24px var(--vault-glow)}
+.w .l{display:inline-block;opacity:0;transform:translateY(.62em);transition:transform calc(420ms*var(--speed-inv)) cubic-bezier(.22,1.36,.36,1),opacity calc(230ms*var(--speed-inv)) ease;transition-delay:calc(var(--i)*26ms*var(--speed-inv))}
+body[data-mode="sound"] .w-sound .l,body[data-mode="vault"] .w-vault .l{opacity:1;transform:translateY(0)}
+body[data-mode="vault"] .w-sound .l{transform:translateY(-.62em)}
+
+.controls{margin-top:16px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:17px 19px;display:grid;grid-template-columns:104px 1fr;gap:15px 16px;align-items:center}
+.ctl-label{font-size:10px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;color:var(--text-3)}
+.seg{position:relative;display:flex;width:212px;background:#131316;border:1px solid var(--border);border-radius:8px;padding:3px}
+.seg .thumb{position:absolute;top:3px;bottom:3px;left:3px;width:calc(50% - 3px);background:var(--mode-color);border-radius:6px;box-shadow:0 0 14px var(--mode-glow);transition:transform calc(280ms*var(--speed-inv)) cubic-bezier(.3,1.35,.4,1),background .35s,box-shadow .35s}
+.seg[data-active="vault"] .thumb{transform:translateX(100%)}
+.seg button{position:relative;z-index:1;flex:1;padding:8px 0;background:none;border:0;cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--text-2);transition:color .25s}
+.seg button:hover{color:var(--text)}
+.seg button[aria-pressed="true"]{color:#101014}
+.seg button[aria-pressed="true"]:hover{color:#101014}
+
+.swatch-row{display:flex;align-items:center;gap:12px}
+.swatch{width:22px;height:22px;border-radius:50%;border:0;cursor:pointer;box-shadow:0 0 0 1px var(--border);transition:transform .18s cubic-bezier(.3,1.4,.4,1),box-shadow .18s}
+.swatch:hover{transform:scale(1.18);box-shadow:0 0 0 1px var(--border),0 0 12px currentColor}
+.swatch[aria-pressed="true"]{box-shadow:0 0 0 2px var(--surface),0 0 0 4px currentColor}
+.hex-label{font-size:10.5px;color:var(--text-3);letter-spacing:.6px;margin-left:4px}
+
+.play-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.switch{position:relative;width:36px;height:20px;border-radius:11px;background:#131316;border:1px solid var(--border);cursor:pointer;padding:0;transition:background .25s,border-color .25s}
+.switch::after{content:'';position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--text-3);transition:transform .24s cubic-bezier(.3,1.4,.4,1),background .25s}
+.switch[aria-pressed="true"]{background:rgba(200,247,109,.12);border-color:rgba(200,247,109,.45)}
+.switch[aria-pressed="true"]::after{transform:translateX(16px);background:var(--mode-color)}
+.play-label{font-size:11px;color:var(--text-2)}
+.vdiv{width:1px;height:18px;background:var(--border)}
+.chip{padding:6px 11px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--text-3);font-family:ui-monospace,'SF Mono','Cascadia Mono',Consolas,monospace;font-size:10.5px;font-weight:600;letter-spacing:.5px;cursor:pointer;transition:color .2s,border-color .2s,background .2s}
+.chip:hover{color:var(--text);border-color:#3a3a42}
+.chip[aria-pressed="true"]{background:var(--mode-color);border-color:transparent;color:#101014}
+button:focus-visible,.swatch:focus-visible{outline:2px solid var(--mode-color);outline-offset:2px}
+
+.hint{margin:15px 4px 0;font-size:10px;letter-spacing:.5px;color:#555;text-align:center}
+.caption{margin:10px 0 0;font-size:11px;color:var(--text-3);text-align:center;letter-spacing:.3px}
+
+@media (max-width:640px){
+  header{flex-direction:column;align-items:flex-start;gap:10px}
+  .controls{grid-template-columns:1fr;gap:8px}
+  .controls .ctl-label{margin-top:8px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0ms!important;transition-duration:.01ms!important;transition-delay:0ms!important}
+  .halo i{animation:none!important}
+}
+</style>
+</head>
+<body data-mode="sound">
+<div class="wrap scene" id="scene">
+
+  <header>
+    <div>
+      <div class="overline">SoundVault &middot; Motion Study 01</div>
+      <h1>Chest Open&ndash;Close Transition</h1>
+    </div>
+    <div class="readout mono" aria-live="polite">
+      <span class="ro-dot"></span><span id="roState">CLOSED</span><span>&middot;</span><span id="roColor">#6DD5F7</span><span>&middot;</span><span id="roSpeed">1.0&times;</span>
+    </div>
+  </header>
+
+  <section class="window">
+    <div class="titlebar">
+      <span class="mini-logo" aria-hidden="true">
+        <svg viewBox="0 0 996 964" width="21" height="20">
+          <g transform="translate(0,964) scale(0.1,-0.1)" fill="currentColor">
+            <path fill-rule="evenodd" d="M1850 9625 c-154 -22 -246 -43 -404 -96 -761 -252 -1307 -910 -1421 -1711 -13 -89 -15 -506 -15 -2968 0 -1854 3 -2894 10 -2945 41 -331 160 -656 341 -930 305 -464 764 -789 1307 -925 208 -52 57 -50 3336 -50 2728 0 3059 2 3150 16 600 93 1130 436 1469 949 131 199 253 493 309 745 l23 105 3 2985 c2 2152 0 3007 -8 3065 -15 104 -51 247 -94 372 -262 751 -954 1302 -1751 1393 -60 6 -1107 10 -3125 9 -2451 -1 -3053 -4 -3130 -14z m6335 -502 c230 -55 416 -134 590 -251 358 -242 603 -619 687 -1059 l23 -118 0 -1685 0 -1685 -23 -70 c-38 -114 -81 -184 -162 -265 -83 -83 -171 -139 -270 -173 l-65 -22 -1262 -3 -1263 -2 0 -245 0 -245 1209 0 c801 0 1236 4 1288 11 146 20 330 91 476 185 37 24 70 44 72 44 10 0 5 -1443 -6 -1538 -25 -235 -75 -408 -174 -607 -85 -170 -175 -295 -310 -430 -136 -136 -261 -226 -430 -311 -145 -72 -259 -112 -421 -146 l-109 -23 -3020 0 c-2871 0 -3025 1 -3125 18 -121 21 -341 92 -442 143 -548 276 -894 788 -947 1399 -12 129 -15 1371 -5 1448 l6 45 67 -40 c158 -98 337 -165 495 -187 52 -7 478 -11 1277 -11 l1199 0 0 245 0 245 -1222 0 c-1353 0 -1295 -2 -1436 65 -145 69 -261 185 -327 330 -64 138 -60 27 -60 1820 0 1526 1 1648 18 1753 98 616 503 1103 1086 1306 95 33 246 69 331 79 19 2 1414 3 3100 3 l3065 -2 90 -21z"/>
+            <rect x="2900" y="5600" width="380" height="2600" rx="190"/>
+            <rect x="3600" y="5000" width="380" height="3200" rx="190"/>
+            <rect x="4300" y="6000" width="380" height="2200" rx="190"/>
+            <rect x="5000" y="4800" width="380" height="3400" rx="190"/>
+            <rect x="5700" y="5400" width="380" height="2800" rx="190"/>
+            <rect x="6400" y="5000" width="380" height="3200" rx="190"/>
+            <rect x="7100" y="5800" width="380" height="2400" rx="190"/>
+            <path fill-rule="evenodd" d="M3993 4119 c-98 -18 -186 -87 -229 -181 l-29 -63 0 -1025 0 -1025 23 -60 c53 -141 150 -240 290 -297 l57 -23 880 0 880 0 75 28 c41 15 96 43 122 62 60 44 130 143 160 225 l23 65 3 1005 c2 980 2 1007 -18 1071 -26 87 -79 148 -168 191 l-67 33 -980 1 c-539 0 -999 -3 -1022 -7z m1160 -702 c76 -35 171 -126 209 -201 75 -148 51 -320 -62 -449 l-40 -45 0 -260 c0 -253 -1 -260 -23 -293 -12 -18 -38 -44 -56 -56 -32 -22 -44 -23 -191 -23 -147 0 -159 1 -191 23 -18 12 -44 38 -56 56 -22 33 -23 40 -23 296 l0 261 -34 33 c-46 45 -94 143 -106 216 -19 118 21 244 106 336 60 63 92 86 163 116 48 20 69 23 151 20 77 -2 106 -8 153 -30z"/>
+          </g>
+        </svg>
+      </span>
+      <span class="mini-word" aria-hidden="true">
+        <span class="mw mw-sound">SOUND</span>
+        <span class="mw mw-vault">VAULT</span>
+      </span>
+      <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    </div>
+
+    <div class="stage">
+      <div class="chest-area" id="chestHit" title="Click to toggle SOUND / VAULT">
+        <div class="halo" aria-hidden="true"><i></i></div>
+        <div class="floor-shadow" aria-hidden="true"></div>
+        <div class="floor-glow" aria-hidden="true"></div>
+        <div class="chest" aria-hidden="true">
+          <div class="cavity">
+            <div class="core"></div>
+            <div class="mini-eq">
+              <i class="bar" style="--i:0;--r:.3;--p:.9;--dj:0ms"></i>
+              <i class="bar" style="--i:1;--r:.5;--p:1;--dj:120ms"></i>
+              <i class="bar" style="--i:2;--r:.7;--p:.85;--dj:50ms"></i>
+              <i class="bar" style="--i:3;--r:.5;--p:1;--dj:180ms"></i>
+              <i class="bar" style="--i:4;--r:.3;--p:.9;--dj:80ms"></i>
+            </div>
+          </div>
+          <div class="body">
+            <div class="grille">
+              <i class="bar" style="--i:0;--r:.28;--p:.78;--dj:0ms"></i>
+              <i class="bar" style="--i:1;--r:.42;--p:.95;--dj:140ms"></i>
+              <i class="bar" style="--i:2;--r:.58;--p:.7;--dj:60ms"></i>
+              <i class="bar" style="--i:3;--r:.74;--p:1;--dj:200ms"></i>
+              <i class="bar" style="--i:4;--r:.86;--p:.88;--dj:100ms"></i>
+              <i class="bar" style="--i:5;--r:.74;--p:.97;--dj:20ms"></i>
+              <i class="bar" style="--i:6;--r:.58;--p:.72;--dj:170ms"></i>
+              <i class="bar" style="--i:7;--r:.42;--p:.9;--dj:80ms"></i>
+              <i class="bar" style="--i:8;--r:.28;--p:.8;--dj:120ms"></i>
+            </div>
+          </div>
+          <div class="lid"></div>
+          <div class="lock-wrap">
+            <svg class="lock" viewBox="356 538 266 292">
+              <path fill-rule="evenodd" transform="translate(0,964) scale(0.1,-0.1)" d="M3993 4119 c-98 -18 -186 -87 -229 -181 l-29 -63 0 -1025 0 -1025 23 -60 c53 -141 150 -240 290 -297 l57 -23 880 0 880 0 75 28 c41 15 96 43 122 62 60 44 130 143 160 225 l23 65 3 1005 c2 980 2 1007 -18 1071 -26 87 -79 148 -168 191 l-67 33 -980 1 c-539 0 -999 -3 -1022 -7z m1160 -702 c76 -35 171 -126 209 -201 75 -148 51 -320 -62 -449 l-40 -45 0 -260 c0 -253 -1 -260 -23 -293 -12 -18 -38 -44 -56 -56 -32 -22 -44 -23 -191 -23 -147 0 -159 1 -191 23 -18 12 -44 38 -56 56 -22 33 -23 40 -23 296 l0 261 -34 33 c-46 45 -94 143 -106 216 -19 118 21 244 106 336 60 63 92 86 163 116 48 20 69 23 151 20 77 -2 106 -8 153 -30z"/>
+            </svg>
+          </div>
+        </div>
+        <div class="beam" aria-hidden="true"></div>
+      </div>
+
+      <div class="mode-word" aria-hidden="true">
+        <span class="w w-sound"><b class="l" style="--i:0">S</b><b class="l" style="--i:1">O</b><b class="l" style="--i:2">U</b><b class="l" style="--i:3">N</b><b class="l" style="--i:4">D</b></span>
+        <span class="w w-vault"><b class="l" style="--i:0">V</b><b class="l" style="--i:1">A</b><b class="l" style="--i:2">U</b><b class="l" style="--i:3">L</b><b class="l" style="--i:4">T</b></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="controls">
+    <span class="ctl-label">Mode</span>
+    <div class="seg" id="segMode" data-active="sound" role="group" aria-label="Mode">
+      <span class="thumb" aria-hidden="true"></span>
+      <button id="btnSound" type="button" aria-pressed="true">SOUND</button>
+      <button id="btnVault" type="button" aria-pressed="false">VAULT</button>
+    </div>
+
+    <span class="ctl-label">Vault color</span>
+    <div class="swatch-row" id="swatches" role="group" aria-label="Vault color">
+      <button class="swatch" type="button" data-color="#c8f76d" aria-pressed="false" aria-label="Lime" title="Lime" style="background:#c8f76d;color:#c8f76d"></button>
+      <button class="swatch" type="button" data-color="#6dd5f7" aria-pressed="true" aria-label="Cyan" title="Cyan" style="background:#6dd5f7;color:#6dd5f7"></button>
+      <button class="swatch" type="button" data-color="#f7a06d" aria-pressed="false" aria-label="Orange" title="Orange" style="background:#f7a06d;color:#f7a06d"></button>
+      <button class="swatch" type="button" data-color="#f76da5" aria-pressed="false" aria-label="Pink" title="Pink" style="background:#f76da5;color:#f76da5"></button>
+      <span class="hex-label mono" id="hexLabel">#6DD5F7</span>
+    </div>
+
+    <span class="ctl-label">Playback</span>
+    <div class="play-row">
+      <button class="switch" type="button" id="autoBtn" role="switch" aria-pressed="false" aria-label="Auto demo"></button>
+      <span class="play-label">Auto demo</span>
+      <span class="vdiv" aria-hidden="true"></span>
+      <div id="speeds" role="group" aria-label="Speed" style="display:flex;gap:8px">
+        <button class="chip" type="button" data-speed="0.5" aria-pressed="false">0.5&times;</button>
+        <button class="chip" type="button" data-speed="1" aria-pressed="true">1&times;</button>
+        <button class="chip" type="button" data-speed="1.5" aria-pressed="false">1.5&times;</button>
+      </div>
+    </div>
+  </section>
+
+  <p class="hint mono">space &mdash; toggle &middot; &larr;/&rarr; &mdash; mode &middot; 1&ndash;4 &mdash; vault color &middot; click the chest</p>
+  <p class="caption">SoundVault &mdash; chest mode animation study &middot; not part of the app</p>
+
+</div>
+
+<script>
+(function(){
+  var scene=document.getElementById('scene');
+  var root=document.documentElement;
+  var body=document.body;
+  var segMode=document.getElementById('segMode');
+  var btnSound=document.getElementById('btnSound');
+  var btnVault=document.getElementById('btnVault');
+  var swatches=Array.prototype.slice.call(document.querySelectorAll('#swatches .swatch'));
+  var hexLabel=document.getElementById('hexLabel');
+  var autoBtn=document.getElementById('autoBtn');
+  var speedBtns=Array.prototype.slice.call(document.querySelectorAll('#speeds .chip'));
+  var roState=document.getElementById('roState');
+  var roColor=document.getElementById('roColor');
+  var roSpeed=document.getElementById('roSpeed');
+  var open=false;
+  var vault='#6dd5f7';
+  var speed=1;
+  var autoTimer=null;
+
+  function updateReadout(){
+    roState.textContent=open?'OPEN':'CLOSED';
+    roColor.textContent=vault.toUpperCase();
+    roSpeed.textContent=(speed===1?'1.0':String(speed))+'\u00d7';
+  }
+
+  function setMode(o){
+    if(o===open)return;
+    open=o;
+    scene.classList.toggle('open',o);
+    scene.classList.add('has-interacted');
+    body.dataset.mode=o?'vault':'sound';
+    segMode.dataset.active=body.dataset.mode;
+    btnSound.setAttribute('aria-pressed',String(!o));
+    btnVault.setAttribute('aria-pressed',String(o));
+    updateReadout();
+  }
+
+  function setVault(hex,btn){
+    vault=hex;
+    root.style.setProperty('--vault',hex);
+    root.style.setProperty('--vault-glow',hex+'55');
+    root.style.setProperty('--vault-strong',hex+'99');
+    swatches.forEach(function(s){s.setAttribute('aria-pressed',String(s===btn));});
+    hexLabel.textContent=hex.toUpperCase();
+    updateReadout();
+    if(!open)setMode(true);
+  }
+
+  function setSpeed(s,btn){
+    speed=s;
+    root.style.setProperty('--speed-inv',String(1/s));
+    speedBtns.forEach(function(b){b.setAttribute('aria-pressed',String(b===btn));});
+    updateReadout();
+  }
+
+  function setAuto(on){
+    autoBtn.setAttribute('aria-pressed',String(on));
+    if(autoTimer){clearInterval(autoTimer);autoTimer=null;}
+    if(on){
+      setMode(!open);
+      autoTimer=setInterval(function(){setMode(!open);},2500);
+    }
+  }
+
+  btnSound.addEventListener('click',function(){setMode(false);});
+  btnVault.addEventListener('click',function(){setMode(true);});
+  swatches.forEach(function(s){
+    s.addEventListener('click',function(){setVault(s.dataset.color,s);});
+  });
+  speedBtns.forEach(function(b){
+    b.addEventListener('click',function(){setSpeed(parseFloat(b.dataset.speed),b);});
+  });
+  autoBtn.addEventListener('click',function(){
+    setAuto(autoBtn.getAttribute('aria-pressed')!=='true');
+  });
+  document.getElementById('chestHit').addEventListener('click',function(){setMode(!open);});
+
+  window.addEventListener('keydown',function(e){
+    if(e.repeat)return;
+    var t=e.target;
+    if(e.code==='Space'){
+      if(t&&t.closest&&t.closest('button'))return;
+      e.preventDefault();
+      setMode(!open);
+    }else if(e.key==='ArrowRight'){
+      setMode(true);
+    }else if(e.key==='ArrowLeft'){
+      setMode(false);
+    }else if(e.key>='1'&&e.key<='4'){
+      var s=swatches[parseInt(e.key,10)-1];
+      if(s)setVault(s.dataset.color,s);
+    }
+  });
+
+  updateReadout();
+})();
+</script>
+</body>
+</html>
