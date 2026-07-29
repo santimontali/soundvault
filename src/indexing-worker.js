@@ -448,6 +448,37 @@ parentPort.on('message', async (msg) => {
         }
     }
 
+    if (msg.type === 'index-single') {
+        const { filePath, mtime, needsClap, needsSpectral } = msg;
+        (async () => {
+            try {
+                const maxDur = needsSpectral ? 30 : 10;
+                const audioData = await getAudioData(filePath, maxDur);
+                if (needsClap) {
+                    const clapAudio = audioData.subarray(0, Math.min(audioData.length, 48000 * 10));
+                    const inputs = await processor(clapAudio);
+                    const { audio_embeds } = await audioModel(inputs);
+                    const vectorArray = Array.from(audio_embeds.data);
+                    const buffer = Buffer.from(new Float32Array(vectorArray).buffer);
+                    stmts.insertEmbedding.run(filePath, mtime, buffer);
+                    parentPort.postMessage({ type: 'single-done', filePath, vector: buffer, needsSpectral });
+                }
+                if (needsSpectral) {
+                    const { matrix, numWindows } = fingerprinter.extractRaw(audioData, 48000);
+                    const summary = fingerprinter.computeSummary(matrix, numWindows);
+                    const durationMs = Math.round(audioData.length / 48000 * 1000);
+                    const compressedMatrix = compressMatrixFn(matrix);
+                    const summaryBuf = Buffer.from(summary.buffer, summary.byteOffset, summary.byteLength);
+                    stmts.insertSpectral.run(filePath, mtime, compressedMatrix, summaryBuf, durationMs, numWindows);
+                    if (!needsClap) parentPort.postMessage({ type: 'single-done', filePath, vector: null, needsSpectral: true });
+                }
+            } catch (e) {
+                parentPort.postMessage({ type: 'single-error', filePath, error: e.message });
+            }
+        })();
+        return;
+    }
+
     if (msg.type === 'shutdown') {
         if (db) db.close();
         process.exit(0);

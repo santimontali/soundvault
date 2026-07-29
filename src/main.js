@@ -6,7 +6,7 @@ const zlib = require('zlib');
 const semanticEngine = require('./semantic-engine');
 // Pure, Electron-free search/audio modules (Phase 2/3 refactor: extracted so
 // the logic is unit-testable in plain Node and has a single source of truth).
-const { searchSounds } = require('./search/lexical-search');
+const { searchSounds, tokenizeEntry } = require('./search/lexical-search');
 const { dedupeByPath } = require('./search/vector-search');
 const audioPeaks = require('./audio/peaks');
 const extractPeaksFromWAV = audioPeaks.extractPeaksFromWAV;
@@ -156,14 +156,23 @@ function registerProtocol() {
     const url=new URL(req.url), fp=decodeURIComponent(url.searchParams.get('path')||'');
     if(!fp||!fs.existsSync(fp)) return new Response('Not found',{status:404});
     if(!fp.toLowerCase().endsWith('.wav')) return new Response('Forbidden',{status:403});
-    return net.fetch('file://'+fp);
+    const fileUrl = require('url').pathToFileURL(fp).href;
+    return net.fetch(fileUrl);
   });
 }
 
 let soundCache = [];
 let soundCacheReady = false;
+let soundCacheResolve = null;
+let soundCachePromise = new Promise(r => { soundCacheResolve = r; });
+let soundCacheMap = new Map();
+function rebuildSoundCacheMap() {
+  soundCacheMap = new Map();
+  for (const s of soundCache) soundCacheMap.set(s.path, s);
+}
 async function initSoundCache() {
   soundCacheReady = false;
+  soundCachePromise = new Promise(r => { soundCacheResolve = r; });
   const lib = getConfig().libraryPath;
   try {
     const arr = await fs.promises.readdir(lib, { recursive: true, withFileTypes: true });
@@ -175,12 +184,14 @@ async function initSoundCache() {
       if (p.parentPath.includes('node_modules') || p.parentPath.includes('.git')) continue;
       const fullPath = path.join(p.parentPath, p.name);
       const rel = path.relative(lib, fullPath);
-      batch.push({
+      const item = {
         name: p.name,
         path: fullPath,
         folder: path.dirname(rel).replace(/\\/g, '/'),
         topLevel: rel.split(path.sep)[0]
-      });
+      };
+      item._tokens = tokenizeEntry(item);
+      batch.push(item);
     }
     
     // Async stat chunks to prevent blocking event loop for 70k files
@@ -198,7 +209,9 @@ async function initSoundCache() {
     }
     soundCache.sort((a,b) => b.dateAdded - a.dateAdded);
   } catch(e) { console.error('Cache init fail', e); }
+  rebuildSoundCacheMap();
   soundCacheReady = true;
+  soundCacheResolve();
 }
 
 app.whenReady().then(async () => {
@@ -234,7 +247,7 @@ ipcMain.handle('set-watcher', (_,enabled)=>{ const lib=getConfig().libraryPath; 
 ipcMain.handle('get-accent-color', ()=>getConfig().accentColor||null);
 ipcMain.handle('set-accent-color', (_,color)=>{const c=getConfig();c.accentColor=color;saveConfig(c);return color;});
 ipcMain.handle('get-folders', async ()=>{ 
-    while(!soundCacheReady) await new Promise(r=>setTimeout(r,50));
+    if (!soundCacheReady) await soundCachePromise;
     const counts = {};
     for (const c of soundCache) counts[c.topLevel] = (counts[c.topLevel]||0) + 1;
     return Object.keys(counts).map(name => ({name, count: counts[name]})).sort((a,b)=>a.name.localeCompare(b.name));
@@ -243,10 +256,10 @@ ipcMain.handle('create-folder',(_,n)=>{const p=path.join(getConfig().libraryPath
 ipcMain.handle('rename-folder',(_,o,n)=>{const c=getConfig().libraryPath;if(fs.existsSync(path.join(c,o))&&!fs.existsSync(path.join(c,n))){fs.renameSync(path.join(c,o),path.join(c,n));initSoundCache();return true;}return false;});
 ipcMain.handle('delete-folder',async(_,n)=>{const fp=path.join(getConfig().libraryPath,n);const r=await dialog.showMessageBox(mainWindow,{type:'warning',buttons:['Cancel','Delete'],defaultId:0,message:`Delete "${n}"?`,detail:'Cannot be undone.'});if(r.response===1){fs.rmSync(fp,{recursive:true,force:true});initSoundCache();return true;}return false;});
 ipcMain.handle('get-sounds', async (_,f)=>{
-    while(!soundCacheReady) await new Promise(r=>setTimeout(r,50));
+    if (!soundCacheReady) await soundCachePromise;
     return soundCache.filter(c => c.topLevel === f);
 });
-ipcMain.handle('delete-sound',async(_,fp)=>{const r=await dialog.showMessageBox(mainWindow,{type:'warning',buttons:['Cancel','Delete'],defaultId:0,message:'Delete this sound?',detail:'Cannot be undone.'});if(r.response===1&&fs.existsSync(fp)){fs.unlinkSync(fp);soundCache=soundCache.filter(s=>s.path!==fp);return true;}return false;});
+ipcMain.handle('delete-sound',async(_,fp)=>{const r=await dialog.showMessageBox(mainWindow,{type:'warning',buttons:['Cancel','Delete'],defaultId:0,message:'Delete this sound?',detail:'Cannot be undone.'});if(r.response===1&&fs.existsSync(fp)){fs.unlinkSync(fp);soundCache=soundCache.filter(s=>s.path!==fp);rebuildSoundCacheMap();return true;}return false;});
 ipcMain.handle('move-sound',(_,fp,tf)=>{const d=path.join(getConfig().libraryPath,tf,path.basename(fp));if(fs.existsSync(fp)&&!fs.existsSync(d)){fs.renameSync(fp,d);initSoundCache();return true;}return false;});
 ipcMain.handle('import-files',async(_,tf)=>{const r=await dialog.showOpenDialog(mainWindow,{properties:['openFile','multiSelections'],filters:[{name:'WAV',extensions:['wav']}]});if(!r.canceled){const tp=path.join(getConfig().libraryPath,tf);ensureDir(tp);const res=r.filePaths.map(fp=>{const d=path.join(tp,path.basename(fp));fs.copyFileSync(fp,d);return d;});initSoundCache();return res;}return[];});
 ipcMain.handle('drop-files',(_,fps,tf)=>{console.log('[IPC] drop-files called, fps:', JSON.stringify(fps), 'tf:', tf);const tp=path.join(getConfig().libraryPath,tf);ensureDir(tp);const res=(fps||[]).filter(fp=>fp&&typeof fp==='string'&&fp.toLowerCase().endsWith('.wav')&&fs.existsSync(fp)).map(fp=>{const d=path.join(tp,path.basename(fp));fs.copyFileSync(fp,d);console.log('[IPC] Copied',fp,'->',d);return d;});initSoundCache();return res;});
@@ -291,6 +304,31 @@ ipcMain.handle('get-peaks', async (_, fp) => {
     }
 });
 
+ipcMain.handle('get-peaks-batch', async (_, paths) => {
+    if (!Array.isArray(paths) || paths.length === 0) return {};
+    const results = {};
+    const CHUNK = 6;
+    for (let i = 0; i < paths.length; i += CHUNK) {
+      await Promise.all(paths.slice(i, i + CHUNK).map(async (fp) => {
+        try {
+            if (!fp || !fs.existsSync(fp)) return;
+            if (semanticEngine.isReady) {
+                const dbPeaks = semanticEngine.getPeaksFromDB(fp);
+                if (dbPeaks) { results[fp] = dbPeaks; return; }
+            }
+            const ext = path.extname(fp).toLowerCase();
+            if (ext === '.wav') {
+                const result = await extractPeaksFromWAV(fp);
+                if (result) { results[fp] = result; return; }
+            }
+            const result = await extractPeaksWithFFmpeg(fp);
+            if (result) results[fp] = result;
+        } catch (e) {}
+      }));
+    }
+    return results;
+});
+
 // Collections
 ipcMain.handle('get-collections', () => loadCollections());
 ipcMain.handle('create-collection', (_, name) => { if(name==='__colors')return false; const c=loadCollections(); if(!c[name]){c[name]=[];saveCollections(c);return true;} return false; });
@@ -299,9 +337,13 @@ ipcMain.handle('rename-collection', (_, old, nu) => { const c=loadCollections();
 ipcMain.handle('set-collection-color', (_, name, color) => { const c=loadCollections(); if(!c.__colors)c.__colors={};if(color)c.__colors[name]=color;else delete c.__colors[name];saveCollections(c);return true; });
 ipcMain.handle('add-to-collection', (_, name, filePath) => { const c=loadCollections(); if(!c[name])c[name]=[]; if(!c[name].includes(filePath)){c[name].push(filePath);saveCollections(c);return true;} return false; });
 ipcMain.handle('remove-from-collection', (_, name, filePath) => { const c=loadCollections(); if(c[name]){c[name]=c[name].filter(p=>p!==filePath);saveCollections(c);return true;} return false; });
-ipcMain.handle('get-collection-sounds', (_, name) => {
-  const c=loadCollections(); const paths=(c[name]&&name!=='__colors'?c[name]:[]);
-  return paths.filter(p=>fs.existsSync(p)).map(p=>{const st=fs.statSync(p);return{name:path.basename(p),path:p,size:st.size,dateAdded:st.mtimeMs};});
+ipcMain.handle('get-collection-sounds', async (_, name) => {
+  const c = loadCollections(); const paths = (c[name] && name !== '__colors' ? c[name] : []);
+  const results = await Promise.all(paths.map(async p => {
+    try { const st = await fs.promises.stat(p); return { path: p, name: path.basename(p), size: st.size, dateAdded: st.mtimeMs }; }
+    catch(e) { return null; }
+  }));
+  return results.filter(Boolean);
 });
 
 // ═══ Vault IPC ═══
@@ -459,7 +501,7 @@ ipcMain.on('ondragstart', (event, filePath) => {
 ipcMain.handle('reveal-in-finder',(_,fp)=>shell.showItemInFolder(fp));
 
 ipcMain.handle('search-all-sounds', async (_, q, limit) => {
-    while(!soundCacheReady) await new Promise(r=>setTimeout(r,50));
+    if (!soundCacheReady) await soundCachePromise;
     // Tokenized AND search over name/folder/topLevel with relevance ranking,
     // routed through the pure `src/search/lexical-search` module. Fixes the
     // multi-word query bug (e.g. "kick drum") that the old whole-query literal
@@ -492,12 +534,9 @@ ipcMain.handle('semantic-search', async (_, queryText, weights) => {
         // any duplicate path is the highest-score one and is the one kept.
         const ranked = dedupeByPath(res.results);
 
-        const cacheMap = new Map();
-        for (const s of soundCache) cacheMap.set(s.path, s);
-
         const finalResults = [];
         for (const r of ranked) {
-            const cached = cacheMap.get(r.path);
+            const cached = soundCacheMap.get(r.path);
             if (cached) {
                 finalResults.push({
                     name: cached.name,
@@ -526,11 +565,8 @@ ipcMain.handle('semantic-suggest', async (_, collectionName) => {
         
         const suggestions = semanticEngine.suggestForCollection(paths, 12);
         
-        const cacheMap = new Map();
-        for (const s of soundCache) cacheMap.set(s.path, s);
-        
         return suggestions.map(r => {
-            const cached = cacheMap.get(r.path);
+            const cached = soundCacheMap.get(r.path);
             if (!cached) return null;
             return { name: cached.name, path: cached.path, folder: cached.folder, size: cached.size, dateAdded: cached.dateAdded, score: r.score };
         }).filter(Boolean);
@@ -579,15 +615,11 @@ ipcMain.handle('echo-search', async (_, params) => {
             sourceFilePath: params.sourceFilePath || null,
         });
 
-        // Enrich results with sound cache metadata
-        const cacheMap = new Map();
-        for (const s of soundCache) cacheMap.set(s.path, s);
-
         // Defense-in-depth: dedup by path (same root-cause / engine cache drift
         // pattern as `semantic-search`). Echo results render in the #echo-results
         // panel, not the explorer grid, but the same guard belongs here.
         res.results = dedupeByPath(res.results).map(r => {
-            const cached = cacheMap.get(r.path);
+            const cached = soundCacheMap.get(r.path);
             return {
                 ...r,
                 name: cached ? cached.name : path.basename(r.path),
@@ -609,12 +641,9 @@ ipcMain.handle('echo-file', async (_, filePath, weights) => {
     try {
         const res = await semanticEngine.echoFile(filePath, weights || null);
 
-        const cacheMap = new Map();
-        for (const s of soundCache) cacheMap.set(s.path, s);
-
         // Defense-in-depth: dedup by path — see `semantic-search` for rationale.
         res.results = dedupeByPath(res.results).map(r => {
-            const cached = cacheMap.get(r.path);
+            const cached = soundCacheMap.get(r.path);
             return {
                 ...r,
                 name: cached ? cached.name : path.basename(r.path),

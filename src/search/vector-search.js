@@ -77,17 +77,48 @@ function bruteCosineTopK(queryVec, matrix, paths, count, dim, topK = 200) {
     const n = count;
     if (!n || !matrix || !queryVec) return [];
 
-    const pairs = new Array(n);
-    for (let i = 0; i < n; i++) {
-        pairs[i] = { idx: i, score: dotRow(queryVec, matrix, i, dim) };
-    }
-    pairs.sort((a, b) => b.score - a.score);
-
     const k = Math.min(topK, n);
-    const results = new Array(k);
-    for (let i = 0; i < k; i++) {
-        results[i] = { path: paths[pairs[i].idx], score: pairs[i].score };
+    const heapIdx = new Int32Array(k);
+    const heapScore = new Float64Array(k);
+    let size = 0;
+
+    for (let i = 0; i < n; i++) {
+        const score = dotRow(queryVec, matrix, i, dim);
+        if (size < k) {
+            heapIdx[size] = i;
+            heapScore[size] = score;
+            let c = size;
+            while (c > 0) {
+                const p = (c - 1) >> 1;
+                if (heapScore[p] <= heapScore[c]) break;
+                const ts = heapScore[p]; heapScore[p] = heapScore[c]; heapScore[c] = ts;
+                const ti = heapIdx[p]; heapIdx[p] = heapIdx[c]; heapIdx[c] = ti;
+                c = p;
+            }
+            size++;
+        } else if (score > heapScore[0]) {
+            heapIdx[0] = i;
+            heapScore[0] = score;
+            let p = 0;
+            while (true) {
+                const l = 2 * p + 1;
+                const r = l + 1;
+                let smallest = p;
+                if (l < size && heapScore[l] < heapScore[smallest]) smallest = l;
+                if (r < size && heapScore[r] < heapScore[smallest]) smallest = r;
+                if (smallest === p) break;
+                const ts = heapScore[p]; heapScore[p] = heapScore[smallest]; heapScore[smallest] = ts;
+                const ti = heapIdx[p]; heapIdx[p] = heapIdx[smallest]; heapIdx[smallest] = ti;
+                p = smallest;
+            }
+        }
     }
+
+    const results = new Array(size);
+    for (let i = 0; i < size; i++) {
+        results[i] = { path: paths[heapIdx[i]], score: heapScore[i] };
+    }
+    results.sort((a, b) => b.score - a.score);
     return results;
 }
 

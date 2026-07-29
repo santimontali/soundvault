@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld('api', {
   spectralIsReady: ()=>ipcRenderer.invoke('spectral-is-ready'),
   spectralGetProgress: ()=>ipcRenderer.invoke('spectral-get-progress'),
   getPeaks: p=>ipcRenderer.invoke('get-peaks', p),
+  getPeaksBatch: (paths) => ipcRenderer.invoke('get-peaks-batch', paths),
   setWatcher: enabled=>ipcRenderer.invoke('set-watcher', enabled),
   getAccentColor: ()=>ipcRenderer.invoke('get-accent-color'),
   setAccentColor: c=>ipcRenderer.invoke('set-accent-color', c),

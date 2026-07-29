@@ -35,7 +35,7 @@ const {
 // Pure cosine top-K + similarity-threshold primitives (Phase 2.2 refactor).
 // The engine delegates its brute-force ranking here so the math is unit-
 // testable in plain Node (tests/vector-search.test.js) without the CLAP model.
-const { bruteCosineTopK, applyThreshold, dedupeByPath } = require('./search/vector-search');
+const { bruteCosineTopK, applyThreshold } = require('./search/vector-search');
 
 // Packaged-app safe ffmpeg path: child_process.spawn cannot execute binaries
 // from inside an asar archive; resolveFfmpegPath rewrites app.asar→
@@ -90,6 +90,7 @@ class SemanticEngine {
         this._matrix = null;        // Float32Array of length _count * DIM
         this._count = 0;            // number of vectors currently cached
         this._capacity = 0;         // allocated capacity (in vectors)
+        this._pathIndex = new Map();
 
         // ═══ Echo Vault — Spectral Engine ═══
         this._fingerprinter = new SpectralFingerprinter();
@@ -102,6 +103,7 @@ class SemanticEngine {
         this._summaryPaths = [];    // parallel array
         this._summaryMatrix = null;
         this._summaryCount = 0;
+        this._summaryPathIndex = new Map();
 
         // ═══ HNSW Index (Phase 6) ═══
         this._hnsw = null;      // Built lazily when vector count > HNSW_THRESHOLD
@@ -118,6 +120,7 @@ class SemanticEngine {
         this._watcher = null;
         this._indexQueue = [];
         this._indexTimer = null;
+        this._indexWorker = null;
 
         // ═══ Global CMVN Stats ═══
         this._globalMean = null;  // Float32Array(18) or null
@@ -149,7 +152,7 @@ class SemanticEngine {
         // only invoked by the file watcher's 3 s-debounced queue (one file at
         // a time); the bulk indexer path uses the worker + `_loadCacheFromDB`
         // full reset, never this method.
-        const existing = this._paths.indexOf(filePath);
+        const existing = this._pathIndex.has(filePath) ? this._pathIndex.get(filePath) : -1;
         const vec = new Float32Array(vectorBuffer.buffer, vectorBuffer.byteOffset, vectorBuffer.byteLength / 4);
         if (existing !== -1) {
             this._matrix.set(vec, existing * DIM);
@@ -159,6 +162,7 @@ class SemanticEngine {
         this._matrix.set(vec, this._count * DIM);
         this._paths.push(filePath);
         this._count++;
+        this._pathIndex.set(filePath, this._count - 1);
     }
 
     _loadCacheFromDB() {
@@ -174,6 +178,8 @@ class SemanticEngine {
             this._paths.push(row.file_path);
             this._count++;
         }
+        this._pathIndex = new Map();
+        for (let i = 0; i < this._count; i++) this._pathIndex.set(this._paths[i], i);
         console.log(`[SemanticEngine] Cache loaded: ${this._count} vectors (${(this._count * DIM * 4 / 1048576).toFixed(1)} MB)`);
 
         // Build HNSW index if library is large enough
@@ -193,28 +199,41 @@ class SemanticEngine {
             this._hnswCount = 0;
             return;
         }
-        if (this._hnswBuilding) return; // coalesce concurrent build requests
+        if (this._hnswBuilding) return;
 
-        // Snapshot — indexing during the build must not corrupt the
-        // label→path mapping baked into the index.
+        const dbStat = fs.statSync(this._dbPath);
+        const cacheKey = this._count + ':' + dbStat.mtimeMs;
+        const hnswPath = path.join(path.dirname(this._dbPath), 'soundvault-hnsw.idx');
+
         const count = this._count;
         const matrix = this._matrix;
+
+        if (fs.existsSync(hnswPath)) {
+            try {
+                const index = new HierarchicalNSW('ip', DIM);
+                index.readIndex(hnswPath);
+                index.setEf(200);
+                let storedKey = '';
+                try { storedKey = fs.readFileSync(hnswPath + '.key', 'utf8'); } catch(e) {}
+                if (index.getCurrentCount() === count && storedKey === cacheKey) {
+                    this._hnsw = index;
+                    this._hnswCount = count;
+                    console.log(`[SemanticEngine] HNSW index loaded from disk: ${count} vectors`);
+                    return;
+                }
+            } catch(e) {}
+        }
+
         const t0 = Date.now();
         this._hnswBuilding = true;
 
         (async () => {
             try {
-                // inner_product space — CLAP embeddings are L2-normalized, so ip = cosine
                 const index = new HierarchicalNSW('ip', DIM);
-                index.initIndex(count, 16, 200, 100); // maxElements, M, efConstruction, seed
+                index.initIndex(count, 16, 200, 100);
 
-                // hnswlib-node v3 requires plain Arrays (addon checks IsArray,
-                // which is false for TypedArrays) — and its addPoint COPIES the
-                // point into native storage synchronously (proven by
-                // tests/hnsw-perf.test.js), so ONE reusable buffer is safe and
-                // avoids 70k per-point Array.from allocations.
                 const buf = new Array(DIM);
-                const CHUNK = 500; // ~0.1s slices at measured insertion rates
+                const CHUNK = 500;
                 for (let start = 0; start < count; start += CHUNK) {
                     const end = Math.min(start + CHUNK, count);
                     for (let i = start; i < end; i++) {
@@ -222,17 +241,17 @@ class SemanticEngine {
                         for (let d = 0; d < DIM; d++) buf[d] = matrix[off + d];
                         index.addPoint(buf, i);
                     }
-                    await new Promise(r => setImmediate(r)); // keep the UI responsive
+                    await new Promise(r => setImmediate(r));
                 }
 
-                index.setEf(200); // search-time ef parameter
+                index.setEf(200);
 
                 if (this._count === count && this._matrix === matrix) {
                     this._hnsw = index;
                     this._hnswCount = count;
                     console.log(`[SemanticEngine] HNSW index built: ${count} vectors in ${Date.now() - t0}ms (background)`);
+                    try { index.writeIndex(hnswPath); fs.writeFileSync(hnswPath + '.key', cacheKey); } catch(e) { console.warn('[SemanticEngine] HNSW persist failed:', e.message); }
                 } else {
-                    // Cache mutated mid-build — discard and rebuild fresh.
                     console.log('[SemanticEngine] Cache changed during HNSW build — rebuilding against fresh snapshot');
                 }
             } catch (e) {
@@ -241,7 +260,6 @@ class SemanticEngine {
                 this._hnswCount = 0;
             } finally {
                 this._hnswBuilding = false;
-                // If the snapshot went stale, kick off a fresh build.
                 if (this._hnswCount !== this._count && this._count >= HNSW_THRESHOLD) {
                     this._buildHNSW();
                 }
@@ -321,8 +339,6 @@ class SemanticEngine {
                 window_count INTEGER
             )
         `);
-        this.db.exec(`CREATE INDEX IF NOT EXISTS idx_spectral_path ON spectral_index(file_path)`);
-
         // Create peaks cache table
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS peaks_cache (
@@ -365,6 +381,9 @@ class SemanticEngine {
             selectGlobalStats:     this.db.prepare('SELECT global_mean, global_std, total_windows FROM spectral_stats WHERE id = 1'),
             selectPeaks:       this.db.prepare('SELECT peaks, duration_ms FROM peaks_cache WHERE file_path = ? AND mtime = ?'),
             insertPeaks:       this.db.prepare('INSERT OR REPLACE INTO peaks_cache (file_path, mtime, peaks, duration_ms) VALUES (?, ?, ?, ?)'),
+            deleteEmbedding:   this.db.prepare('DELETE FROM embeddings WHERE file_path = ?'),
+            deleteSpectral:    this.db.prepare('DELETE FROM spectral_index WHERE file_path = ?'),
+            deleteStats:       this.db.prepare('DELETE FROM spectral_stats WHERE id = 1'),
         };
 
         // Load CLAP models — FP32 is FASTER than INT8 on CPUs without VNNI (i5-9400)
@@ -451,7 +470,7 @@ class SemanticEngine {
             }
 
             if (needsSpectral) {
-                const { matrix, numWindows } = this._fingerprinter.extract(audioData, 48000);
+                const { matrix, numWindows } = this._fingerprinter.extractRaw(audioData, 48000);
                 const summary = this._fingerprinter.computeSummary(matrix, numWindows);
                 const durationMs = Math.round(audioData.length / 48000 * 1000);
 
@@ -486,6 +505,8 @@ class SemanticEngine {
             this._summaryPaths.push(row.file_path);
             this._summaryCount++;
         }
+        this._summaryPathIndex = new Map();
+        for (let i = 0; i < this._summaryCount; i++) this._summaryPathIndex.set(this._summaryPaths[i], i);
         console.log(`[SemanticEngine] Spectral summaries loaded: ${this._summaryCount} files`);
         if (staleCount > 0) {
             console.warn(`[SemanticEngine] ⚠ ${staleCount} files have old 18-feature index — re-index required for full Echo coverage`);
@@ -525,30 +546,19 @@ class SemanticEngine {
         };
         
         try {
-            // ── Scan (main thread — fast, sync) ──────────────────────
             const allWavs = [];
-            
-            const scanDir = (dir) => {
-                if(!fs.existsSync(dir)) return;
-                try {
-                    const entries = fs.readdirSync(dir, { withFileTypes: true });
-                    for (const e of entries) {
-                        try {
-                            if (e.name.startsWith('.') || e.name === 'node_modules' || e.name === 'src') continue;
-                            const fullPath = path.join(dir, e.name);
-                            if (e.isDirectory()) {
-                                scanDir(fullPath);
-                            } else if (e.name.toLowerCase().endsWith('.wav')) {
-                                allWavs.push({ path: fullPath, mtime: fs.statSync(fullPath).mtimeMs });
-                            }
-                        } catch(err) {
-                            console.warn("Skipping file due to error:", err);
-                        }
-                    }
-                } catch(e) { console.warn("Skipping dir due to error:", e); }
-            };
-            
-            scanDir(libraryPath);
+            try {
+                const entries = await fs.promises.readdir(libraryPath, { recursive: true, withFileTypes: true });
+                for (const e of entries) {
+                    if (!e.isFile() || !e.name.toLowerCase().endsWith('.wav')) continue;
+                    if (e.parentPath.includes('node_modules') || e.parentPath.includes('.git')) continue;
+                    const fullPath = path.join(e.parentPath, e.name);
+                    try {
+                        const st = await fs.promises.stat(fullPath);
+                        allWavs.push({ path: fullPath, mtime: st.mtimeMs });
+                    } catch(err) {}
+                }
+            } catch(e) { console.warn('[SemanticEngine] Scan error:', e.message); }
             console.log(`[SemanticEngine] Found ${allWavs.length} total wavs in ${libraryPath}`);
             
             // ── Batch mtime preload (main thread — 2 queries) ────────
@@ -635,7 +645,13 @@ class SemanticEngine {
             // re-require ffmpeg-static here, or the worker would spawn from an
             // asar-internal path and every CLAP/spectral decode would fail.
             await new Promise((resolve, reject) => {
-                const worker = new Worker(path.join(__dirname, 'indexing-worker.js'));
+                let worker;
+                if (this._indexWorker) {
+                    worker = this._indexWorker;
+                } else {
+                    worker = new Worker(path.join(__dirname, 'indexing-worker.js'));
+                    this._indexWorker = worker;
+                }
                 let currentTier = -1; // -1 = not started
 
                 const startNextTier = () => {
@@ -666,7 +682,6 @@ class SemanticEngine {
                     } else {
                         // All tiers done
                         this.progress.phase = 'done';
-                        worker.postMessage({ type: 'shutdown' });
                         resolve();
                     }
                 };
@@ -708,6 +723,7 @@ class SemanticEngine {
                     }
                     if (msg.type === 'error') {
                         console.error('[SemanticEngine] Worker error:', msg.error);
+                        this._indexWorker = null;
                         worker.postMessage({ type: 'shutdown' });
                         this._loadCacheFromDB();
                         this._loadSpectralSummaries();
@@ -719,11 +735,13 @@ class SemanticEngine {
 
                 worker.on('error', (err) => {
                     console.error('[SemanticEngine] Worker thread error:', err);
+                    this._indexWorker = null;
                     resolve();
                 });
 
                 worker.on('exit', (code) => {
                     if (code !== 0) console.warn(`[SemanticEngine] Worker exited with code ${code}`);
+                    this._indexWorker = null;
                 });
 
                 // cacheDir: the worker has its OWN @xenova/transformers module instance
@@ -933,6 +951,51 @@ class SemanticEngine {
         return entry;
     }
 
+    _getEchoWorker() {
+        if (this._echoWorker) return Promise.resolve(this._echoWorker);
+        return new Promise((resolve) => {
+            const w = new Worker(path.join(__dirname, 'echo-worker.js'));
+            w.on('message', (msg) => {
+                if (msg.type === 'ready') {
+                    this._echoWorker = w;
+                    resolve(w);
+                }
+            });
+            w.postMessage({ type: 'init', dbPath: this._dbPath });
+        });
+    }
+
+    _runEchoMatch(queryMatrix, queryNumWindows, candidates, featureWeights) {
+        return new Promise(async (resolve) => {
+            const w = await this._getEchoWorker();
+            const jobId = Date.now() + Math.random();
+            const handler = (msg) => {
+                if (msg.type === 'result' && msg.jobId === jobId) {
+                    w.removeListener('message', handler);
+                    resolve(msg.results);
+                }
+            };
+            w.on('message', handler);
+            w.postMessage({
+                type: 'match',
+                jobId,
+                queryMatrix: Buffer.from(queryMatrix.buffer, queryMatrix.byteOffset, queryMatrix.byteLength),
+                queryNumWindows,
+                candidates: candidates.map(c => ({ path: c.path, score: c.score })),
+                featureWeights,
+                globalMean: this._globalMean ? Buffer.from(this._globalMean.buffer) : null,
+                globalStd: this._globalStd ? Buffer.from(this._globalStd.buffer) : null,
+            });
+        });
+    }
+
+    destroyEchoWorker() {
+        if (this._echoWorker) {
+            this._echoWorker.postMessage({ type: 'shutdown' });
+            this._echoWorker = null;
+        }
+    }
+
     /**
      * Full Echo search pipeline.
      * 
@@ -1006,35 +1069,11 @@ class SemanticEngine {
         const t2 = Date.now();
 
         // ── Stage 2: Spectral Fingerprint Fine Search ──
-        let results = [];
-        let scanned = 0;
-
-        for (const candidate of candidates) {
-            const features = this._loadSpectralFeatures(candidate.path);
-            if (!features) continue;
-
-            const match = findBestSegment(
-                queryFeatures.matrix, queryFeatures.numWindows,
-                features.matrix, features.numWindows,
-                featureWeights
-            );
-
-            scanned++;
-
-            // Convert window offset to milliseconds
-            const hopMs = Math.round(HOP_SIZE / SPECTRAL_SR * 1000);
-            const matchOffsetMs = match.offsetWindows * hopMs;
-            const matchDurationMs = Math.round(duration * 1000);
-
-            results.push({
-                path: candidate.path,
-                score: match.score,
-                clapScore: candidate.score,
-                spectralScore: match.score,
-                matchOffsetMs,
-                matchDurationMs,
-            });
-        }
+        let results = await this._runEchoMatch(
+            queryFeatures.matrix, queryFeatures.numWindows,
+            candidates, featureWeights
+        );
+        const scanned = results.length;
 
         // Sort by spectral score (Stage 2 is the authority)
         results.sort((a, b) => b.spectralScore - a.spectralScore);
@@ -1109,8 +1148,7 @@ class SemanticEngine {
 
         const t0 = Date.now();
 
-        // Find CLAP embedding index for this file
-        const fileIdx = this._paths.indexOf(filePath);
+        const fileIdx = this._pathIndex.has(filePath) ? this._pathIndex.get(filePath) : -1;
         if (fileIdx === -1) return { results: [], searchTimeMs: 0, totalCandidates: 0, totalMatches: 0 };
 
         // Extract query vector from flat cache
@@ -1159,27 +1197,10 @@ class SemanticEngine {
         }
 
         const featureWeights = buildFeatureWeights(weights);
-        let results = [];
-
-        for (const candidate of candidates) {
-            const features = this._loadSpectralFeatures(candidate.path);
-            if (!features) continue;
-
-            const match = findBestSegment(
-                sourceFeatures.matrix, sourceFeatures.numWindows,
-                features.matrix, features.numWindows,
-                featureWeights
-            );
-
-            const hopMs = Math.round(HOP_SIZE / SPECTRAL_SR * 1000);
-            results.push({
-                path: candidate.path,
-                clapScore: candidate.score,
-                spectralScore: match.score,
-                matchOffsetMs: match.offsetWindows * hopMs,
-                matchDurationMs: features.durationMs,
-            });
-        }
+        let results = await this._runEchoMatch(
+            sourceFeatures.matrix, sourceFeatures.numWindows,
+            candidates, featureWeights
+        );
 
         // Rank-normalize spectral scores
         results.sort((a, b) => b.spectralScore - a.spectralScore);
@@ -1281,6 +1302,7 @@ class SemanticEngine {
             this._watchRoot = null;
             console.log('[SemanticEngine] File watcher stopped.');
         }
+        this.destroyEchoWorker();
     }
 
     /**
@@ -1308,8 +1330,8 @@ class SemanticEngine {
             // that don't change the file content — we don't want to re-run
             // CLAP inference (~50ms each) for those. Mirrors the bulk indexer's
             // mtime-skip pattern at the top of `startIndexing`.
-            const getClapMtime = this.db.prepare('SELECT mtime FROM embeddings WHERE file_path = ?');
-            const getSpectralMtime = this.db.prepare('SELECT mtime FROM spectral_index WHERE file_path = ?');
+            const getClapMtime = this._stmts.selectEmbMtime;
+            const getSpectralMtime = this._stmts.selectSpecMtime;
             for (const fp of queue) {
                 try {
                     if (!fs.existsSync(fp)) continue; // Re-check: file may be gone
@@ -1319,7 +1341,23 @@ class SemanticEngine {
                     const needsClap = !storedClap || storedClap.mtime !== stat.mtimeMs;
                     const needsSpectral = !storedSpec || storedSpec.mtime !== stat.mtimeMs;
                     if (!needsClap && !needsSpectral) continue; // benign event, skip
-                    await this._indexFileFull(fp, stat.mtimeMs, needsClap, needsSpectral);
+                    if (this._indexWorker) {
+                        await new Promise((resolve) => {
+                            const handler = (msg) => {
+                                if ((msg.type === 'single-done' || msg.type === 'single-error') && msg.filePath === fp) {
+                                    this._indexWorker.removeListener('message', handler);
+                                    if (msg.type === 'single-done' && msg.vector) {
+                                        this._appendToCache(fp, msg.vector);
+                                    }
+                                    resolve();
+                                }
+                            };
+                            this._indexWorker.on('message', handler);
+                            this._indexWorker.postMessage({ type: 'index-single', filePath: fp, mtime: stat.mtimeMs, needsClap, needsSpectral });
+                        });
+                    } else {
+                        await this._indexFileFull(fp, stat.mtimeMs, needsClap, needsSpectral);
+                    }
                 } catch (e) {
                     console.warn(`[Watcher] Skip ${path.basename(fp)}: ${e.message}`);
                 }
@@ -1333,32 +1371,28 @@ class SemanticEngine {
      * Uses swap-remove on flat arrays to avoid costly splice operations.
      */
     _removeFromCaches(filePath) {
-        // Remove from CLAP embeddings DB + flat cache
-        try { this._stmts.insertEmbedding && this.db.prepare('DELETE FROM embeddings WHERE file_path = ?').run(filePath); } catch(e) {}
+        try { this._stmts.deleteEmbedding.run(filePath); } catch(e) {}
 
-        const clapIdx = this._paths.indexOf(filePath);
+        const clapIdx = this._pathIndex.has(filePath) ? this._pathIndex.get(filePath) : -1;
         if (clapIdx !== -1 && this._count > 0) {
-            // Swap-remove: move last element into the deleted slot
             const lastIdx = this._count - 1;
             if (clapIdx !== lastIdx) {
                 this._paths[clapIdx] = this._paths[lastIdx];
                 const src = lastIdx * DIM;
                 const dst = clapIdx * DIM;
                 this._matrix.copyWithin(dst, src, src + DIM);
+                this._pathIndex.set(this._paths[clapIdx], clapIdx);
             }
             this._paths.pop();
             this._count--;
+            this._pathIndex.delete(filePath);
         }
 
-        // Remove from spectral DB + summary cache
-        try { this.db.prepare('DELETE FROM spectral_index WHERE file_path = ?').run(filePath); } catch(e) {}
+        try { this._stmts.deleteSpectral.run(filePath); } catch(e) {}
 
-        // Invalidate CMVN running sums (force full recalc on next index)
-        try {
-            this.db.prepare('DELETE FROM spectral_stats WHERE id = 1').run();
-        } catch(e) {}
+        try { this._stmts.deleteStats.run(); } catch(e) {}
 
-        const specIdx = this._summaryPaths.indexOf(filePath);
+        const specIdx = this._summaryPathIndex.has(filePath) ? this._summaryPathIndex.get(filePath) : -1;
         if (specIdx !== -1 && this._summaryCount > 0) {
             const lastIdx = this._summaryCount - 1;
             if (specIdx !== lastIdx) {
@@ -1366,15 +1400,21 @@ class SemanticEngine {
                 const src = lastIdx * FEATURES_PER_WINDOW;
                 const dst = specIdx * FEATURES_PER_WINDOW;
                 this._summaryMatrix.copyWithin(dst, src, src + FEATURES_PER_WINDOW);
+                this._summaryPathIndex.set(this._summaryPaths[specIdx], specIdx);
             }
             this._summaryPaths.pop();
             this._summaryCount--;
+            this._summaryPathIndex.delete(filePath);
         }
 
-        // Evict from LRU spectral cache
         if (this._spectralCache && this._spectralCache._map) {
             this._spectralCache._map.delete(filePath);
         }
+
+        this._hnsw = null;
+        this._hnswCount = 0;
+        const hnswPath = path.join(path.dirname(this._dbPath), 'soundvault-hnsw.idx');
+        try { fs.unlinkSync(hnswPath); fs.unlinkSync(hnswPath + '.key'); } catch(e) {}
 
         console.log(`[Watcher] Removed from caches: ${path.basename(filePath)}`);
     }

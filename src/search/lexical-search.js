@@ -33,6 +33,14 @@ function tokenize(str) {
         .filter(t => t.length > 0);
 }
 
+function tokenizeEntry(entry) {
+    return {
+        name: tokenize(entry.name),
+        folder: tokenize(entry.folder),
+        topLevel: tokenize(entry.topLevel),
+    };
+}
+
 // Per-field weight bonus applied on top of the match-quality weight.
 const FIELD_WEIGHTS = { name: 6, folder: 3, topLevel: 2 };
 const MATCH_WEIGHTS = { exact: 3, prefix: 2, substring: 1 };
@@ -76,8 +84,10 @@ function searchSounds(cache, query, opts = {}) {
     const scored = [];
     for (let i = 0; i < cache.length; i++) {
         const entry = cache[i];
-        const docTokens = {};
-        for (const f of fields) docTokens[f] = tokenize(entry[f]);
+        const docTokens = entry._tokens || {};
+        if (!entry._tokens) {
+            for (const f of fields) docTokens[f] = tokenize(entry[f]);
+        }
 
         let total = 0;
         let allMatch = true;
@@ -143,6 +153,7 @@ function legacySubstringSearch(cache, query, limit = 200) {
 
 module.exports = {
     tokenize,
+    tokenizeEntry,
     searchSounds,
     legacySubstringSearch,
     FIELD_WEIGHTS,
