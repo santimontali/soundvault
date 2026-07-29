@@ -24,9 +24,9 @@ parentPort.on('message', (msg) => {
 
     if (msg.type === 'match') {
         const { jobId, queryMatrix, queryNumWindows, candidates, featureWeights, globalMean, globalStd } = msg;
-        const qMatrix = new Float32Array(queryMatrix);
-        const gMean = globalMean ? new Float32Array(globalMean) : null;
-        const gStd = globalStd ? new Float32Array(globalStd) : null;
+        const qMatrix = new Float32Array(queryMatrix.buffer, queryMatrix.byteOffset, queryMatrix.byteLength / 4);
+        const gMean = globalMean ? new Float32Array(globalMean.buffer, globalMean.byteOffset, globalMean.byteLength / 4) : null;
+        const gStd = globalStd ? new Float32Array(globalStd.buffer, globalStd.byteOffset, globalStd.byteLength / 4) : null;
         const results = [];
 
         for (const candidate of candidates) {
