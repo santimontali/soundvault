@@ -35,9 +35,30 @@ const {
 // Pure cosine top-K + similarity-threshold primitives (Phase 2.2 refactor).
 // The engine delegates its brute-force ranking here so the math is unit-
 // testable in plain Node (tests/vector-search.test.js) without the CLAP model.
-const { bruteCosineTopK, applyThreshold } = require('./search/vector-search');
+const { bruteCosineTopK, applyThreshold, dedupeByPath } = require('./search/vector-search');
 
-ffmpeg.setFfmpegPath(ffmpegStatic);
+// Packaged-app safe ffmpeg path: child_process.spawn cannot execute binaries
+// from inside an asar archive; resolveFfmpegPath rewrites app.asar→
+// app.asar.unpacked when packaged and is a no-op in dev. See
+// src/packaging/ffmpeg-path.js (pure, unit-tested).
+const { resolveFfmpegPath } = require('./packaging/ffmpeg-path');
+const ffmpegPath = resolveFfmpegPath(ffmpegStatic);
+ffmpeg.setFfmpegPath(ffmpegPath);
+
+// Model cache wiring for packaged installs (audit C2): the CLAP model ships
+// bundled under resources/models via electron-builder extraResources. Without
+// this, @xenova/transformers defaults its cache into app.asar and either
+// re-downloads 592 MB on every launch or stalls offline. `allowRemoteModels`
+// is only locked when packaged — dev keeps the normal download-on-first-use.
+if (app && app.isPackaged) {
+    env.cacheDir = path.join(process.resourcesPath, 'models');
+    env.allowRemoteModels = false;
+    // Keep localModelPath off the asar-internal default — otherwise
+    // FileCache.match probes `<models>/<absolute app.asar path>` on every
+    // model file load (benign but noisy stderr warnings from Electron's asar
+    // interceptor). Point it at the real bundled dir.
+    env.localModelPath = env.cacheDir;
+}
 
 const DIM = 512; // CLAP embedding dimensionality
 const HNSW_THRESHOLD = 50000; // Build HNSW index when vectors exceed this count
@@ -83,7 +104,9 @@ class SemanticEngine {
         this._summaryCount = 0;
 
         // ═══ HNSW Index (Phase 6) ═══
-        this._hnsw = null; // Built lazily when vector count > HNSW_THRESHOLD
+        this._hnsw = null;      // Built lazily when vector count > HNSW_THRESHOLD
+        this._hnswCount = 0;    // snapshot count the current index was built from
+        this._hnswBuilding = false; // build-in-progress guard (coalesces requests)
 
         // ── Similarity threshold (Phase 2.2) ──
         // Cosine floor for `search()` results; 0 = disabled (preserves legacy
@@ -158,30 +181,72 @@ class SemanticEngine {
     }
 
     // ── HNSW Index Builder ────────────────────────────────────────────
+    // Builds ASYNCHRONOUSLY in event-loop slices so a >50k library never
+    // freezes the main thread (a synchronous 70k build measured ~72s — a full
+    // UI freeze). While the build runs (or no index exists), `_searchFlat`
+    // transparently uses brute-force; the finished index hot-swaps in.
+    // The build works on a snapshot (count + matrix reference): if the cache
+    // mutates mid-build, the stale build is discarded and restarted.
     _buildHNSW() {
         if (!HierarchicalNSW || this._count < HNSW_THRESHOLD) {
             this._hnsw = null;
+            this._hnswCount = 0;
             return;
         }
+        if (this._hnswBuilding) return; // coalesce concurrent build requests
 
+        // Snapshot — indexing during the build must not corrupt the
+        // label→path mapping baked into the index.
+        const count = this._count;
+        const matrix = this._matrix;
         const t0 = Date.now();
-        try {
-            // inner_product space — CLAP embeddings are L2-normalized, so ip = cosine
-            const index = new HierarchicalNSW('ip', DIM);
-            index.initIndex(this._count, 16, 200, 100); // maxElements, M, efConstruction, seed
-            
-            for (let i = 0; i < this._count; i++) {
-                const vec = this._matrix.subarray(i * DIM, (i + 1) * DIM);
-                index.addPoint(vec, i);
+        this._hnswBuilding = true;
+
+        (async () => {
+            try {
+                // inner_product space — CLAP embeddings are L2-normalized, so ip = cosine
+                const index = new HierarchicalNSW('ip', DIM);
+                index.initIndex(count, 16, 200, 100); // maxElements, M, efConstruction, seed
+
+                // hnswlib-node v3 requires plain Arrays (addon checks IsArray,
+                // which is false for TypedArrays) — and its addPoint COPIES the
+                // point into native storage synchronously (proven by
+                // tests/hnsw-perf.test.js), so ONE reusable buffer is safe and
+                // avoids 70k per-point Array.from allocations.
+                const buf = new Array(DIM);
+                const CHUNK = 500; // ~0.1s slices at measured insertion rates
+                for (let start = 0; start < count; start += CHUNK) {
+                    const end = Math.min(start + CHUNK, count);
+                    for (let i = start; i < end; i++) {
+                        const off = i * DIM;
+                        for (let d = 0; d < DIM; d++) buf[d] = matrix[off + d];
+                        index.addPoint(buf, i);
+                    }
+                    await new Promise(r => setImmediate(r)); // keep the UI responsive
+                }
+
+                index.setEf(200); // search-time ef parameter
+
+                if (this._count === count && this._matrix === matrix) {
+                    this._hnsw = index;
+                    this._hnswCount = count;
+                    console.log(`[SemanticEngine] HNSW index built: ${count} vectors in ${Date.now() - t0}ms (background)`);
+                } else {
+                    // Cache mutated mid-build — discard and rebuild fresh.
+                    console.log('[SemanticEngine] Cache changed during HNSW build — rebuilding against fresh snapshot');
+                }
+            } catch (e) {
+                console.error('[SemanticEngine] HNSW build failed, using brute-force:', e.message);
+                this._hnsw = null;
+                this._hnswCount = 0;
+            } finally {
+                this._hnswBuilding = false;
+                // If the snapshot went stale, kick off a fresh build.
+                if (this._hnswCount !== this._count && this._count >= HNSW_THRESHOLD) {
+                    this._buildHNSW();
+                }
             }
-            
-            index.setEf(200); // search-time ef parameter
-            this._hnsw = index;
-            console.log(`[SemanticEngine] HNSW index built: ${this._count} vectors in ${Date.now() - t0}ms`);
-        } catch (e) {
-            console.error('[SemanticEngine] HNSW build failed, using brute-force:', e.message);
-            this._hnsw = null;
-        }
+        })();
     }
 
     // ── Optimized Search (HNSW or brute-force) ───────────────────────
@@ -189,10 +254,15 @@ class SemanticEngine {
     // Uses HNSW for O(log N) search when available, falls back to brute-force.
     _searchFlat(queryVec, topK = 200) {
         // ── HNSW fast path (~0.2ms for 70k vectors) ──
-        if (this._hnsw && this._count >= HNSW_THRESHOLD) {
+        // _hnswCount guard: only use the index when it was built from the
+        // CURRENT snapshot — vectors appended/removed after the build (watcher
+        // re-index, deletions) fall back to brute-force until the next rebuild,
+        // preventing label→path misalignment (stale wrong-path results).
+        if (this._hnsw && this._hnswCount === this._count && this._count >= HNSW_THRESHOLD) {
             try {
                 const k = Math.min(topK, this._count);
-                const result = this._hnsw.searchKnn(queryVec, k);
+                // Same v3 contract as _buildHNSW: searchKnn requires number[].
+                const result = this._hnsw.searchKnn(Array.from(queryVec), k);
                 const results = new Array(result.neighbors.length);
                 for (let i = 0; i < result.neighbors.length; i++) {
                     const idx = result.neighbors[i];
@@ -561,8 +631,9 @@ class SemanticEngine {
                 tier: 0
             };
 
-            const ffmpegPath = require('ffmpeg-static');
-
+            // Reuse the module-level resolved ffmpegPath (packaged-app safe) — do NOT
+            // re-require ffmpeg-static here, or the worker would spawn from an
+            // asar-internal path and every CLAP/spectral decode would fail.
             await new Promise((resolve, reject) => {
                 const worker = new Worker(path.join(__dirname, 'indexing-worker.js'));
                 let currentTier = -1; // -1 = not started
@@ -655,7 +726,9 @@ class SemanticEngine {
                     if (code !== 0) console.warn(`[SemanticEngine] Worker exited with code ${code}`);
                 });
 
-                worker.postMessage({ type: 'init', dbPath: this._dbPath, ffmpegPath });
+                // cacheDir: the worker has its OWN @xenova/transformers module instance
+                // (audit C2) — it must point at the bundled model itself.
+                worker.postMessage({ type: 'init', dbPath: this._dbPath, ffmpegPath, cacheDir: env.cacheDir });
             });
         } finally {
             this.isIndexing = false;

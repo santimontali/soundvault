@@ -13,8 +13,11 @@
 const fs = require('fs');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegStatic = require('ffmpeg-static');
+const { resolveFfmpegPath } = require('../packaging/ffmpeg-path');
 
-ffmpeg.setFfmpegPath(ffmpegStatic);
+// Packaged-app safe path (no-op in dev). See src/packaging/ffmpeg-path.js.
+const FFMPEG_PATH = resolveFfmpegPath(ffmpegStatic);
+ffmpeg.setFfmpegPath(FFMPEG_PATH);
 
 const DEFAULT_NUM_PEAKS = 4000;
 const WAVE_FORMAT_EXTENSIBLE = 0xFFFE;
@@ -200,7 +203,7 @@ function extractPeaksWithFFmpeg(fp, numPeaks = DEFAULT_NUM_PEAKS) {
             resolve(peaksFromFloat32(samples, 48000, numPeaks));
         };
         ffmpeg(fp)
-            .setFfmpegPath(ffmpegStatic)
+            .setFfmpegPath(FFMPEG_PATH)
             .audioFrequency(48000)
             .audioChannels(1)
             .format('f32le')

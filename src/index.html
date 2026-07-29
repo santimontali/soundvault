@@ -3539,7 +3539,7 @@
     const sle = document.getElementById('sound-list');
     sle.addEventListener('dragover', e => { e.preventDefault(); document.getElementById('drop-zone').classList.add('active') });
     sle.addEventListener('dragleave', e => { if (!sle.contains(e.relatedTarget)) document.getElementById('drop-zone').classList.remove('active') });
-    sle.addEventListener('drop', async e => { e.preventDefault(); document.getElementById('drop-zone').classList.remove('active'); if (!currentFolder) return; const f = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.wav')).map(f => f.path); if (f.length) { await window.api.dropFiles(f, currentFolder); await loadSounds(); await loadFolders() } });
+    sle.addEventListener('drop', async e => { e.preventDefault(); document.getElementById('drop-zone').classList.remove('active'); if (!currentFolder) return; const f = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.wav')).map(f => window.api.getPathForFile(f) || f.path).filter(Boolean); if (f.length) { await window.api.dropFiles(f, currentFolder); await loadSounds(); await loadFolders() } });
 
     // Player
     document.getElementById('player-toggle').addEventListener('click', togglePlayback);

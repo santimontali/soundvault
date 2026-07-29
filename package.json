@@ -3,28 +3,109 @@
   "version": "1.0.0",
   "description": "Personal sound library manager for game audio designers",
   "main": "src/main.js",
+  "author": "SoundVault Contributors",
+  "license": "MIT",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
     "postinstall": "electron-rebuild --only=better-sqlite3",
-    "test": "node --test tests/lexical-search.test.js tests/vector-search.test.js tests/audio-peaks.test.js tests/semantic-e2e.test.js",
-    "test:fast": "node --test tests/lexical-search.test.js tests/vector-search.test.js tests/semantic-e2e.test.js",
+    "test": "node --test tests/lexical-search.test.js tests/vector-search.test.js tests/audio-peaks.test.js tests/semantic-e2e.test.js tests/packaging.test.js tests/hnsw-integration.test.js tests/hnsw-perf.test.js",
+    "test:fast": "node --test tests/lexical-search.test.js tests/vector-search.test.js tests/semantic-e2e.test.js tests/packaging.test.js tests/hnsw-integration.test.js tests/hnsw-perf.test.js",
     "test:audio": "node --test tests/audio-peaks.test.js",
-    "test:semantic": "electron tests/semantic-live.js"
+    "test:semantic": "electron tests/semantic-live.js",
+    "prepack": "node scripts/stage-crt-dlls.js && node scripts/make-icon.js",
+    "pack": "electron-builder --dir",
+    "predist": "node scripts/stage-crt-dlls.js && node scripts/make-icon.js",
+    "dist": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable",
+    "verify:dist": "node scripts/verify-dist.js"
   },
   "dependencies": {
     "@xenova/transformers": "^2.17.2",
     "better-sqlite3": "^12.8.0",
-    "electron": "^41.0.3",
     "ffmpeg-static": "^5.3.0",
     "fluent-ffmpeg": "^2.1.3"
   },
-  "author": "",
-  "license": "MIT",
   "devDependencies": {
-    "@electron/rebuild": "^4.0.3"
+    "@electron/rebuild": "^4.0.3",
+    "electron": "^41.0.3",
+    "electron-builder": "^26.15.3"
   },
   "optionalDependencies": {
     "hnswlib-node": "^3.0.0"
+  },
+  "build": {
+    "appId": "com.soundvault.app",
+    "productName": "soundvault",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "asar": true,
+    "npmRebuild": false,
+    "files": [
+      "**/*",
+      "!node_modules/electron/**",
+      "!node_modules/@xenova/transformers/.cache/**",
+      "!node_modules/onnxruntime-node/bin/napi-v3/darwin/**",
+      "!node_modules/onnxruntime-node/bin/napi-v3/linux/**",
+      "!node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/**",
+      "!node_modules/sharp/vendor/**",
+      "!node_modules/hnswlib-node/build/Release/obj/**",
+      "!node_modules/hnswlib-node/build/Release/*.{pdb,iobj,ipdb,exp,lib}",
+      "!node_modules/better-sqlite3/deps/**",
+      "!node_modules/better-sqlite3/src/**",
+      "!node_modules/better-sqlite3/build/Release/obj/**",
+      "!node_modules/fluent-ffmpeg/coverage/**",
+      "!node_modules/fluent-ffmpeg/doc/**",
+      "!node_modules/fluent-ffmpeg/tools/**",
+      "!node_modules/onnxruntime-web/docs/**",
+      "!**/*.{ts,map}",
+      "!**/.github/**",
+      "!{tests,docs,scripts,reaper-scripts,.claude,dist,build,build-assets}/**"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/ffmpeg.exe",
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+      "node_modules/sharp/**",
+      "node_modules/onnxruntime-node/**",
+      "node_modules/hnswlib-node/build/Release/addon.node"
+    ],
+    "extraResources": [
+      {
+        "from": "build-assets/models/",
+        "to": "models/"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "${productName}-${version}-${targetName}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SoundVault",
+      "artifactName": "${productName}-${version}-Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-Portable.${ext}"
+    }
   }
 }

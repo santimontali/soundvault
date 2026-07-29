@@ -25,10 +25,18 @@ Check the `docs/architecture/` folder for RFCs and previous implementation plans
 ## Current Setup & Testing
 - Start app with `npm run dev` or `npm start` (defined in `package.json`).
 - Test scripts (Node's built-in test runner — no extra deps):
-  - `npm test` — full fast suite (lexical + vector + audio + semantic contract).
-  - `npm run test:fast` — lexical + vector + semantic contract only (skips ffmpeg).
+  - `npm test` — full fast suite (lexical + vector + audio + semantic contract + packaging + HNSW integration).
+  - `npm run test:fast` — lexical + vector + semantic contract + packaging + HNSW (skips ffmpeg).
   - `npm run test:audio` — audio peak-extraction profiling + baseline regression guard.
   - `npm run test:semantic` — live CLAP precision/recall + latency harness (spawns Electron; downloads ONNX weights on first run).
 - Plain-Node test files live in `tests/*.test.js`; legacy ad-hoc scripts remain as `tests/test-*.js`.
-- Pure, Electron-free logic lives in `src/search/` (lexical + vector search) and `src/audio/peaks.js` so it can be unit-tested without the Electron `app` singleton.
+- Pure, Electron-free logic lives in `src/search/` (lexical + vector search), `src/audio/peaks.js` and `src/packaging/ffmpeg-path.js` so it can be unit-tested without the Electron `app` singleton.
 - Always use the provided documents and historical context before modifying core components.
+
+## Building & Distribution (electron-builder)
+- `npm run pack` — fast build to `dist/win-unpacked` (no installer). Then `npm run verify:dist` (43 structural checks).
+- `npm run dist` — full build: `dist/soundvault-<version>-Setup.exe` (NSIS per-user) + `-Portable.exe`.
+- The CLAP model ships **bundled** in `build-assets/models/` → `resources/models` (offline-first; ~592 MB). Re-copy from `node_modules/@xenova/transformers/.cache/Xenova` if the model ever changes.
+- Icon: `node scripts/make-icon.js` → `build/icon.ico` (dependency-free).
+- Full end-user sharing guide: **`DISTRIBUTION.md`**.
+- Key packaging invariants enforced by `tests/packaging.test.js` + `scripts/verify-dist.js`: ffmpeg path rewritten `app.asar`→`app.asar.unpacked` (spawn can't run binaries from asar), `env.cacheDir`/`localModelPath` pointed at bundled models in engine AND worker, VC++ CRT DLLs beside `onnxruntime.dll`, asarUnpack for all natives, transformers `.cache` excluded from asar, `productName` stays `soundvault` (userData + REAPER Lua autodetect).

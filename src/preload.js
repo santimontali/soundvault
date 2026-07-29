@@ -1,5 +1,8 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('api', {
+  // Electron 32+ removed `File.path`; webUtils.getPathForFile is the
+  // sanctioned replacement for drag-and-drop file paths (audit C3).
+  getPathForFile: f => webUtils.getPathForFile(f),
   getLibraryPath: ()=>ipcRenderer.invoke('get-library-path'),
   setLibraryPath: ()=>ipcRenderer.invoke('set-library-path'),
   getFolders: ()=>ipcRenderer.invoke('get-folders'),

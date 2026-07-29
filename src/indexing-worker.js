@@ -64,7 +64,7 @@ function getAudioData(filePath, maxDuration = 10) {
 }
 
 // ═══ Initialization ═══
-async function initWorker(dbPath, ffmpegPath) {
+async function initWorker(dbPath, ffmpegPath, cacheDir) {
     console.log('[IndexWorker] Initializing...');
     const t0 = Date.now();
 
@@ -102,7 +102,19 @@ async function initWorker(dbPath, ffmpegPath) {
 
     // Load CLAP audio model — FP32 is FASTER than INT8 on CPUs without VNNI (i5-9400)
     // Benchmark: FP32 ~145ms vs INT8 ~250ms per inference (DequantizeLinear overhead)
-    const { AutoProcessor, ClapAudioModelWithProjection } = require('@xenova/transformers');
+    // This worker has its OWN transformers module instance (separate module
+    // registry from the main thread), so the cacheDir received via the init
+    // message MUST be applied here before any from_pretrained call (audit C2).
+    // When packaged, allowRemoteModels=false makes it strictly offline: the
+    // bundled model ships inside resources/models.
+    const { env, AutoProcessor, ClapAudioModelWithProjection } = require('@xenova/transformers');
+    if (cacheDir) {
+        env.cacheDir = cacheDir;
+        env.allowRemoteModels = false;
+        // Same as the main thread: keep localModelPath off the asar-internal
+        // default to avoid malformed <models>/<app.asar> probe paths.
+        env.localModelPath = cacheDir;
+    }
     console.log('[IndexWorker] Loading CLAP audio model (FP32)...');
     processor = await AutoProcessor.from_pretrained('Xenova/clap-htsat-unfused');
     audioModel = await ClapAudioModelWithProjection.from_pretrained('Xenova/clap-htsat-unfused', { quantized: false });
@@ -392,7 +404,7 @@ async function processSpectralBatch(files) {
 parentPort.on('message', async (msg) => {
     if (msg.type === 'init') {
         try {
-            await initWorker(msg.dbPath, msg.ffmpegPath);
+            await initWorker(msg.dbPath, msg.ffmpegPath, msg.cacheDir);
             parentPort.postMessage({ type: 'ready' });
         } catch (e) {
             console.error('[IndexWorker] Init error:', e);
