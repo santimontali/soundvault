@@ -181,9 +181,6 @@ class SemanticEngine {
         this._pathIndex = new Map();
         for (let i = 0; i < this._count; i++) this._pathIndex.set(this._paths[i], i);
         console.log(`[SemanticEngine] Cache loaded: ${this._count} vectors (${(this._count * DIM * 4 / 1048576).toFixed(1)} MB)`);
-
-        // Build HNSW index if library is large enough
-        this._buildHNSW();
     }
 
     // ── HNSW Index Builder ────────────────────────────────────────────
@@ -201,8 +198,8 @@ class SemanticEngine {
         }
         if (this._hnswBuilding) return;
 
-        const dbStat = fs.statSync(this._dbPath);
-        const cacheKey = this._count + ':' + dbStat.mtimeMs;
+        const { cnt, maxId } = this._stmts.embeddingsCacheKey.get();
+        const cacheKey = cnt + ':' + maxId;
         const hnswPath = path.join(path.dirname(this._dbPath), 'soundvault-hnsw.idx');
 
         const count = this._count;
@@ -230,7 +227,7 @@ class SemanticEngine {
         (async () => {
             try {
                 const index = new HierarchicalNSW('ip', DIM);
-                index.initIndex(count, 16, 200, 100);
+                index.initIndex(count, 12, 100, 100);
 
                 const buf = new Array(DIM);
                 const CHUNK = 500;
@@ -293,6 +290,15 @@ class SemanticEngine {
                 // Fallback to brute-force on HNSW error
                 console.warn('[SemanticEngine] HNSW search failed, falling back to brute-force:', e.message);
             }
+        }
+
+        // ── Lazy HNSW trigger (deferred from startup to first search) ──
+        try {
+            if (!this._hnsw && !this._hnswBuilding && this._count >= HNSW_THRESHOLD && HierarchicalNSW) {
+                this._buildHNSW();
+            }
+        } catch(e) {
+            console.warn('[SemanticEngine] HNSW lazy trigger failed (brute-force unaffected):', e.message);
         }
 
         // ── Brute-force fallback (~5-8ms for 70k × 512) ──
@@ -384,6 +390,7 @@ class SemanticEngine {
             deleteEmbedding:   this.db.prepare('DELETE FROM embeddings WHERE file_path = ?'),
             deleteSpectral:    this.db.prepare('DELETE FROM spectral_index WHERE file_path = ?'),
             deleteStats:       this.db.prepare('DELETE FROM spectral_stats WHERE id = 1'),
+            embeddingsCacheKey: this.db.prepare('SELECT COUNT(*) AS cnt, COALESCE(MAX(id), 0) AS maxId FROM embeddings'),
         };
 
         // Load CLAP models — FP32 is FASTER than INT8 on CPUs without VNNI (i5-9400)

@@ -123,8 +123,11 @@
     }
 
     .logo {
-      display: flex;
-      align-items: center;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 2px;
       font-size: 13px;
       letter-spacing: 3px;
       -webkit-app-region: no-drag;
@@ -134,7 +137,7 @@
     }
     .logo-word-clip {
       overflow: hidden;
-      height: 22px;
+      height: 15px;
       display: flex;
       align-items: center;
     }
@@ -145,7 +148,7 @@
       color: var(--accent);
       transition: color .35s ease;
       will-change: transform, opacity;
-      line-height: 22px;
+      line-height: 15px;
     }
     .logo:hover .logo-word {
       text-shadow: 0 0 14px currentColor;
@@ -277,11 +280,11 @@
     }
     /* Underline indicator — tracks the active mode word */
     .logo-indicator {
-      position: absolute;
-      bottom: 1px;
+      position: relative;
       height: 2px;
-      border-radius: 2px;
+      border-radius: 1px;
       opacity: .8;
+      flex-shrink: 0;
       transition: left .3s cubic-bezier(.4, 0, .2, 1), width .3s cubic-bezier(.4, 0, .2, 1), background .3s;
     }
 
@@ -4660,6 +4663,28 @@
       updateVirtualList();
       if (selection) positionGlobalToolbar();
     });
+
+    // Redraw waveforms when the list container resizes (sidebar toggle, window resize)
+    let wfResizeRaf = null;
+    let wfLastWidth = 0;
+    const wfResizeObserver = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const w = Math.round(entry.contentRect.width);
+        if (w === wfLastWidth) continue;
+        wfLastWidth = w;
+        if (wfResizeRaf) cancelAnimationFrame(wfResizeRaf);
+        wfResizeRaf = requestAnimationFrame(() => {
+          wfResizeRaf = null;
+          document.querySelectorAll('.sound-item[data-path]').forEach(it => {
+            if (it.style.display === 'none') return;
+            const fp = it.dataset.path;
+            if (peakCache.has(fp)) redrawWf(fp);
+          });
+          if (editorState && editorState.isOpen) drawEditorWaveform(editorState.playhead || 0);
+        });
+      }
+    });
+    wfResizeObserver.observe(document.getElementById('sound-list'));
     document.getElementById('panel-header').addEventListener('click', e => { if (!e.target.closest('.btn-small')) clearSelection() });
 
     // Keyboard — spacebar plays editor when editor is open
@@ -5604,8 +5629,22 @@
       }, Math.max(0, 900 - elapsed));
     }
 
-    init().finally(hideSplash);
-    setTimeout(hideSplash, 20000);
+    function setSplashStatus(msg) {
+      const el = document.getElementById('splash-status');
+      if (el) el.textContent = msg;
+    }
+
+    async function waitForSemanticEngine() {
+      setSplashStatus('loading AI models');
+      const poll = setInterval(async () => {
+        const ready = await window.api.semanticIsReady();
+        if (ready) { clearInterval(poll); hideSplash(); }
+      }, 500);
+      setTimeout(() => { clearInterval(poll); hideSplash(); }, 60000);
+    }
+
+    init().then(waitForSemanticEngine).catch(waitForSemanticEngine);
+    setTimeout(hideSplash, 60000);
 
     // ══════════════════════════════════════════════
     // ECHO VAULT — Fragment-Level Audio Similarity
