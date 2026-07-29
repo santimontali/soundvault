@@ -231,6 +231,8 @@ app.on('activate', () => { if(BrowserWindow.getAllWindows().length===0) createWi
 ipcMain.handle('get-library-path', ()=>getConfig().libraryPath);
 ipcMain.handle('set-library-path', async()=>{const r=await dialog.showOpenDialog(mainWindow,{properties:['openDirectory']});if(!r.canceled&&r.filePaths[0]){const c=getConfig();c.libraryPath=r.filePaths[0];saveConfig(c);ensureDir(c.libraryPath);initSoundCache();if(semanticEngine.isReady) semanticEngine.startWatching(c.libraryPath);return c.libraryPath;}return null;});
 ipcMain.handle('set-watcher', (_,enabled)=>{ const lib=getConfig().libraryPath; if(!lib||!semanticEngine.isReady) return; if(enabled) semanticEngine.startWatching(lib); else semanticEngine.stopWatching(); return enabled; });
+ipcMain.handle('get-accent-color', ()=>getConfig().accentColor||null);
+ipcMain.handle('set-accent-color', (_,color)=>{const c=getConfig();c.accentColor=color;saveConfig(c);return color;});
 ipcMain.handle('get-folders', async ()=>{ 
     while(!soundCacheReady) await new Promise(r=>setTimeout(r,50));
     const counts = {};

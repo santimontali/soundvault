@@ -18,12 +18,14 @@
       --bg-hover: #222228;
       --bg-active: rgba(200, 247, 109, .06);
       --accent: #c8f76d;
+      --accent-rgb: 200, 247, 109;
       --accent-dim: rgba(200, 247, 109, .15);
       --text-primary: #e0ddd5;
       --text-secondary: #999;
       --text-muted: #666;
       --border: #2a2a30;
       --border-light: #222228;
+      --border-hover: #33333a;
       --danger: #e24b4a;
       --danger-dim: rgba(226, 75, 74, .1);
       --sidebar-w: 210px
@@ -50,7 +52,8 @@
     .player-play-btn,
     .player-volume,
     #new-folder-btn,
-    #settings-btn,
+    #settings-overlay,
+    .sv-icon,
     .btn-small,
     .context-menu,
     .modal-overlay,
@@ -102,6 +105,21 @@
       display: flex;
       align-items: center;
       padding-left: 16px;
+      gap: 8px;
+    }
+
+    .sv-icon {
+      flex-shrink: 0;
+      opacity: .9;
+      cursor: pointer;
+      transition: opacity .2s, transform .2s cubic-bezier(.34,1.56,.64,1);
+    }
+    .sv-icon:hover {
+      opacity: 1;
+      transform: scale(1.08);
+    }
+    .sv-icon:active {
+      transform: scale(.94);
     }
 
     .logo {
@@ -640,23 +658,281 @@
 
     .sidebar-bottom {
       border-top: .5px solid var(--border);
-      padding: 8px 12px
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
     }
 
-    #settings-btn {
+    #settings-open-btn {
       background: none;
       border: none;
       color: var(--text-muted);
       cursor: pointer;
-      font-size: 12px;
+      padding: 5px;
+      border-radius: 6px;
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 3px 0
+      justify-content: center;
+      position: relative;
+      transition: color .14s, background .14s;
+    }
+    #settings-open-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-hover);
+    }
+    #settings-open-btn svg {
+      transition: transform .4s cubic-bezier(.34,1.56,.64,1);
+    }
+    #settings-open-btn:hover svg {
+      transform: rotate(35deg);
+    }
+    #settings-open-btn:active {
+      transform: scale(.9);
+    }
+    #settings-open-btn.indexing {
+      color: var(--accent);
+    }
+    #settings-open-btn.indexing::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 6px var(--accent);
+      animation: settings-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes settings-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .3; transform: scale(.6); }
     }
 
-    #settings-btn:hover {
-      color: var(--text-primary)
+    /* ═══ Settings Modal ═══ */
+    #settings-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .55);
+      z-index: 10002;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(2px);
+    }
+    #settings-overlay.active {
+      display: flex;
+    }
+    .settings-modal {
+      background: var(--bg-main);
+      border: .5px solid var(--border);
+      border-radius: 12px;
+      width: 380px;
+      max-width: calc(100vw - 40px);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, .6);
+      overflow: hidden;
+      animation: settingsIn .22s cubic-bezier(.34, 1.2, .64, 1);
+    }
+    @keyframes settingsIn {
+      from { opacity: 0; transform: translateY(10px) scale(.97); }
+      to { opacity: 1; transform: none; }
+    }
+    .settings-head {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 13px 16px;
+      border-bottom: .5px solid var(--border);
+    }
+    .settings-head .sh-icon {
+      color: var(--accent);
+      display: flex;
+      flex-shrink: 0;
+    }
+    .settings-head .sh-title {
+      flex: 1;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-primary);
+    }
+    .settings-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 17px;
+      line-height: 1;
+      padding: 0 3px;
+      border-radius: 4px;
+      transition: color .12s, background .12s;
+    }
+    .settings-close:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, .1);
+    }
+    .settings-body {
+      padding: 4px 16px 16px;
+      max-height: 72vh;
+      overflow-y: auto;
+    }
+    .settings-section {
+      padding: 16px 0;
+      border-bottom: .5px solid var(--border-light);
+    }
+    .settings-section:last-child {
+      border-bottom: none;
+      padding-bottom: 4px;
+    }
+    .settings-section-label {
+      font-size: 9px;
+      letter-spacing: 1.3px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-bottom: 11px;
+    }
+    .settings-libpath-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-surface);
+      border: .5px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      transition: border-color .14s;
+    }
+    .settings-libpath-row:hover {
+      border-color: var(--border-hover);
+    }
+    .settings-libpath-icon {
+      color: var(--text-muted);
+      display: flex;
+      flex-shrink: 0;
+    }
+    .settings-libpath-text {
+      flex: 1;
+      min-width: 0;
+      font-size: 11px;
+      color: var(--text-secondary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      direction: rtl;
+      text-align: left;
+      unicode-bidi: plaintext;
+    }
+    .settings-libpath-change {
+      flex-shrink: 0;
+      background: var(--bg-hover);
+      border: .5px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: 5px;
+      padding: 4px 11px;
+      font-size: 10px;
+      cursor: pointer;
+      transition: border-color .12s, color .12s, transform .1s;
+    }
+    .settings-libpath-change:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .settings-catalog-btn {
+      width: 100%;
+      justify-content: center;
+      background: var(--bg-surface);
+      border: .5px solid var(--border);
+      color: var(--text-secondary);
+      border-radius: 6px;
+      padding: 9px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      transition: border-color .14s, color .14s, background .14s, transform .1s;
+    }
+    .settings-catalog-btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+    .settings-catalog-btn:active:not(:disabled) {
+      transform: scale(.99);
+    }
+    .settings-catalog-btn:disabled {
+      cursor: default;
+      opacity: .45;
+      color: var(--text-muted);
+    }
+    .settings-catalog-btn svg {
+      flex-shrink: 0;
+    }
+    .settings-accent-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .accent-swatches {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+    }
+    .accent-swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border-color .12s, transform .12s;
+      padding: 0;
+      font: inherit;
+    }
+    .accent-swatch:hover {
+      transform: scale(1.14);
+      border-color: rgba(255, 255, 255, .35);
+    }
+    .accent-swatch.active {
+      border-color: #fff;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, .4), 0 0 8px rgba(255, 255, 255, .18);
+    }
+    .accent-swatch:focus-visible,
+    .accent-custom-btn:focus-visible {
+      outline: 1.5px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .accent-custom-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1.5px dashed var(--text-muted);
+      background: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: var(--text-muted);
+      transition: border-color .12s, color .12s;
+      padding: 0;
+      line-height: 1;
+    }
+    .accent-custom-btn:hover {
+      border-color: var(--text-secondary);
+      color: var(--text-secondary);
+    }
+    .accent-swatch:active {
+      transform: scale(.9);
+    }
+    .accent-custom-btn:active {
+      transform: scale(.9);
+    }
+    .settings-libpath-change:active {
+      transform: scale(.95);
     }
 
     #main-panel {
@@ -724,9 +1000,9 @@
       position: relative;
     }
     #watcher-btn.watching {
-      border-color: rgba(200, 247, 109, .35);
+      border-color: rgba(var(--accent-rgb), .35);
       color: var(--accent);
-      background: rgba(200, 247, 109, .07);
+      background: rgba(var(--accent-rgb), .07);
     }
     #watcher-btn.watching svg {
       stroke: var(--accent);
@@ -786,7 +1062,7 @@
 
     .play-btn:hover {
       border-color: var(--accent);
-      background: rgba(200, 247, 109, .08)
+      background: rgba(var(--accent-rgb), .08)
     }
 
     .play-btn:hover .play-icon {
@@ -844,7 +1120,7 @@
       position: absolute;
       top: 0;
       height: 100%;
-      background: rgba(200, 247, 109, .10);
+      background: rgba(var(--accent-rgb), .10);
       border-left: 1.5px solid var(--accent);
       border-right: 1.5px solid var(--accent);
       pointer-events: none;
@@ -866,7 +1142,7 @@
     }
 
     .sel-resize:hover {
-      background: rgba(200, 247, 109, .3)
+      background: rgba(var(--accent-rgb), .3)
     }
 
     .sel-resize.left {
@@ -914,7 +1190,7 @@
     }
     
     .sel-btn:active, .sel-btn.active {
-      background: rgba(200, 247, 109, .15);
+      background: rgba(var(--accent-rgb), .15);
       color: var(--accent);
     }
 
@@ -956,7 +1232,7 @@
       display: none;
       position: absolute;
       inset: 0;
-      background: rgba(200, 247, 109, .05);
+      background: rgba(var(--accent-rgb), .05);
       border: 2px dashed var(--accent);
       border-radius: 8px;
       z-index: 100;
@@ -1402,16 +1678,17 @@
     .ed-fade-handle-box {
       width: 8px;
       height: 8px;
-      background: rgba(200, 247, 109, 0.8);
+      background: var(--accent);
+      opacity: 0.8;
       border-radius: 2px;
       transition: transform .15s, background .15s;
     }
 
     .ed-fade-handle:hover .ed-fade-handle-box,
     .ed-fade-handle.dragging .ed-fade-handle-box {
-      background: #c8f76d;
+      background: var(--accent);
       transform: scale(1.4);
-      box-shadow: 0 0 6px rgba(200, 247, 109, .6)
+      box-shadow: 0 0 6px rgba(var(--accent-rgb), .6)
     }
 
     .ed-fade-region {
@@ -1422,13 +1699,13 @@
     }
 
     .ed-fade-region.fade-in {
-      background: linear-gradient(90deg, rgba(200, 247, 109, .12), transparent);
-      border-right: 1px dashed rgba(200, 247, 109, .3)
+      background: linear-gradient(90deg, rgba(var(--accent-rgb), .12), transparent);
+      border-right: 1px dashed rgba(var(--accent-rgb), .3)
     }
 
     .ed-fade-region.fade-out {
-      background: linear-gradient(270deg, rgba(200, 247, 109, .12), transparent);
-      border-left: 1px dashed rgba(200, 247, 109, .3)
+      background: linear-gradient(270deg, rgba(var(--accent-rgb), .12), transparent);
+      border-left: 1px dashed rgba(var(--accent-rgb), .3)
     }
 
     /* Minimap */
@@ -1458,8 +1735,8 @@
       position: absolute;
       top: 0;
       height: 100%;
-      border: 1px solid rgba(200,247,109,0.5);
-      background: rgba(200,247,109,0.05);
+      border: 1px solid rgba(var(--accent-rgb),0.5);
+      background: rgba(var(--accent-rgb),0.05);
       border-radius: 4px;
       cursor: grab;
       box-sizing: border-box;
@@ -1517,11 +1794,11 @@
       transition: background 0.15s, box-shadow 0.15s;
     }
     .ed-slip-region:hover {
-      background: rgba(200, 247, 109, 0.08);
-      box-shadow: inset 0 0 10px rgba(200, 247, 109, 0.1);
+      background: rgba(var(--accent-rgb), 0.08);
+      box-shadow: inset 0 0 10px rgba(var(--accent-rgb), 0.1);
     }
     .ed-slip-region.dragging {
-      background: rgba(200, 247, 109, 0.12);
+      background: rgba(var(--accent-rgb), 0.12);
       cursor: grabbing;
     }
 
@@ -1658,11 +1935,11 @@
       background: var(--accent);
       cursor: pointer;
       border: 2px solid #16161a;
-      box-shadow: 0 0 4px rgba(200, 247, 109, .3)
+      box-shadow: 0 0 4px rgba(var(--accent-rgb), .3)
     }
 
     .ed-slider-row input[type="range"]::-webkit-slider-thumb:hover {
-      box-shadow: 0 0 8px rgba(200, 247, 109, .5)
+      box-shadow: 0 0 8px rgba(var(--accent-rgb), .5)
     }
 
     .ed-slider-val {
@@ -1836,7 +2113,7 @@
     }
 
     #editor-drag-btn:hover {
-      background: #d4fc7a
+      filter: brightness(1.15)
     }
     .titlebar-word {
       font-size: 13px; font-weight: 600; letter-spacing: 0.3px; padding: 2px 6px;
@@ -1906,17 +2183,29 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      padding-right: 34px;
     }
     .vault-list-item.active .vl-name {
       color: var(--text-primary);
       font-weight: 500;
     }
     .vault-list-item .vl-count {
+      position: absolute;
+      right: 8px;
+      top: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
       font-size: 10px;
       color: var(--text-muted);
     }
     .vault-list-item .vl-actions {
+      position: absolute;
+      right: 6px;
+      top: 0;
+      bottom: 0;
       display: none;
+      align-items: center;
       gap: 2px;
     }
     .vault-list-item:hover .vl-actions {
@@ -2077,13 +2366,14 @@
       border-left: 2px solid transparent;
     }
     .ai-sug-list .ai-sug-item:hover {
-      border-left-color: rgba(200, 247, 109, .3);
+      border-left-color: rgba(var(--accent-rgb), .3);
     }
 
     /* ═══ Vault Edit Modal ═══ */
     #vault-edit-overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      position: fixed; inset: 0; background: rgba(0,0,0,.55);
       z-index: 10002; display: none; align-items: center; justify-content: center;
+      backdrop-filter: blur(2px);
     }
     #vault-edit-overlay.active { display: flex; }
     .vault-edit-modal {
@@ -2267,14 +2557,14 @@
     }
     .echo-match-overlay {
       position: absolute; top: 0; height: 100%;
-      background: rgba(200, 247, 109, .12);
+      background: rgba(var(--accent-rgb), .12);
       border-left: 1.5px solid var(--accent);
       border-right: 1.5px solid var(--accent);
       pointer-events: none;
       transition: opacity .2s;
     }
     .echo-wf-wrap:hover .echo-match-overlay {
-      background: rgba(200, 247, 109, .2);
+      background: rgba(var(--accent-rgb), .2);
     }
     .echo-result-actions {
       display: flex; gap: 4px;
@@ -2318,6 +2608,31 @@
   <div id="app">
     <div id="titlebar">
       <div class="logo-wrap">
+        <svg class="sv-icon" id="sv-icon-toggle" width="22" height="22" viewBox="0 0 996 964" xmlns="http://www.w3.org/2000/svg" title="Toggle Sound / Vault mode">
+          <g transform="translate(0,964) scale(0.1,-0.1)">
+            <g fill="#ffffff" stroke="none">
+              <path d="M1850 9625 c-154 -22 -246 -43 -404 -96 -761 -252 -1307 -910 -1421 -1711 -13 -89 -15 -506 -15 -2968 0 -1854 3 -2894 10 -2945 41 -331 160 -656 341 -930 305 -464 764 -789 1307 -925 208 -52 57 -50 3336 -50 2728 0 3059 2 3150 16 600 93 1130 436 1469 949 131 199 253 493 309 745 l23 105 3 2985 c2 2152 0 3007 -8 3065 -15 104 -51 247 -94 372 -262 751 -954 1302 -1751 1393 -60 6 -1107 10 -3125 9 -2451 -1 -3053 -4 -3130 -14z m6335 -502 c230 -55 416 -134 590 -251 358 -242 603 -619 687 -1059 l23 -118 0 -1685 0 -1685 -23 -70 c-38 -114 -81 -184 -162 -265 -83 -83 -171 -139 -270 -173 l-65 -22 -1262 -3 -1263 -2 0 -245 0 -245 1209 0 c801 0 1236 4 1288 11 146 20 330 91 476 185 37 24 70 44 72 44 10 0 5 -1443 -6 -1538 -25 -235 -75 -408 -174 -607 -85 -170 -175 -295 -310 -430 -136 -136 -261 -226 -430 -311 -145 -72 -259 -112 -421 -146 l-109 -23 -3020 0 c-2871 0 -3025 1 -3125 18 -121 21 -341 92 -442 143 -548 276 -894 788 -947 1399 -12 129 -15 1371 -5 1448 l6 45 67 -40 c158 -98 337 -165 495 -187 52 -7 478 -11 1277 -11 l1199 0 0 245 0 245 -1222 0 c-1353 0 -1295 -2 -1436 65 -145 69 -261 185 -327 330 -64 138 -60 27 -60 1820 0 1526 1 1648 18 1753 98 616 503 1103 1086 1306 95 33 246 69 331 79 19 2 1414 3 3100 3 l3065 -2 90 -21z"/>
+              <path d="M4925 8071 c-48 -22 -78 -54 -94 -100 -8 -25 -11 -456 -11 -1601 l0 -1567 23 -44 c70 -131 268 -113 316 30 16 47 16 3118 0 3176 -14 50 -64 100 -114 114 -54 15 -73 14 -120 -8z"/>
+              <path d="M4413 7549 c-45 -13 -96 -67 -110 -115 -8 -28 -10 -352 -9 -1134 3 -1193 -1 -1123 58 -1177 78 -73 216 -49 265 46 l23 44 0 1101 c0 1047 -1 1103 -19 1141 -22 49 -48 73 -98 91 -44 15 -65 16 -110 3z"/>
+              <path d="M5465 7548 c-36 -13 -82 -53 -101 -90 -12 -23 -14 -202 -14 -1146 l0 -1119 23 -33 c35 -52 70 -73 130 -78 70 -6 120 17 155 71 l27 41 3 1108 c2 1077 2 1111 -17 1153 -33 75 -132 120 -206 93z"/>
+              <path d="M2475 7232 c-48 -23 -78 -56 -94 -101 -14 -44 -16 -1788 -1 -1841 5 -20 24 -50 42 -67 80 -76 211 -59 270 35 l23 37 0 915 0 915 -23 37 c-46 75 -142 105 -217 70z"/>
+              <path d="M7393 7239 c-45 -13 -100 -71 -113 -118 -7 -27 -10 -326 -8 -933 l3 -893 23 -37 c33 -53 83 -81 145 -81 63 -1 106 20 144 70 l28 36 0 927 0 927 -29 37 c-31 41 -95 76 -136 75 -14 0 -40 -5 -57 -10z"/>
+              <path d="M3915 6957 c-57 -23 -75 -38 -95 -77 -20 -39 -20 -54 -18 -643 l3 -602 23 -33 c30 -41 90 -72 139 -72 53 1 116 31 144 71 l24 34 3 599 c2 590 2 599 -18 642 -12 24 -36 52 -54 64 -42 25 -112 33 -151 17z"/>
+              <path d="M5955 6952 c-46 -22 -79 -55 -94 -95 -7 -19 -11 -213 -11 -580 0 -518 2 -555 19 -593 68 -149 285 -127 321 31 10 46 13 966 4 1073 -5 49 -14 84 -28 105 -45 66 -140 93 -211 59z"/>
+              <path d="M2962 6779 c-28 -14 -49 -34 -62 -60 -19 -36 -20 -61 -20 -511 0 -533 -1 -522 75 -565 54 -31 116 -30 170 2 77 44 75 32 75 568 l0 474 -22 33 c-53 77 -137 100 -216 59z"/>
+              <path d="M6871 6778 c-83 -43 -81 -26 -81 -574 l0 -481 23 -33 c48 -71 145 -91 222 -45 77 44 75 32 75 568 l0 474 -22 33 c-53 78 -137 100 -217 58z"/>
+              <path d="M1944 6732 c-23 -11 -52 -35 -65 -53 l-24 -34 -3 -415 c-2 -228 0 -430 3 -448 8 -45 57 -97 112 -118 38 -15 52 -16 90 -6 61 17 91 38 114 83 18 36 19 62 19 459 0 467 0 466 -65 515 -48 37 -122 44 -181 17z"/>
+              <path d="M7900 6739 c-14 -6 -36 -20 -48 -32 -52 -49 -52 -45 -52 -502 0 -468 1 -473 60 -515 57 -41 155 -42 208 -3 15 10 37 39 50 64 l23 44 -3 420 c-3 413 -3 421 -25 455 -41 67 -139 98 -213 69z"/>
+              <path d="M3463 6500 c-46 -10 -80 -35 -98 -71 -14 -25 -16 -64 -13 -239 l3 -209 30 -31 c53 -55 132 -63 203 -20 57 35 64 67 60 285 -3 179 -5 196 -24 222 -38 51 -103 76 -161 63z"/>
+              <path d="M6447 6495 c-51 -18 -85 -50 -97 -94 -5 -20 -10 -112 -10 -206 0 -146 3 -176 20 -212 49 -109 220 -107 266 3 10 24 14 84 14 219 0 163 -2 190 -19 223 -32 62 -106 91 -174 67z"/>
+              <path d="M1399 6404 c-92 -28 -147 -123 -136 -233 19 -187 264 -248 371 -94 35 50 46 137 26 198 -19 59 -74 113 -133 130 -60 18 -68 18 -128 -1z"/>
+              <path d="M8443 6403 c-84 -29 -143 -133 -130 -228 8 -55 26 -91 64 -129 101 -103 288 -58 333 80 7 20 10 64 8 99 -5 84 -40 137 -111 171 -59 27 -103 29 -164 7z"/>
+            </g>
+            <g class="sv-icon-lock" style="fill:var(--accent)" stroke="none">
+              <path d="M3993 4119 c-98 -18 -186 -87 -229 -181 l-29 -63 0 -1025 0 -1025 23 -60 c53 -141 150 -240 290 -297 l57 -23 880 0 880 0 75 28 c41 15 96 43 122 62 60 44 130 143 160 225 l23 65 3 1005 c2 980 2 1007 -18 1071 -26 87 -79 148 -168 191 l-67 33 -980 1 c-539 0 -999 -3 -1022 -7z m1160 -702 c76 -35 171 -126 209 -201 75 -148 51 -320 -62 -449 l-40 -45 0 -260 c0 -253 -1 -260 -23 -293 -12 -18 -38 -44 -56 -56 -32 -22 -44 -23 -191 -23 -147 0 -159 1 -191 23 -18 12 -44 38 -56 56 -22 33 -23 40 -23 296 l0 261 -34 33 c-46 45 -94 143 -106 216 -19 118 21 244 106 336 60 63 92 86 163 116 48 20 69 23 151 20 77 -2 106 -8 153 -30z"/>
+            </g>
+          </g>
+        </svg>
         <div class="logo" id="logo-interactive">
           <span class="logo-half" id="logo-sound" data-mode="sounds">SOUND</span><span class="logo-sep"></span><span class="logo-half" id="logo-vault" data-mode="vault">VAULT</span>
           <div class="logo-indicator" id="logo-indicator"></div>
@@ -2389,91 +2704,13 @@
           </div>
         </div>
         <div class="sidebar-bottom">
-          <div class="sidebar-bottom-content" style="display:flex; flex-direction:column; gap:6px">
-            <button id="semantic-index-btn" class="btn-small" style="justify-content:center; width:100%">
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="margin-right:4px">
-                <path d="M2 3h12M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-                <circle cx="13" cy="13" r="2.5" stroke="currentColor" stroke-width="1.2"/>
-                <path d="M13 11.5v3M11.5 13h3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
-              </svg>Catalog Library</button>
-            <div id="index-progress-panel" style="display:none">
-              <style>
-                #index-progress-panel {
-                  margin-top: 6px;
-                  padding: 8px 10px;
-                  background: rgba(255,255,255,0.03);
-                  border: 1px solid rgba(255,255,255,0.06);
-                  border-radius: 6px;
-                  font-size: 10px;
-                  color: #ccc;
-                  animation: ipanelIn 0.3s ease;
-                }
-                @keyframes ipanelIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
-                .idx-phase { margin-bottom: 6px; }
-                .idx-phase:last-child { margin-bottom: 0; }
-                .idx-phase-header { display:flex; justify-content:space-between; margin-bottom: 3px; }
-                .idx-phase-label { font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; font-size: 9px; }
-                .idx-phase-label.active { color: var(--accent); }
-                .idx-phase-label.done { color: #5a5; }
-                .idx-phase-count { color: #888; font-size: 9px; font-variant-numeric: tabular-nums; }
-                .idx-bar-track {
-                  width: 100%;
-                  height: 4px;
-                  background: rgba(255,255,255,0.06);
-                  border-radius: 2px;
-                  overflow: hidden;
-                }
-                .idx-bar-fill {
-                  height: 100%;
-                  width: 0%;
-                  border-radius: 2px;
-                  transition: width 0.5s ease;
-                }
-                .idx-bar-fill.semantic { background: linear-gradient(90deg, #6366f1, #a78bfa); }
-                .idx-bar-fill.spectral { background: linear-gradient(90deg, #f59e0b, #f97316); }
-                .idx-bar-fill.done { background: #5a5 !important; }
-                .idx-bar-fill.active {
-                  background-size: 20px 20px;
-                  background-image: linear-gradient(
-                    135deg,
-                    rgba(255,255,255,0.1) 25%, transparent 25%,
-                    transparent 50%, rgba(255,255,255,0.1) 50%,
-                    rgba(255,255,255,0.1) 75%, transparent 75%
-                  );
-                  animation: idx-stripe 0.8s linear infinite;
-                }
-                @keyframes idx-stripe { from { background-position: 0 0; } to { background-position: 20px 0; } }
-                .idx-status { text-align: center; color: #888; font-size: 9px; margin-top: 4px; font-style: italic; }
-              </style>
-              <div class="idx-phase" id="idx-clap-phase">
-                <div class="idx-phase-header">
-                  <span class="idx-phase-label" id="idx-clap-label">Quick Semantic</span>
-                  <span class="idx-phase-count" id="idx-clap-count">0 / 0</span>
-                </div>
-                <div class="idx-bar-track"><div class="idx-bar-fill semantic" id="idx-clap-bar"></div></div>
-              </div>
-              <div class="idx-phase" id="idx-deep-phase">
-                <div class="idx-phase-header">
-                  <span class="idx-phase-label" id="idx-deep-label">Deep Semantic</span>
-                  <span class="idx-phase-count" id="idx-deep-count">–</span>
-                </div>
-                <div class="idx-bar-track"><div class="idx-bar-fill semantic" id="idx-deep-bar"></div></div>
-              </div>
-              <div class="idx-phase" id="idx-spectral-phase">
-                <div class="idx-phase-header">
-                  <span class="idx-phase-label" id="idx-spectral-label">Echo Spectral</span>
-                  <span class="idx-phase-count" id="idx-spectral-count">–</span>
-                </div>
-                <div class="idx-bar-track"><div class="idx-bar-fill spectral" id="idx-spectral-bar"></div></div>
-              </div>
-              <div class="idx-status" id="idx-status-text">Scanning library...</div>
-            </div>
-            <button id="settings-btn"><svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.2" />
-                <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M3 13l1.5-1.5M11.5 4.5L13 3"
-                  stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-              </svg>Library path</button>
-          </div>
+          <button id="settings-open-btn" title="Settings">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="2.4" stroke="currentColor" stroke-width="1.2" />
+              <path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M3.3 12.7l1.2-1.2M11.5 4.5l1.2-1.2"
+                stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+            </svg>
+          </button>
         </div>
       </div>
       <div id="main-panel">
@@ -2540,7 +2777,7 @@
     </div>
     <div id="player-bar">
       <button class="player-play-btn" id="player-toggle"><svg width="18" height="18" viewBox="0 0 16 16">
-          <polygon points="3,1 13,8 3,15" fill="#c8f76d" />
+          <polygon points="3,1 13,8 3,15" style="fill:var(--accent)" />
         </svg></button>
       <span class="player-time" id="player-time">--:-- / --:--</span>
       <div class="player-progress-wrap" id="player-progress-wrap">
@@ -2592,6 +2829,129 @@
       </div>
     </div>
   </div>
+
+  <div id="settings-overlay">
+    <div class="settings-modal">
+      <div class="settings-head">
+        <span class="sh-icon">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="2.4" stroke="currentColor" stroke-width="1.2" />
+            <path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M3.3 12.7l1.2-1.2M11.5 4.5l1.2-1.2"
+              stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+          </svg>
+        </span>
+        <span class="sh-title">Settings</span>
+        <button class="settings-close" id="settings-close-btn">&times;</button>
+      </div>
+      <div class="settings-body">
+        <div class="settings-section">
+          <div class="settings-section-label">Library</div>
+          <div class="settings-libpath-row">
+            <span class="settings-libpath-icon">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 4.5h4l1.5 1.5H14v7H2z" />
+              </svg>
+            </span>
+            <span class="settings-libpath-text" id="settings-libpath-display">&mdash;</span>
+            <button class="settings-libpath-change" id="settings-libpath-btn">Change</button>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-label">Catalog</div>
+          <button id="semantic-index-btn" class="settings-catalog-btn">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M2 3h12M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              <circle cx="13" cy="13" r="2.5" stroke="currentColor" stroke-width="1.2"/>
+              <path d="M13 11.5v3M11.5 13h3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+            </svg>
+            <span id="semantic-index-btn-label">Catalog Library</span>
+          </button>
+          <div id="index-progress-panel" style="display:none">
+            <style>
+              #index-progress-panel {
+                margin-top: 12px;
+                padding: 10px 12px;
+                background: var(--bg-surface);
+                border: .5px solid var(--border);
+                border-radius: 6px;
+                font-size: 10px;
+                color: var(--text-secondary);
+                animation: ipanelIn 0.3s ease;
+              }
+              @keyframes ipanelIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+              .idx-phase { margin-bottom: 7px; }
+              .idx-phase:last-child { margin-bottom: 0; }
+              .idx-phase-header { display:flex; justify-content:space-between; margin-bottom: 4px; }
+              .idx-phase-label { font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; font-size: 9px; color: var(--text-muted); }
+              .idx-phase-label.active { color: var(--accent); }
+              .idx-phase-label.done { color: var(--text-secondary); }
+              .idx-phase-count { color: var(--text-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
+              .idx-bar-track {
+                width: 100%;
+                height: 4px;
+                background: rgba(255,255,255,0.06);
+                border-radius: 2px;
+                overflow: hidden;
+              }
+              .idx-bar-fill {
+                height: 100%;
+                width: 0%;
+                border-radius: 2px;
+                transition: width 0.5s ease, opacity 0.3s ease;
+              }
+              .idx-bar-fill.semantic,
+              .idx-bar-fill.spectral { background: var(--accent); }
+              .idx-bar-fill.done { opacity: .4; }
+              .idx-bar-fill.active {
+                opacity: 1;
+                background-size: 20px 20px;
+                background-image: linear-gradient(
+                  135deg,
+                  rgba(255,255,255,0.18) 25%, transparent 25%,
+                  transparent 50%, rgba(255,255,255,0.18) 50%,
+                  rgba(255,255,255,0.18) 75%, transparent 75%
+                );
+                animation: idx-stripe 0.8s linear infinite;
+              }
+              @keyframes idx-stripe { from { background-position: 0 0; } to { background-position: 20px 0; } }
+              .idx-status { text-align: center; color: var(--text-muted); font-size: 9px; margin-top: 6px; font-style: italic; }
+              .idx-status.done { color: var(--accent); font-style: normal; }
+            </style>
+            <div class="idx-phase" id="idx-clap-phase">
+              <div class="idx-phase-header">
+                <span class="idx-phase-label" id="idx-clap-label">Quick Semantic</span>
+                <span class="idx-phase-count" id="idx-clap-count">0 / 0</span>
+              </div>
+              <div class="idx-bar-track"><div class="idx-bar-fill semantic" id="idx-clap-bar"></div></div>
+            </div>
+            <div class="idx-phase" id="idx-deep-phase">
+              <div class="idx-phase-header">
+                <span class="idx-phase-label" id="idx-deep-label">Deep Semantic</span>
+                <span class="idx-phase-count" id="idx-deep-count">&ndash;</span>
+              </div>
+              <div class="idx-bar-track"><div class="idx-bar-fill semantic" id="idx-deep-bar"></div></div>
+            </div>
+            <div class="idx-phase" id="idx-spectral-phase">
+              <div class="idx-phase-header">
+                <span class="idx-phase-label" id="idx-spectral-label">Echo Spectral</span>
+                <span class="idx-phase-count" id="idx-spectral-count">&ndash;</span>
+              </div>
+              <div class="idx-bar-track"><div class="idx-bar-fill spectral" id="idx-spectral-bar"></div></div>
+            </div>
+            <div class="idx-status" id="idx-status-text">Scanning library...</div>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-section-label">Appearance</div>
+          <div class="settings-accent-row">
+            <div class="accent-swatches" id="accent-swatches"></div>
+            <button class="accent-custom-btn" id="accent-custom-btn" title="Custom color">+</button>
+            <input type="color" id="accent-color-input" style="position:absolute;opacity:0;width:0;height:0;pointer-events:none">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="sel-toolbar-global">
     <button class="sel-btn" id="gtb-edit" title="Open editor"><svg viewBox="0 0 16 16" fill="none">
         <circle cx="4.5" cy="11.5" r="2.5" stroke="currentColor" stroke-width="1.3"/>
@@ -2620,8 +2980,8 @@
   <div id="editor-panel">
     <div id="editor-header">
       <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-        <rect x="1" y="4" width="12" height="7" rx="1.5" stroke="#c8f76d" stroke-width="1.3" />
-        <path d="M3 7h8M5 5.5v3M9 5.5v3" stroke="#c8f76d" stroke-width="1.1" stroke-linecap="round" />
+        <rect x="1" y="4" width="12" height="7" rx="1.5" style="stroke:var(--accent)" stroke-width="1.3" />
+        <path d="M3 7h8M5 5.5v3M9 5.5v3" style="stroke:var(--accent)" stroke-width="1.1" stroke-linecap="round" />
       </svg>
       <span id="editor-title">Editor</span>
       <button id="editor-close">×</button>
@@ -2662,7 +3022,7 @@
         id="ed-t-end">0:00</span></div>
     <div id="editor-controls">
       <button id="editor-play-btn"><svg width="10" height="12" viewBox="0 0 12 14">
-          <polygon class="ed-play-icon" points="2,0 12,7 2,14" fill="#c8f76d" />
+          <polygon class="ed-play-icon" points="2,0 12,7 2,14" style="fill:var(--accent)" />
         </svg></button>
       <span id="editor-time-display">0:00 / 0:00</span>
       <div style="flex:1"></div>
@@ -2724,8 +3084,17 @@
 
   <script>
     let currentFolder = null, currentCollection = null, sounds = [], currentSound = null, isPlaying = false, playOffset = 0, playStartTime = 0, playEndTime = Infinity, animFrameId = null, volume = .8, contextMenuTarget = null, searchMode = false;
+    let lastCollection = null;
     let audioContext = null, gainNode = null, audioSource = null, audioBuffer = null;
+    let streamAudio = null;
+    let streamSource = null;
     const bufferCache = new Map, peakCache = new Map;
+    const BUFFER_CACHE_BUDGET = 256 * 1024 * 1024;
+    const bufferCacheOrder = [];
+    let bufferCacheBytes = 0;
+    function audioBufferBytes(buf) {
+      return buf.duration * buf.sampleRate * buf.numberOfChannels * 4;
+    }
     let selection = null;
     let sidebarMode = 'vault'; // 'vault' = show collections, 'sounds' = show folders
 
@@ -2743,18 +3112,32 @@
     let activeVaultData = null; // { id, name, color }
 
     function getCtx() { if (!audioContext) { audioContext = new AudioContext; gainNode = audioContext.createGain(); gainNode.gain.value = volume; gainNode.connect(audioContext.destination) } if (audioContext.state === 'suspended') audioContext.resume(); return audioContext }
-    // Decode without requiring AudioContext to be resumed — use a fresh context for decoding if needed
+    const _decodeInflight = new Map();
     async function decodeFile(fp) {
-      if (bufferCache.has(fp)) return bufferCache.get(fp); 
-      try {
-        const raw = await window.api.readAudioFile(fp); 
-        if (!raw) return null; 
-        const arr = (raw.type === 'Buffer') ? new Uint8Array(raw.data) : new Uint8Array(raw);
-        const ab = arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength);
-        const dec = await getCtx().decodeAudioData(ab);
-        bufferCache.set(fp, dec); 
-        return dec;
-      } catch (e) { console.error('decode:', fp, e); return null }
+      if (bufferCache.has(fp)) return bufferCache.get(fp);
+      if (_decodeInflight.has(fp)) return _decodeInflight.get(fp);
+      const p = (async () => {
+        try {
+          const raw = await window.api.readAudioFile(fp);
+          if (!raw) return null;
+          const arr = (raw.type === 'Buffer') ? new Uint8Array(raw.data) : new Uint8Array(raw);
+          const ab = arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength);
+          const dec = await getCtx().decodeAudioData(ab);
+          bufferCache.set(fp, dec);
+          const sz = audioBufferBytes(dec);
+          bufferCacheBytes += sz;
+          bufferCacheOrder.push(fp);
+          while (bufferCacheBytes > BUFFER_CACHE_BUDGET && bufferCacheOrder.length > 1) {
+            const evict = bufferCacheOrder.shift();
+            const evicted = bufferCache.get(evict);
+            if (evicted) bufferCacheBytes -= audioBufferBytes(evicted);
+            bufferCache.delete(evict);
+          }
+          return dec;
+        } catch (e) { console.error('decode:', fp, e); return null; }
+      })();
+      _decodeInflight.set(fp, p);
+      try { return await p; } finally { _decodeInflight.delete(fp); }
     }
 
     // Dedicated decoding context — never connected to speakers, no user-gesture needed
@@ -2785,13 +3168,70 @@
       }
     }
     function playAudio(s, e) { if (!audioBuffer) return; stopAudio(); const ctx = getCtx(); audioSource = ctx.createBufferSource(); audioSource.buffer = audioBuffer; const dur = e - s; if (selection && selection.path === currentSound?.path && (selection.fadeIn > 0 || selection.fadeOut > 0)) { const fg = ctx.createGain(); fg.connect(gainNode); audioSource.connect(fg); const now = ctx.currentTime; if (selection.fadeIn > 0) { fg.gain.setValueAtTime(0, now); fg.gain.linearRampToValueAtTime(1, now + Math.min(selection.fadeIn, dur)) } else fg.gain.setValueAtTime(1, now); if (selection.fadeOut > 0) { fg.gain.setValueAtTime(1, now + dur - Math.min(selection.fadeOut, dur)); fg.gain.linearRampToValueAtTime(0, now + dur) } } else audioSource.connect(gainNode); audioSource.onended = function() { if (audioSource !== this) return; if (isPlaying) { isPlaying = false; playOffset = s; updatePlayerUI(); refreshPlaying() } }; playOffset = s; playStartTime = ctx.currentTime - s; playEndTime = e; audioSource.start(0, s, dur); isPlaying = true; updatePlayerUI(); startAnim() }
-    function stopAudio() { if (audioSource) { try { audioSource.stop() } catch (e) { } audioSource.disconnect(); audioSource = null } isPlaying = false; if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null } }
-    function togglePlayback() { if (!audioBuffer || !currentSound) return; if (isPlaying) { playOffset = getCtx().currentTime - playStartTime; stopAudio(); updatePlayerUI(); return } if (selection && selection.path === currentSound.path) { const d = peakCache.get(currentSound.path)?.duration || audioBuffer.duration; playAudio(selection.start * d, selection.end * d) } else { if (playOffset >= audioBuffer.duration) playOffset = 0; playAudio(playOffset, audioBuffer.duration) } }
-    function seekTo(f) { if (!audioBuffer) return; const t = Math.max(0, Math.min(f, 1)) * audioBuffer.duration; playOffset = t; if (isPlaying) playAudio(t, playEndTime); else { updateTimeDisplay(t, audioBuffer.duration); updateProgressBar(f) } }
-    function startAnim() { (function t() { if (!isPlaying || !audioBuffer) return; const el = getCtx().currentTime - playStartTime; if (el >= playEndTime) { stopAudio(); playOffset = 0; updatePlayerUI(); updateProgressBar(0); refreshPlaying(); return } updateProgressBar(el / audioBuffer.duration); updateTimeDisplay(el, audioBuffer.duration); updateWfPh(currentSound?.path, el / audioBuffer.duration); animFrameId = requestAnimationFrame(t) })() }
+    function stopAudio() { stopStream(); if (audioSource) { try { audioSource.stop() } catch (e) { } audioSource.disconnect(); audioSource = null } isPlaying = false; if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null } }
+    function togglePlayback() { if (streamAudio && currentSound) { if (isPlaying) { playOffset = streamAudio.currentTime; streamAudio.pause(); isPlaying = false; updatePlayerUI(); } else { streamAudio.play(); isPlaying = true; playStartTime = getCtx().currentTime - playOffset; updatePlayerUI(); startAnim(); } return; } if (!audioBuffer || !currentSound) return; if (isPlaying) { playOffset = getCtx().currentTime - playStartTime; stopAudio(); updatePlayerUI(); return } if (selection && selection.path === currentSound.path) { const d = peakCache.get(currentSound.path)?.duration || audioBuffer.duration; playAudio(selection.start * d, selection.end * d) } else { if (playOffset >= audioBuffer.duration) playOffset = 0; playAudio(playOffset, audioBuffer.duration) } }
+    function seekTo(f) { if (streamAudio && currentSound) { const pc = peakCache.get(currentSound.path); const dur = pc ? pc.duration : (streamAudio.duration || 0); if (dur > 0) { streamAudio.currentTime = f * dur; playOffset = streamAudio.currentTime; playStartTime = getCtx().currentTime - streamAudio.currentTime; if (!isPlaying) { updateProgressBar(f); updateTimeDisplay(streamAudio.currentTime, dur); } } return; } if (!audioBuffer) return; const t = Math.max(0, Math.min(f, 1)) * audioBuffer.duration; playOffset = t; if (isPlaying) playAudio(t, playEndTime); else { updateTimeDisplay(t, audioBuffer.duration); updateProgressBar(f) } }
+    function startAnim() { (function t() { if (!isPlaying) return; if (!audioBuffer && !streamAudio) return; const el = getCtx().currentTime - playStartTime; const dur = audioBuffer ? audioBuffer.duration : (peakCache.get(currentSound?.path)?.duration || (streamAudio && streamAudio.duration) || Infinity); if (el >= playEndTime || (streamAudio && streamAudio.ended)) { stopAudio(); playOffset = 0; updatePlayerUI(); updateProgressBar(0); refreshPlaying(); return } updateProgressBar(el / dur); updateTimeDisplay(el, dur); updateWfPh(currentSound?.path, el / dur); animFrameId = requestAnimationFrame(t) })() }
+    function playStream(sound, offset = 0) {
+      stopAudio();
+      const ctx = getCtx();
+      streamAudio = new Audio();
+      streamAudio.src = 'soundvault://?path=' + encodeURIComponent(sound.path);
+      streamAudio.preload = 'auto';
+      streamSource = ctx.createMediaElementSource(streamAudio);
+      streamSource.connect(gainNode);
+      currentSound = sound;
+      document.getElementById('player-name').textContent = sound.name.replace(/\.wav$/i, '');
+      isPlaying = true;
+      playOffset = offset;
+      playEndTime = Infinity;
+      updatePlayerUI();
+      const doPlay = () => {
+        if (!streamAudio) return;
+        if (offset > 0) streamAudio.currentTime = offset;
+        playStartTime = ctx.currentTime - offset;
+        streamAudio.play().catch(() => {});
+        startAnim();
+      };
+      if (streamAudio.readyState >= 1) {
+        doPlay();
+      } else {
+        streamAudio.addEventListener('loadedmetadata', doPlay, { once: true });
+      }
+      streamAudio.onerror = () => {
+        if (!streamAudio) return;
+        stopStream();
+        decodeFile(sound.path).then(buf => {
+          if (!buf) { currentSound = null; refreshPlaying(); return; }
+          audioBuffer = buf;
+          playAudio(offset, buf.duration);
+          refreshPlaying();
+        });
+      };
+      streamAudio.onended = () => {
+        if (!isPlaying) return;
+        isPlaying = false;
+        playOffset = 0;
+        updatePlayerUI();
+        updateProgressBar(0);
+        refreshPlaying();
+      };
+      refreshPlaying();
+    }
+    function stopStream() {
+      if (streamAudio) {
+        streamAudio.pause();
+        streamAudio.src = '';
+        streamAudio = null;
+      }
+      if (streamSource) {
+        streamSource.disconnect();
+        streamSource = null;
+      }
+    }
 
     // Waveform
-    function drawWf(cv, pks, o = {}) { const c = cv.getContext('2d'); const dpr = devicePixelRatio || 1; const w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return; cv.width = w * dpr; cv.height = h * dpr; c.scale(dpr, dpr); c.clearRect(0, 0, w, h); if (!pks?.length) return; const bw = 2, gap = 1, step = bw + gap, bc = Math.floor(w / step), mid = h / 2, ppb = pks.length / bc; const { playhead: ph = 0, selStart: ss, selEnd: se, fiF = 0, foF = 0 } = o; const hasSel = ss !== undefined && se !== undefined; for (let i = 0; i < bc; i++) { const pk = pks[Math.min(Math.floor(i * ppb), pks.length - 1)]; let bh = Math.max(2, pk * (h - 4)); const x = i * step, fr = i / bc; const inSel = hasSel && fr >= ss && fr <= se; if (inSel) { let env = 1; if (fiF > 0 && fr < ss + fiF) env = (fr - ss) / fiF; if (foF > 0 && fr > se - foF) env = Math.min(env, (se - fr) / foF); env = Math.max(0, Math.min(1, env)); bh = Math.max(2, bh * env); c.fillStyle = fr < ph ? '#c8f76d' : '#7da83e' } else c.fillStyle = fr < ph ? '#c8f76d' : '#555'; c.fillRect(x, mid - bh / 2, bw, bh) } if (hasSel && (fiF > 0 || foF > 0)) { c.globalAlpha = .3; if (fiF > 0) { c.fillStyle = '#c8f76d'; c.beginPath(); c.moveTo(ss * w, 0); c.lineTo((ss + fiF) * w, 0); c.lineTo(ss * w, h); c.closePath(); c.fill() } if (foF > 0) { c.fillStyle = '#c8f76d'; c.beginPath(); c.moveTo(se * w, 0); c.lineTo((se - foF) * w, 0); c.lineTo(se * w, h); c.closePath(); c.fill() } c.globalAlpha = 1 } }
+    function drawWf(cv, pks, o = {}) { const c = cv.getContext('2d'); const dpr = devicePixelRatio || 1; const w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return; cv.width = w * dpr; cv.height = h * dpr; c.scale(dpr, dpr); c.clearRect(0, 0, w, h); if (!pks?.length) return; const bw = 2, gap = 1, step = bw + gap, bc = Math.floor(w / step), mid = h / 2, ppb = pks.length / bc; const { playhead: ph = 0, selStart: ss, selEnd: se, fiF = 0, foF = 0 } = o; const hasSel = ss !== undefined && se !== undefined; const _ac = currentAccent, _acDim = dimHex(currentAccent); for (let i = 0; i < bc; i++) { const pk = pks[Math.min(Math.floor(i * ppb), pks.length - 1)]; let bh = Math.max(2, pk * (h - 4)); const x = i * step, fr = i / bc; const inSel = hasSel && fr >= ss && fr <= se; if (inSel) { let env = 1; if (fiF > 0 && fr < ss + fiF) env = (fr - ss) / fiF; if (foF > 0 && fr > se - foF) env = Math.min(env, (se - fr) / foF); env = Math.max(0, Math.min(1, env)); bh = Math.max(2, bh * env); c.fillStyle = fr < ph ? _ac : _acDim } else c.fillStyle = fr < ph ? _ac : '#555'; c.fillRect(x, mid - bh / 2, bw, bh) } if (hasSel && (fiF > 0 || foF > 0)) { c.globalAlpha = .3; if (fiF > 0) { c.fillStyle = _ac; c.beginPath(); c.moveTo(ss * w, 0); c.lineTo((ss + fiF) * w, 0); c.lineTo(ss * w, h); c.closePath(); c.fill() } if (foF > 0) { c.fillStyle = _ac; c.beginPath(); c.moveTo(se * w, 0); c.lineTo((se - foF) * w, 0); c.lineTo(se * w, h); c.closePath(); c.fill() } c.globalAlpha = 1 } }
     function redrawWf(fp) { const c = peakCache.get(fp); if (!c) return; const it = document.querySelector(`.sound-item[data-path="${CSS.escape(fp)}"]`); if (!it) return; const cv = it.querySelector('.waveform-canvas'); const ph = (currentSound?.path === fp && isPlaying) ? (getCtx().currentTime - playStartTime) / c.duration : 0; const sel = selection?.path === fp ? selection : null; drawWf(cv, c.peaks, { playhead: ph, selStart: sel?.start, selEnd: sel?.end, fiF: sel ? sel.fadeIn / c.duration : 0, foF: sel ? sel.fadeOut / c.duration : 0 }) }
     function updateWfPh(fp, fr) { if (!fp) return; const c = peakCache.get(fp); if (!c) return; const it = document.querySelector(`.sound-item[data-path="${CSS.escape(fp)}"]`); if (!it) return; const cv = it.querySelector('.waveform-canvas'); const sel = selection?.path === fp ? selection : null; drawWf(cv, c.peaks, { playhead: fr, selStart: sel?.start, selEnd: sel?.end, fiF: sel ? sel.fadeIn / c.duration : 0, foF: sel ? sel.fadeOut / c.duration : 0 }) }
 
@@ -2834,7 +3274,7 @@
     // UI
     function formatTime(s) { if (!s || isNaN(s)) return '0:00'; return Math.floor(s / 60) + ':' + Math.floor(s % 60).toString().padStart(2, '0') }
     function updatePlayerUI() { 
-      document.getElementById('player-toggle').innerHTML = isPlaying ? '<svg width="18" height="18" viewBox="0 0 16 16"><rect x="3" y="2" width="3.5" height="12" rx="1" fill="#c8f76d"/><rect x="9.5" y="2" width="3.5" height="12" rx="1" fill="#c8f76d"/></svg>' : '<svg width="18" height="18" viewBox="0 0 16 16"><polygon points="3,1 13,8 3,15" fill="#c8f76d"/></svg>'; 
+      document.getElementById('player-toggle').innerHTML = isPlaying ? `<svg width="18" height="18" viewBox="0 0 16 16"><rect x="3" y="2" width="3.5" height="12" rx="1" fill="${currentAccent}"/><rect x="9.5" y="2" width="3.5" height="12" rx="1" fill="${currentAccent}"/></svg>` : `<svg width="18" height="18" viewBox="0 0 16 16"><polygon points="3,1 13,8 3,15" fill="${currentAccent}"/></svg>`; 
       document.getElementById('player-sel-badge').classList.toggle('visible', !!(selection && currentSound && selection.path === currentSound.path));
       const gtbPlay = document.getElementById('gtb-play');
       if (gtbPlay) {
@@ -2864,10 +3304,10 @@
     async function loadFolders() { const fs = await window.api.getFolders(); const l = document.getElementById('folder-list'); l.innerHTML = ''; for (const f of fs) { const d = document.createElement('div'); d.className = 'folder-item' + (f.name === currentFolder && !currentCollection ? ' active' : ''); d.innerHTML = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 4h4l2 2h6v7H2V4z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg><span>${f.name}</span><span class="item-count">${f.count}</span><span class="item-actions"><button class="item-action-btn" data-a="ren">✎</button><button class="item-action-btn" data-a="del">✕</button></span>`; d.addEventListener('click', e => { if (!e.target.closest('.item-action-btn')) selectFolder(f.name) }); d.querySelector('[data-a="ren"]').addEventListener('click', e => { e.stopPropagation(); showModal('Rename', f.name, 'Rename', async n => { await window.api.renameFolder(f.name, n); if (currentFolder === f.name) currentFolder = n; await loadFolders(); await loadSounds() }) }); d.querySelector('[data-a="del"]').addEventListener('click', e => { e.stopPropagation(); deleteFolder(f.name) }); l.appendChild(d) } }
     async function loadCollections() { const cols = await window.api.getCollections(); const l = document.getElementById('col-list'); l.innerHTML = ''; const colors = cols.__colors || {}; for (const name of Object.keys(cols).filter(k => k !== '__colors').sort()) { const cnt = cols[name].length; const col = colors[name] || ''; const d = document.createElement('div'); d.className = 'col-item' + (name === currentCollection ? ' active' : ''); d.innerHTML = `<div class="col-color-dot" style="background:${col || 'var(--bg-hover)'}" data-col-name="${name}"></div><span>${name}</span><span class="item-count">${cnt}</span><span class="item-actions"><button class="item-action-btn" data-a="ren">✎</button><button class="item-action-btn" data-a="del">✕</button></span>`; d.addEventListener('click', e => { if (!e.target.closest('.item-action-btn') && !e.target.closest('.col-color-dot')) selectCollection(name) }); d.querySelector('.col-color-dot').addEventListener('click', e => { e.stopPropagation(); showColColorPicker(e, name, col) }); d.querySelector('[data-a="ren"]').addEventListener('click', e => { e.stopPropagation(); showModal('Rename', name, 'Rename', async n => { await window.api.renameCollection(name, n); if (currentCollection === name) currentCollection = n; await loadCollections(); await loadCollectionSounds() }) }); d.querySelector('[data-a="del"]').addEventListener('click', async e => { e.stopPropagation(); if (!confirm(`Delete collection "${name}"?\nSound files will not be affected.`)) return; await window.api.deleteCollection(name); if (currentCollection === name) { currentCollection = null; document.getElementById('current-folder-name').textContent = 'Select a folder' } await loadCollections() }); l.appendChild(d) } }
     async function selectFolder(n) { currentFolder = n; currentCollection = null; searchMode = false; document.getElementById('search-box').value = ''; document.getElementById('current-folder-name').textContent = n; document.getElementById('add-col-btn').style.display = ''; await loadFolders(); await loadSounds() }
-    async function selectCollection(n) { currentCollection = n; currentFolder = null; searchMode = false; document.getElementById('search-box').value = ''; document.getElementById('current-folder-name').textContent = '⬡ ' + n; document.getElementById('add-col-btn').style.display = 'none'; await loadCollections(); await loadCollectionSounds() }
+    async function selectCollection(n) { currentCollection = n; lastCollection = n; currentFolder = null; searchMode = false; document.getElementById('search-box').value = ''; document.getElementById('current-folder-name').textContent = '⬡ ' + n; document.getElementById('add-col-btn').style.display = 'none'; await loadCollections(); await loadCollectionSounds() }
     async function loadSounds() { if (!currentFolder) return; sounds = await window.api.getSounds(currentFolder); renderSounds(sounds) }
     async function loadCollectionSounds() { if (!currentCollection) return; sounds = await window.api.getCollectionSounds(currentCollection); renderSounds(sounds) }
-    async function deleteFolder(n) { if (await window.api.deleteFolder(n)) { if (currentFolder === n) { currentFolder = null; document.getElementById('current-folder-name').textContent = 'Select a folder'; document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>' } await loadFolders() } }
+    async function deleteFolder(n) { if (await window.api.deleteFolder(n)) { if (currentFolder === n) { currentFolder = null; document.getElementById('current-folder-name').textContent = 'Select a folder'; document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>'; vList.pool = []; vList.sentinel = null; } await loadFolders() } }
 
     // Sound list
 
@@ -2898,6 +3338,10 @@
       const prevIdx = poolEntry.idx;
       poolEntry.idx = index;
 
+      if (poolEntry.ac) poolEntry.ac.abort();
+      poolEntry.ac = new AbortController();
+      const signal = poolEntry.ac.signal;
+
       // Position
       el.style.top = (index * ITEM_HEIGHT) + 'px';
 
@@ -2926,20 +3370,14 @@
         ? '<svg class="play-icon" width="11" height="13" viewBox="0 0 12 14"><rect x="1" y="0" width="3.5" height="14" rx="1" fill="currentColor"/><rect x="7.5" y="0" width="3.5" height="14" rx="1" fill="currentColor"/></svg>'
         : '<svg class="play-icon" width="11" height="13" viewBox="0 0 12 14"><polygon points="2,0 12,7 2,14"/></svg>';
 
-      // Rebind events (remove old listeners via cloneNode trick)
-      const newBtn = btn.cloneNode(true);
-      btn.parentNode.replaceChild(newBtn, btn);
-      newBtn.addEventListener('click', e => { e.stopPropagation(); playSoundItem(sound) });
+      btn.addEventListener('click', e => { e.stopPropagation(); playSoundItem(sound) }, { signal });
 
-      // Waveform container events
       const wc = el.querySelector('.waveform-container');
-      const newWc = wc.cloneNode(true);
-      wc.parentNode.replaceChild(newWc, wc);
 
-      newWc.addEventListener('mousedown', e => {
+      wc.addEventListener('mousedown', e => {
         if (e.button !== 0 || e.target.closest('.sel-resize')) return;
         e.preventDefault(); e.stopPropagation();
-        const rect = newWc.getBoundingClientRect();
+        const rect = wc.getBoundingClientRect();
         const startFrac = (e.clientX - rect.left) / rect.width;
         const startX = e.clientX, startY = e.clientY;
         let dragMode = false;
@@ -2970,21 +3408,22 @@
               const t = clickFrac * audioBuffer.duration;
               playOffset = t; stopAudio();
               playAudio(t, audioBuffer.duration); refreshPlaying();
+            } else if (streamAudio) {
+              seekTo(clickFrac);
             }
           }
         };
         document.addEventListener('mousemove', onM);
         document.addEventListener('mouseup', onU);
-      });
+      }, { signal });
 
-      // Resize handles
-      const lh = newWc.querySelector('.sel-resize.left');
-      const rh = newWc.querySelector('.sel-resize.right');
+      const lh = wc.querySelector('.sel-resize.left');
+      const rh = wc.querySelector('.sel-resize.right');
       function resize(ev, side) {
         if (ev.button !== 0 || !selection || selection.path !== sound.path) return;
         ev.preventDefault(); ev.stopPropagation();
-        if (ev.shiftKey) { fadeDrag(ev, side, sound, newWc); return }
-        const rect = newWc.getBoundingClientRect();
+        if (ev.shiftKey) { fadeDrag(ev, side, sound, wc); return }
+        const rect = wc.getBoundingClientRect();
         const onM = me => {
           const fr = Math.max(0, Math.min(1, (me.clientX - rect.left) / rect.width));
           if (side === 'left') selection.start = Math.min(fr, selection.end - .01);
@@ -2994,21 +3433,18 @@
         const onU = () => { document.removeEventListener('mousemove', onM); document.removeEventListener('mouseup', onU) };
         document.addEventListener('mousemove', onM); document.addEventListener('mouseup', onU);
       }
-      lh.addEventListener('mousedown', e => resize(e, 'left'));
-      rh.addEventListener('mousedown', e => resize(e, 'right'));
+      lh.addEventListener('mousedown', e => resize(e, 'left'), { signal });
+      rh.addEventListener('mousedown', e => resize(e, 'right'), { signal });
 
-      // Full file drag
       const fdEl = el.querySelector('.full-drag');
-      const newFd = fdEl.cloneNode(true);
-      fdEl.parentNode.replaceChild(newFd, fdEl);
-      newFd.addEventListener('dragstart', e => { e.preventDefault(); window.api.startDrag(sound.path) });
+      fdEl.addEventListener('dragstart', e => { e.preventDefault(); window.api.startDrag(sound.path) }, { signal });
 
       // Context menu
       const newEl = el; // el reference stays the same
       newEl.oncontextmenu = e => { e.preventDefault(); showCtx(e.clientX, e.clientY, sound) };
 
       // Draw waveform
-      const cv = newWc.querySelector('.waveform-canvas');
+      const cv = wc.querySelector('.waveform-canvas');
       if (c) {
         requestAnimationFrame(() => {
           const sel = selection?.path === sound.path ? selection : null;
@@ -3076,12 +3512,14 @@
       const dz = document.getElementById('drop-zone');
 
       // Clear previous state
-      wfQ = []; // discard pending waveform loads from previous view
+      if (wfBatchTimer) { clearTimeout(wfBatchTimer); wfBatchTimer = null; }
+      wfBatch = new Map();
       vList.data = list || [];
       document.getElementById('sound-count').textContent =
         vList.data.length + ' sound' + (vList.data.length !== 1 ? 's' : '');
 
       if (!vList.data.length) {
+        for (const entry of vList.pool) { if (entry.ac) entry.ac.abort(); }
         ct.innerHTML = '';
         ct.appendChild(dz);
         ct.insertAdjacentHTML('beforeend',
@@ -3092,25 +3530,23 @@
         return;
       }
 
-      // Clear DOM — this destroys sentinel and pool nodes from the DOM tree
-      ct.innerHTML = '';
-      ct.appendChild(dz);
-
-      // Always recreate sentinel (innerHTML destroyed it)
-      vList.sentinel = document.createElement('div');
-      vList.sentinel.style.cssText = 'position:relative;width:100%;';
+      if (!vList.sentinel || !vList.sentinel.isConnected || !vList.pool.length) {
+        ct.innerHTML = '';
+        ct.appendChild(dz);
+        vList.sentinel = document.createElement('div');
+        vList.sentinel.style.cssText = 'position:relative;width:100%;';
+        ct.appendChild(vList.sentinel);
+        vList.pool = [];
+      } else {
+        const empty = ct.querySelector('.empty-state');
+        if (empty) empty.remove();
+      }
       vList.sentinel.style.height = (vList.data.length * ITEM_HEIGHT) + 'px';
-      ct.appendChild(vList.sentinel);
 
-      // Calculate pool size: visible items + 2x buffer
-      vList.containerHeight = ct.clientHeight;
-      const visibleCount = Math.ceil(vList.containerHeight / ITEM_HEIGHT);
-      const neededPool = visibleCount + BUFFER_COUNT * 2;
-      const poolSize = Math.min(neededPool, vList.data.length);
+      const visibleCount = Math.ceil(ct.clientHeight / ITEM_HEIGHT);
+      const neededPool = Math.min(visibleCount + BUFFER_COUNT * 2, vList.data.length);
 
-      // Always recreate pool nodes (innerHTML destroyed previous ones)
-      vList.pool = [];
-      for (let i = 0; i < poolSize; i++) {
+      while (vList.pool.length < neededPool) {
         const el = createSoundItemElement();
         el.style.position = 'absolute';
         el.style.left = '0';
@@ -3120,7 +3556,19 @@
         vList.sentinel.appendChild(el);
         vList.pool.push({ el, idx: -1 });
       }
-      vList.poolSize = poolSize;
+      vList.poolSize = neededPool;
+
+      for (let i = neededPool; i < vList.pool.length; i++) {
+        vList.pool[i].el.style.display = 'none';
+        vList.pool[i].idx = -1;
+      }
+
+      for (const entry of vList.pool) {
+        if (entry.idx !== -1) {
+          if (entry.ac) entry.ac.abort();
+          entry.idx = -1;
+        }
+      }
 
       ct.scrollTop = 0;
       vList.scrollTop = 0;
@@ -3140,6 +3588,11 @@
         updateProgressBar(0); redrawWf(s.path); refreshPlaying();
         return;
       }
+      if (currentSound?.path === s.path && !isPlaying && streamAudio) {
+        togglePlayback();
+        refreshPlaying();
+        return;
+      }
       // If this sound is loaded but paused → resume
       if (currentSound?.path === s.path && !isPlaying && audioBuffer) {
         if (selection && selection.path === s.path) playAudio(selection.start * audioBuffer.duration, selection.end * audioBuffer.duration);
@@ -3147,43 +3600,74 @@
         refreshPlaying();
         return;
       }
-      // New sound — stop anything playing, load fresh
       stopAudio();
       currentSound = s;
       document.getElementById('player-name').textContent = s.name.replace(/\.wav$/i, '');
       refreshPlaying();
-      const buf = await decodeFile(s.path);
-      
-      // Guard: if user clicked something else during async decode, discard this decode result!
-      if (playAttemptId !== thisAttempt) return;
-      
-      if (!buf || currentSound?.path !== s.path) { if (currentSound?.path === s.path) { currentSound = null; refreshPlaying(); } return; }
-      audioBuffer = buf;
-      if (selection && selection.path === s.path) playAudio(selection.start * buf.duration, selection.end * buf.duration);
-      else playAudio(0, buf.duration);
+      if (selection && selection.path === s.path) {
+        const buf = await decodeFile(s.path);
+        if (!buf) { currentSound = null; refreshPlaying(); return; }
+        audioBuffer = buf;
+        playAudio(selection.start * buf.duration, selection.end * buf.duration);
+      } else {
+        playStream(s, 0);
+      }
       refreshPlaying();
     }
 
-    let wfQ = [], wfActive = 0;
-    const WF_CONCURRENCY = 4; // process up to 4 waveforms simultaneously
-    function queueWf(d, s) { wfQ.push({ d, s }); drainWfQ() }
-    function drainWfQ() {
-      while (wfActive < WF_CONCURRENCY && wfQ.length) {
-        const { d, s } = wfQ.shift();
+    let wfBatch = new Map();
+    let wfBatchTimer = null;
+    function queueWf(d, s) {
+      wfBatch.set(s.path, { d, s });
+      if (!wfBatchTimer) wfBatchTimer = setTimeout(flushWfBatch, 0);
+    }
+    async function flushWfBatch() {
+      wfBatchTimer = null;
+      const batch = wfBatch;
+      wfBatch = new Map();
+      const uncached = [];
+      for (const [fp, { d, s }] of batch) {
         if (!d.isConnected) continue;
-        wfActive++;
-        loadPeaks(s.path).then(c => {
-          if (c && d.isConnected) {
+        if (peakCache.has(fp)) {
+          const c = peakCache.get(fp);
+          const cv = d.querySelector('.waveform-canvas');
+          if (cv) drawWf(cv, c.peaks, {});
+          const m = d.querySelector('.sound-meta'), du = d.querySelector('.sound-duration');
+          if (m) m.textContent = 'WAV \u00b7 ' + formatTime(c.duration);
+          if (du) du.textContent = formatTime(c.duration);
+        } else {
+          uncached.push({ fp, d, s });
+        }
+      }
+      if (!uncached.length) return;
+      try {
+        const results = await window.api.getPeaksBatch(uncached.map(u => u.fp));
+        for (const { fp, d } of uncached) {
+          if (!d.isConnected || d.dataset.path !== fp) continue;
+          const data = results[fp];
+          if (!data || !data.peaks) continue;
+          const peaks = (data.peaks instanceof Float32Array) ? data.peaks : new Float32Array(Object.values(data.peaks));
+          const res = { peaks, duration: data.duration };
+          peakCache.set(fp, res);
+          const cv = d.querySelector('.waveform-canvas');
+          if (cv) drawWf(cv, peaks, {});
+          const m = d.querySelector('.sound-meta'), du = d.querySelector('.sound-duration');
+          if (m) m.textContent = 'WAV \u00b7 ' + formatTime(data.duration);
+          if (du) du.textContent = formatTime(data.duration);
+        }
+      } catch (e) {
+        console.error('flushWfBatch:', e);
+        for (const { fp, d } of uncached) {
+          if (!d.isConnected || d.dataset.path !== fp) continue;
+          loadPeaks(fp).then(c => {
+            if (!c || !d.isConnected || d.dataset.path !== fp) return;
             const cv = d.querySelector('.waveform-canvas');
-            if (cv) requestAnimationFrame(() => drawWf(cv, c.peaks, {}));
+            if (cv) drawWf(cv, c.peaks, {});
             const m = d.querySelector('.sound-meta'), du = d.querySelector('.sound-duration');
             if (m) m.textContent = 'WAV \u00b7 ' + formatTime(c.duration);
             if (du) du.textContent = formatTime(c.duration);
-          }
-        }).catch(() => {}).finally(() => {
-          wfActive--;
-          drainWfQ();
-        });
+          }).catch(() => {});
+        }
       }
     }
 
@@ -3202,7 +3686,7 @@
       m.querySelector('#ctx-reveal')?.addEventListener('click', () => { window.api.revealInFinder(sound.path); m.classList.remove('active') });
       m.querySelector('#ctx-echo-file')?.addEventListener('click', () => { m.classList.remove('active'); triggerEchoFile(sound.path, sound.name) });
       m.querySelector('#ctx-move')?.addEventListener('click', async () => { m.classList.remove('active'); const folders = (await window.api.getFolders()).filter(f => f.name !== currentFolder).map(f => f.name); if (!folders.length) return; showListModal('Move to folder', folders, async t => { if (t) { await window.api.moveSound(sound.path, t); await loadSounds(); await loadFolders() } }) });
-      m.querySelector('#ctx-delete')?.addEventListener('click', async () => { m.classList.remove('active'); if (await window.api.deleteSound(sound.path)) { if (currentSound?.path === sound.path) { stopAudio(); currentSound = null; audioBuffer = null; updatePlayerUI(); document.getElementById('player-name').textContent = 'No sound loaded'; updateProgressBar(0) } bufferCache.delete(sound.path); peakCache.delete(sound.path); if (selection?.path === sound.path) clearSelection(); if (currentCollection) await loadCollectionSounds(); else await loadSounds(); await loadFolders(); await loadCollections() } });
+      m.querySelector('#ctx-delete')?.addEventListener('click', async () => { m.classList.remove('active'); if (await window.api.deleteSound(sound.path)) { if (currentSound?.path === sound.path) { stopAudio(); currentSound = null; audioBuffer = null; updatePlayerUI(); document.getElementById('player-name').textContent = 'No sound loaded'; updateProgressBar(0) } const evictedBuf = bufferCache.get(sound.path); if (evictedBuf) bufferCacheBytes -= audioBufferBytes(evictedBuf); bufferCache.delete(sound.path); const oi = bufferCacheOrder.indexOf(sound.path); if (oi !== -1) bufferCacheOrder.splice(oi, 1); peakCache.delete(sound.path); if (selection?.path === sound.path) clearSelection(); if (currentCollection) await loadCollectionSounds(); else await loadSounds(); await loadFolders(); await loadCollections() } });
       m.querySelector('#ctx-remove-col')?.addEventListener('click', async () => { m.classList.remove('active'); await window.api.removeFromCollection(currentCollection, sound.path); await loadCollectionSounds(); await loadCollections() });
       m.querySelectorAll('.sub-menu-item').forEach(el => { el.addEventListener('click', async () => { m.classList.remove('active'); await window.api.addToCollection(el.dataset.col, sound.path); await loadCollections() }) });
     }
@@ -3281,21 +3765,30 @@
         if (f.length) await selectFolder(f[0].name);
         else {
           document.getElementById('current-folder-name').textContent = 'Select a folder';
-          document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>';
+          document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>'; vList.pool = []; vList.sentinel = null;
           document.getElementById('sound-count').textContent = '';
         }
       }
     });
     
-    document.getElementById('logo-vault').addEventListener('click', () => {
+    document.getElementById('logo-vault').addEventListener('click', async () => {
       if (sidebarMode === 'vault') return;
       setSidebarMode('vault');
       currentFolder = null;
-      if (!currentCollection) {
+      const target = currentCollection || lastCollection;
+      const cols = await window.api.getCollections();
+      if (target && cols[target] !== undefined) {
+        await selectCollection(target);
+      } else {
         document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
-        document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>';
+        document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>'; vList.pool = []; vList.sentinel = null;
         document.getElementById('sound-count').textContent = '';
       }
+    });
+
+    document.getElementById('sv-icon-toggle').addEventListener('click', () => {
+      if (sidebarMode === 'vault') document.getElementById('logo-sound').click();
+      else document.getElementById('logo-vault').click();
     });
 
     // ═══ Sidebar Nav Button (unified vault/folders toggle) ═══
@@ -3441,7 +3934,7 @@
       setSidebarMode('vault');
       await loadCollections();
       document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
-      document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>';
+      document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>'; vList.pool = []; vList.sentinel = null;
       document.getElementById('sound-count').textContent = '';
       document.getElementById('add-col-btn').style.display = 'none';
     }
@@ -3535,7 +4028,7 @@
       await window.api.setWatcher(watcherEnabled);
       updateWatcherBtn();
     });
-    document.getElementById('refresh-btn').addEventListener('click', async () => { wfQ = []; if (currentCollection) await loadCollectionSounds(); else if (currentFolder) await loadSounds(); await loadFolders(); await loadCollections() });
+    document.getElementById('refresh-btn').addEventListener('click', async () => { if (wfBatchTimer) { clearTimeout(wfBatchTimer); wfBatchTimer = null; } wfBatch = new Map(); if (currentCollection) await loadCollectionSounds(); else if (currentFolder) await loadSounds(); await loadFolders(); await loadCollections() });
     const sle = document.getElementById('sound-list');
     sle.addEventListener('dragover', e => { e.preventDefault(); document.getElementById('drop-zone').classList.add('active') });
     sle.addEventListener('dragleave', e => { if (!sle.contains(e.relatedTarget)) document.getElementById('drop-zone').classList.remove('active') });
@@ -3594,13 +4087,13 @@
             } else if (sidebarMode === 'vault' && !currentCollection) {
                 // In vault mode with no collection selected, search all vault sounds
                 document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
-                document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>';
+                document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>'; vList.pool = []; vList.sentinel = null;
                 document.getElementById('sound-count').textContent = '';
             }
             return; 
         } 
         searchMode = true; 
-        wfQ = []; 
+        if (wfBatchTimer) { clearTimeout(wfBatchTimer); wfBatchTimer = null; } wfBatch = new Map(); 
         
         if (useSemanticSearch) {
             document.getElementById('current-folder-name').textContent = 'AI Search: "' + q + '"';
@@ -3683,19 +4176,23 @@
                 currentTermWeights[w] = newW;
                 setCol(newW);
             };
-            document.addEventListener('mousemove', e => {
+            const onMove = (e) => {
                 if (!isDragging) return;
                 updateW(e);
                 clearTimeout(dragTO);
                 dragTO = setTimeout(() => { doSearch(document.getElementById('search-box').value, true); }, 80);
-            });
-            document.addEventListener('mouseup', e => {
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
                 if (!isDragging) return;
                 isDragging = false; 
                 span.classList.remove('dragging');
                 document.body.style.cursor = '';
                 clearTimeout(dragTO); doSearch(document.getElementById('search-box').value, true);
-            });
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
         });
     }
     
@@ -3722,21 +4219,22 @@
         const btn = document.getElementById('semantic-index-btn');
         const panel = document.getElementById('index-progress-panel');
         btn.disabled = true;
-        btn.style.opacity = '0.6';
         
         const started = await window.api.semanticStartIndex();
         if (!started) {
-            btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="margin-right:4px"><path d="M2 3h12M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="13" cy="13" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M13 11.5v3M11.5 13h3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>Engine Loading...';
+            document.getElementById('semantic-index-btn-label').textContent = 'Engine Loading...';
             setTimeout(() => {
-                btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="margin-right:4px"><path d="M2 3h12M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="13" cy="13" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M13 11.5v3M11.5 13h3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>Catalog Library';
+                document.getElementById('semantic-index-btn-label').textContent = 'Catalog Library';
                 btn.disabled = false;
-                btn.style.opacity = '1';
             }, 3000);
             return;
         }
         
         // Show progress panel
         panel.style.display = 'block';
+        document.getElementById('settings-open-btn').classList.add('indexing');
+        document.getElementById('semantic-index-btn-label').textContent = 'Cataloging…';
+        document.getElementById('idx-status-text').classList.remove('done');
         document.getElementById('idx-status-text').textContent = 'Scanning library...';
         document.getElementById('idx-clap-bar').style.width = '0%';
         document.getElementById('idx-deep-bar').style.width = '0%';
@@ -3821,33 +4319,159 @@
                 document.getElementById('idx-clap-count').textContent = p.clapTotal > 0 ? `${p.clapTotal} ✓` : '–';
                 document.getElementById('idx-spectral-count').textContent = p.spectralTotal > 0 ? `${p.spectralTotal} ✓` : '–';
                 document.getElementById('idx-status-text').textContent = 'Library cataloged ✓';
-                document.getElementById('idx-status-text').style.color = '#5a5';
+                document.getElementById('idx-status-text').classList.add('done');
 
-                btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="margin-right:4px"><path d="M2 3h12M2 8h12M2 13h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="13" cy="13" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M13 11.5v3M11.5 13h3" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>Catalog Library';
+                document.getElementById('semantic-index-btn-label').textContent = 'Cataloged ✓';
                 btn.disabled = false;
-                btn.style.opacity = '1';
+                document.getElementById('settings-open-btn').classList.remove('indexing');
 
                 setTimeout(() => {
                     panel.style.display = 'none';
-                    document.getElementById('idx-status-text').style.color = '';
+                    document.getElementById('idx-status-text').classList.remove('done');
                 }, 5000);
             }
         }, 800);
     });
     
     // Status checker for engine readiness
-    setInterval(async () => {
+    const readyIv = setInterval(async () => {
         if (!useSemanticSearch) {
             const ready = await window.api.semanticIsReady();
-            const sBtn = document.getElementById('semantic-toggle');
-            sBtn.title = ready ? 'Toggle Semantic Search' : 'Engine loading...';
-            sBtn.style.opacity = ready ? '1' : '0.5';
-            sBtn.style.pointerEvents = ready ? 'auto' : 'none';
+            if (ready) {
+                clearInterval(readyIv);
+                const sBtn = document.getElementById('semantic-toggle');
+                sBtn.title = 'Toggle Semantic Search';
+                sBtn.style.opacity = '1';
+                sBtn.style.pointerEvents = 'auto';
+            }
         }
     }, 2500);
 
-    // Settings
-    document.getElementById('settings-btn').addEventListener('click', async () => { const p = await window.api.setLibraryPath(); if (p) { bufferCache.clear(); peakCache.clear(); selection = null; currentFolder = null; currentCollection = null; await loadVaultSwitcher(); await loadFolders(); await loadCollections() } });
+    // ═══ Settings Modal ═══
+    async function reloadLibraryData() {
+      bufferCache.clear(); peakCache.clear(); selection = null;
+      currentFolder = null; currentCollection = null;
+      await loadVaultSwitcher(); await loadFolders(); await loadCollections();
+    }
+    async function refreshLibPathDisplay() {
+      const p = await window.api.getLibraryPath();
+      const el = document.getElementById('settings-libpath-display');
+      if (el) el.textContent = p || '—';
+    }
+    function openSettings() {
+      refreshLibPathDisplay();
+      document.getElementById('settings-overlay').classList.add('active');
+    }
+    function closeSettings() {
+      document.getElementById('settings-overlay').classList.remove('active');
+    }
+    document.getElementById('settings-open-btn').addEventListener('click', openSettings);
+    document.getElementById('settings-close-btn').addEventListener('click', closeSettings);
+    document.getElementById('settings-overlay').addEventListener('click', e => {
+      if (e.target.id === 'settings-overlay') closeSettings();
+    });
+    document.getElementById('settings-libpath-btn').addEventListener('click', async () => {
+      const p = await window.api.setLibraryPath();
+      if (p) { await refreshLibPathDisplay(); await reloadLibraryData(); }
+    });
+
+    // ═══ Accent Color System ═══
+    const ACCENT_PRESETS = [
+      { name: 'Mint',    hex: '#c8f76d' },
+      { name: 'Verde',   hex: '#6ee7a0' },
+      { name: 'Azul',    hex: '#7eb8e0' },
+      { name: 'Lila',    hex: '#c084fc' },
+      { name: 'Turquesa',hex: '#5eead4' },
+      { name: 'Coral',   hex: '#f97066' },
+      { name: 'Ambar',   hex: '#fbbf24' },
+    ];
+    let currentAccent = '#c8f76d';
+
+    function hexToRgb(hex) {
+      const r = parseInt(hex.slice(1,3),16);
+      const g = parseInt(hex.slice(3,5),16);
+      const b = parseInt(hex.slice(5,7),16);
+      return {r,g,b};
+    }
+
+    function dimHex(hex, factor = 0.55) {
+      const {r,g,b} = hexToRgb(hex);
+      const dr = Math.round(r * factor);
+      const dg = Math.round(g * factor);
+      const db = Math.round(b * factor);
+      return `rgb(${dr},${dg},${db})`;
+    }
+
+    function applyAccentColor(hex) {
+      currentAccent = hex;
+      const {r,g,b} = hexToRgb(hex);
+      const root = document.documentElement.style;
+      root.setProperty('--accent', hex);
+      root.setProperty('--accent-rgb', `${r}, ${g}, ${b}`);
+      root.setProperty('--accent-dim', `rgba(${r},${g},${b},.15)`);
+      root.setProperty('--bg-active', `rgba(${r},${g},${b},.06)`);
+      let presetMatch = false;
+      document.querySelectorAll('.accent-swatch').forEach(s => {
+        const match = s.dataset.color === hex;
+        s.classList.toggle('active', match);
+        if (match) presetMatch = true;
+      });
+      const customBtn = document.getElementById('accent-custom-btn');
+      if (customBtn) {
+        if (!presetMatch) {
+          customBtn.style.background = hex;
+          customBtn.style.borderColor = hex;
+          customBtn.style.borderStyle = 'solid';
+          customBtn.style.color = '#111';
+          customBtn.textContent = '';
+        } else {
+          customBtn.style.background = '';
+          customBtn.style.borderColor = '';
+          customBtn.style.borderStyle = '';
+          customBtn.style.color = '';
+          customBtn.textContent = '+';
+        }
+      }
+    }
+
+    function renderAccentSwatches() {
+      const container = document.getElementById('accent-swatches');
+      container.innerHTML = '';
+      ACCENT_PRESETS.forEach(p => {
+        const el = document.createElement('button');
+        el.className = 'accent-swatch' + (p.hex === currentAccent ? ' active' : '');
+        el.style.background = p.hex;
+        el.dataset.color = p.hex;
+        el.title = p.name;
+        el.setAttribute('aria-label', p.name);
+        el.addEventListener('click', () => {
+          applyAccentColor(p.hex);
+          window.api.setAccentColor(p.hex);
+        });
+        container.appendChild(el);
+      });
+    }
+
+    document.getElementById('accent-custom-btn').addEventListener('click', () => {
+      const inp = document.getElementById('accent-color-input');
+      inp.value = currentAccent;
+      inp.style.pointerEvents = 'auto';
+      inp.click();
+      inp.style.pointerEvents = 'none';
+    });
+    document.getElementById('accent-color-input').addEventListener('input', (e) => {
+      applyAccentColor(e.target.value);
+    });
+    document.getElementById('accent-color-input').addEventListener('change', (e) => {
+      applyAccentColor(e.target.value);
+      window.api.setAccentColor(e.target.value);
+    });
+
+    renderAccentSwatches();
+    (async () => {
+      const saved = await window.api.getAccentColor();
+      if (saved) applyAccentColor(saved);
+    })();
 
     // Click outside deselects
     document.getElementById('sound-list').addEventListener('click', e => { if (!e.target.closest('.sound-item')) clearSelection() });
@@ -3861,6 +4485,10 @@
 
     // Keyboard — spacebar plays editor when editor is open
     document.addEventListener('keydown', e => {
+      if (document.getElementById('settings-overlay').classList.contains('active')) {
+        if (e.code === 'Escape') closeSettings();
+        return;
+      }
       if (document.getElementById('modal-overlay').classList.contains('active')) return;
       if (e.target.tagName === 'INPUT') return;
       if (e.code === 'Space') {
@@ -4077,7 +4705,7 @@
         
         let color = '#4a4a55';
         if (visualFrac < cs || visualFrac > ce) color = 'rgba(74,74,85, 0.4)';
-        else if (visualFrac < ph) color = '#c8f76d';
+        else if (visualFrac < ph) color = currentAccent;
         
         let bh = Math.max(2, pk * (h - 4) * env * Math.min(gainLin, 3));
         if (visualFrac < cs || visualFrac > ce) bh = Math.max(2, pk * (h - 4) * Math.min(gainLin, 3));
@@ -4087,7 +4715,7 @@
       
       // Draw fade curve lines inside crop boundaries
       if (fi > cs && fi > vs && cs < ve) {
-        c.beginPath(); c.strokeStyle = 'rgba(200,247,109,.6)'; c.lineWidth = 1.5;
+        c.beginPath(); c.strokeStyle = `rgba(${hexToRgb(currentAccent).r},${hexToRgb(currentAccent).g},${hexToRgb(currentAccent).b},.6)`; c.lineWidth = 1.5;
         const sX = Math.max(0, ((cs - vs) / vRange) * w);
         const eX = Math.min(w, ((fi - vs) / vRange) * w);
         for (let x = sX; x <= eX; x++) {
@@ -4101,7 +4729,7 @@
         c.stroke();
       }
       if (fo < ce && fo < ve && ce > vs) {
-        c.beginPath(); c.strokeStyle = 'rgba(200,247,109,.6)'; c.lineWidth = 1.5;
+        c.beginPath(); c.strokeStyle = `rgba(${hexToRgb(currentAccent).r},${hexToRgb(currentAccent).g},${hexToRgb(currentAccent).b},.6)`; c.lineWidth = 1.5;
         const sX = Math.max(0, ((fo - vs) / vRange) * w);
         const eX = Math.min(w, ((ce - vs) / vRange) * w);
         for (let x = sX; x <= eX; x++) {
@@ -4116,7 +4744,7 @@
       }
       // Playhead line
       if (ph > 0 && ph >= cs && ph <= ce && ph >= vs && ph <= ve) { 
-        c.fillStyle = 'rgba(200,247,109,.8)'; 
+        c.fillStyle = `rgba(${hexToRgb(currentAccent).r},${hexToRgb(currentAccent).g},${hexToRgb(currentAccent).b},.8)`; 
         c.fillRect(((ph - vs) / vRange) * w - 0.5, 0, 1.5, h); 
       }
     }
@@ -4504,7 +5132,7 @@
       if (editorState.source) { try { editorState.source.stop(); } catch (e) { } editorState.source.disconnect(); editorState.source = null; }
       editorState.isPlaying = false; if (editorState.raf) { cancelAnimationFrame(editorState.raf); editorState.raf = null; }
       const btn = document.getElementById('editor-play-btn'); btn.classList.remove('playing');
-      btn.innerHTML = '<svg width="10" height="12" viewBox="0 0 12 14"><polygon points="2,0 12,7 2,14" fill="#c8f76d"/></svg>';
+      btn.innerHTML = `<svg width="10" height="12" viewBox="0 0 12 14"><polygon points="2,0 12,7 2,14" fill="${currentAccent}"/></svg>`;
     }
     async function edPlayAudio() {
       if (!selection) return; edStopAudio(); const rawBuf = bufferCache.get(selection.path); if (!rawBuf) return;
@@ -4772,9 +5400,14 @@
       await loadVaultSwitcher();
       await loadFolders();
       await loadCollections();
-      // Start in vault mode — show collections of active vault
       setSidebarMode('vault');
-      document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
+      const cols = await window.api.getCollections();
+      const colNames = Object.keys(cols).filter(k => k !== '__colors').sort();
+      if (colNames.length) {
+        await selectCollection(colNames[0]);
+      } else {
+        document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
+      }
     }
     init();
 
@@ -5177,7 +5810,7 @@
         item.scrollIntoView({ behavior: 'smooth', block: 'center' });
         // Flash highlight
         item.style.transition = 'background .15s';
-        item.style.background = 'rgba(200, 247, 109, .12)';
+        item.style.background = `rgba(${hexToRgb(currentAccent).r},${hexToRgb(currentAccent).g},${hexToRgb(currentAccent).b},.12)`;
         setTimeout(() => { item.style.background = ''; }, 1500);
       }
     }
