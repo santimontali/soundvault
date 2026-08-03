@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#111114">
+<meta name="description" content="SoundVault — encuentra sonidos por cómo suenan y guárdalos en colecciones. Búsqueda semántica offline sobre tu propia biblioteca. Pruébalo en el navegador.">
+<meta property="og:title" content="SoundVault — encuentra y colecciona sonido">
+<meta property="og:description" content="Encuentra cualquier sonido por cómo suena y colecciona lo que te sirve. 100% offline, en tu máquina.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="og.png">
+<title>SoundVault — Búsqueda semántica para tu biblioteca de sonido</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111114'/%3E%3Crect x='6' y='12' width='3' height='8' rx='1.5' fill='%23e0ddd5'/%3E%3Crect x='11' y='7' width='3' height='18' rx='1.5' fill='%23e0ddd5'/%3E%3Crect x='16' y='10' width='3' height='12' rx='1.5' fill='%23e0ddd5'/%3E%3Crect x='21' y='5' width='3' height='22' rx='1.5' fill='%23c8f76d'/%3E%3Crect x='26' y='13' width='3' height='6' rx='1.5' fill='%23e0ddd5'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="splash" aria-hidden="true">
+  <div class="splash-core">
+    <div class="splash-ring-wrap">
+      <div class="splash-halo"></div>
+      <svg class="splash-ring" viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="ring-track" cx="60" cy="60" r="54"/>
+        <circle class="ring-arc" cx="60" cy="60" r="54"/>
+      </svg>
+      <svg class="splash-logo" width="54" height="54" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="3" y="12" width="3" height="8" rx="1.5" fill="#e0ddd5"/>
+        <rect x="8.5" y="7" width="3" height="18" rx="1.5" fill="#e0ddd5"/>
+        <rect x="14" y="10" width="3" height="12" rx="1.5" fill="#e0ddd5"/>
+        <rect x="19.5" y="5" width="3" height="22" rx="1.5" fill="#c8f76d"/>
+        <rect x="25" y="13" width="3" height="6" rx="1.5" fill="#e0ddd5"/>
+      </svg>
+    </div>
+    <div class="splash-name">SoundVault</div>
+    <div class="splash-status" id="splash-status">opening the vault</div>
+  </div>
+  <button class="splash-skip" id="splash-skip">skip</button>
+</div>
+
+<nav id="floatnav" aria-label="Navegación">
+  <a href="#demo">Demo</a>
+  <a href="#echo">Echo</a>
+  <a href="#specs">Specs</a>
+  <a href="#download">Descarga</a>
+</nav>
+
+<header class="hero" id="demo">
+  <canvas id="ambient" aria-hidden="true"></canvas>
+
+  <div class="hero-inner wrap">
+    <div class="hero-text reveal">
+      <span class="eyebrow"><i></i>tu biblioteca de sonido · búsqueda semántica</span>
+      <h1 class="hero-title">SOUND<span class="hl">VAULT</span></h1>
+      <p class="hero-tagline">Encuentra sonidos por cómo suenan y guarda los que te sirven en colecciones. Todo corre en tu máquina — sin nube, sin suscripción.</p>
+    </div>
+  </div>
+
+  <div class="app-frame reveal" style="--d:.18s">
+    <div class="app-frame-bar">
+      <span class="demo-badge"><i></i>DEMO WEB · 12 de 70.000 sonidos</span>
+      <span class="frame-hint">esto es la interfaz real · pulsa <kbd>▶</kbd> y busca con <kbd>/</kbd></span>
+    </div>
+    <div id="app">
+      <div id="titlebar">
+        <div class="logo-wrap">
+          <svg class="sv-icon" width="22" height="22" viewBox="0 0 32 32" aria-hidden="true" title="SoundVault">
+            <rect x="3" y="12" width="3" height="8" rx="1.5" fill="#e0ddd5"/>
+            <rect x="8.5" y="7" width="3" height="18" rx="1.5" fill="#e0ddd5"/>
+            <rect x="14" y="10" width="3" height="12" rx="1.5" fill="#e0ddd5"/>
+            <rect x="19.5" y="5" width="3" height="22" rx="1.5" fill="#c8f76d"/>
+            <rect x="25" y="13" width="3" height="6" rx="1.5" fill="#e0ddd5"/>
+          </svg>
+          <div class="logo" id="logo-interactive" title="SoundVault">
+            <div class="logo-word-clip"><span class="logo-word" id="logo-word">VAULT</span></div>
+            <div class="logo-indicator"></div>
+          </div>
+        </div>
+        <div class="search-wrap">
+          <div class="search-icon-wrap">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5.5" stroke="#666" stroke-width="1.5"/><line x1="11" y1="11" x2="14" y2="14" stroke="#666" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <input type="text" id="search-box" placeholder="search sounds... (try: fear, calm)" spellcheck="false" autocomplete="off" aria-label="Buscar sonidos">
+          </div>
+          <button id="semantic-toggle" class="active" title="Búsqueda semántica (IA)" aria-label="Alternar búsqueda semántica" aria-pressed="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="8" cy="4" r="1.5" fill="currentColor" stroke="none"/>
+              <circle cx="4" cy="10" r="1.5" fill="currentColor" stroke="none"/>
+              <circle cx="12" cy="10" r="1.5" fill="currentColor" stroke="none"/>
+              <line x1="8" y1="5.5" x2="4.5" y2="8.8"/>
+              <line x1="8" y1="5.5" x2="11.5" y2="8.8"/>
+              <line x1="5.5" y1="10" x2="10.5" y2="10"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="content">
+        <div id="sidebar">
+          <div id="sidebar-top-bar">
+            <button class="sidebar-nav-btn" id="sidebar-nav-btn" title="Cambiar vault">
+              <div class="nav-dot" id="nav-dot"></div>
+              <span class="nav-label" id="nav-label">Main Vault</span>
+              <svg class="nav-chevron" width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M3 2l4 3-4 3"/></svg>
+            </button>
+            <button id="sidebar-toggle" title="Ocultar sidebar" aria-label="Ocultar sidebar">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M10 3l-5 5 5 5"/></svg>
+            </button>
+          </div>
+          <div class="sidebar-section">
+            <div class="sidebar-header">Collections <button class="sidebar-header-btn" title="Nueva colección">+</button></div>
+            <div id="col-list"></div>
+          </div>
+          <div class="sidebar-bottom">
+            <button id="settings-open-btn" title="Settings" aria-label="Settings">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="8" cy="8" r="2.4" stroke="currentColor" stroke-width="1.2"/>
+                <path d="M8 1.4v1.7M8 12.9v1.7M1.4 8h1.7M12.9 8h1.7M3.3 3.3l1.2 1.2M11.5 11.5l1.2 1.2M3.3 12.7l1.2-1.2M11.5 4.5l1.2-1.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="main-panel">
+          <div id="panel-header">
+            <div><span class="panel-title" id="panel-title">All sounds</span><span class="panel-subtitle" id="sound-count"></span></div>
+            <div class="panel-actions">
+              <button class="btn-small btn-icon" id="refresh-btn" title="Refresh" aria-label="Refresh">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M2 8a6 6 0 0 1 10.3-4.2M14 2v4h-4"/>
+                  <path d="M14 8a6 6 0 0 1-10.3 4.2M2 14v-4h4"/>
+                </svg>
+              </button>
+              <button class="btn-small btn-icon watching" id="watcher-btn" title="Folder watcher: ON — replica la app real" aria-label="Folder watcher">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/>
+                  <circle cx="8" cy="8" r="2"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div id="sound-list"></div>
+        </div>
+      </div>
+
+      <div id="player-bar">
+        <button class="player-play-btn" id="player-toggle" aria-label="Reproducir o pausar"></button>
+        <span class="player-time" id="player-time">--:-- / --:--</span>
+        <div class="player-progress-wrap" id="player-progress-wrap">
+          <div class="player-progress" id="player-progress"></div>
+        </div>
+        <span class="player-sel-badge" id="player-sel-badge">SEL</span>
+        <span class="player-name" id="player-name">No sound loaded</span>
+        <div class="player-volume">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3L4.5 6H2v4h2.5L8 13V3z" fill="currentColor" stroke="none"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5"/></svg>
+          <input type="range" id="player-volume" min="0" max="1" step="0.05" value="0.8" aria-label="Volumen">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll-cue" aria-hidden="true"><span>echo vault &amp; specs</span><span class="arrow">↓</span></div>
+</header>
+
+<div id="sel-toolbar-global" role="toolbar" aria-label="Herramientas de selección">
+  <button class="sel-btn" id="gtb-edit" title="Open editor"><svg viewBox="0 0 16 16" fill="none">
+      <circle cx="4.5" cy="11.5" r="2.5" stroke="currentColor" stroke-width="1.3"/>
+      <circle cx="11.5" cy="11.5" r="2.5" stroke="currentColor" stroke-width="1.3"/>
+      <path d="M6 10L14 2M10 10L2 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+    </svg></button>
+  <button class="sel-btn" id="gtb-play" title="Play selection"><svg viewBox="0 0 12 14">
+      <polygon points="1,0 11,7 1,14" fill="currentColor" stroke="none"/>
+    </svg></button>
+  <div class="sel-btn sel-drag-btn" id="gtb-drag" title="Drag selection to DAW"><svg viewBox="0 0 14 14" fill="none">
+      <circle cx="4" cy="3" r="1.2" fill="currentColor"/><circle cx="4" cy="7" r="1.2" fill="currentColor"/><circle cx="4" cy="11" r="1.2" fill="currentColor"/>
+      <circle cx="9" cy="3" r="1.2" fill="currentColor"/><circle cx="9" cy="7" r="1.2" fill="currentColor"/><circle cx="9" cy="11" r="1.2" fill="currentColor"/>
+    </svg></div>
+  <button class="sel-btn" id="gtb-echo" title="Echo — Find similar sounds"><svg viewBox="0 0 16 16" fill="none">
+      <circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3"/>
+      <path d="M4.5 4.5C3.2 5.8 2.5 7.5 2.5 8s.7 2.2 2 3.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity=".6"/>
+      <path d="M11.5 4.5c1.3 1.3 2 3 2 3.5s-.7 2.2-2 3.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity=".6"/>
+    </svg></button>
+  <button class="sel-btn" id="gtb-clear" title="Clear selection"><svg viewBox="0 0 14 14">
+      <path d="M3 3l8 8M11 3l-8 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </svg></button>
+</div>
+
+<div id="editor-panel" role="dialog" aria-label="Audio editor">
+  <div id="editor-header">
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+      <rect x="1" y="4" width="12" height="7" rx="1.5" style="stroke:var(--accent)" stroke-width="1.3"/>
+      <path d="M3 7h8M5 5.5v3M9 5.5v3" style="stroke:var(--accent)" stroke-width="1.1" stroke-linecap="round"/>
+    </svg>
+    <span id="editor-title">Editor</span>
+    <button id="editor-close" aria-label="Cerrar editor">×</button>
+  </div>
+  <div id="editor-waveform-wrap">
+    <canvas id="editor-canvas"></canvas>
+    <div id="editor-playhead"></div>
+    <div class="ed-crop-region" id="ed-crop-left-region" style="width:0; left:0"></div>
+    <div class="ed-crop-region" id="ed-crop-right-region" style="width:0; right:0"></div>
+    <div class="ed-crop-handle" id="ed-crop-start-handle" style="left:0"><div class="ed-crop-handle-line"></div></div>
+    <div class="ed-crop-handle" id="ed-crop-end-handle" style="left:100%"><div class="ed-crop-handle-line"></div></div>
+    <div class="ed-fade-handle" id="ed-fi-handle" style="left:0"><div class="ed-fade-handle-box"></div></div>
+    <div class="ed-fade-handle" id="ed-fo-handle" style="left:100%"><div class="ed-fade-handle-box"></div></div>
+    <div class="ed-fade-region fade-in" id="ed-fi-region" style="width:0; left:0"></div>
+    <div class="ed-fade-region fade-out" id="ed-fo-region" style="width:0; left:100%"></div>
+    <span id="ed-gain-overlay">0 dB</span>
+    <span id="ed-wf-hint">Drag edges for crop/fades · scroll for gain</span>
+  </div>
+  <div id="ed-minimap-wrap">
+    <canvas id="ed-minimap-canvas"></canvas>
+    <div id="ed-minimap-overlay-left" class="ed-minimap-overlay"></div>
+    <div id="ed-minimap-overlay-right" class="ed-minimap-overlay"></div>
+    <div id="ed-minimap-viewport"></div>
+  </div>
+  <div id="editor-time-labels"><span id="ed-t-start">0:00</span><span id="ed-t-mid"></span><span id="ed-t-end">0:00</span></div>
+  <div id="editor-controls">
+    <button id="editor-play-btn" aria-label="Reproducir edición"><svg width="10" height="12" viewBox="0 0 12 14">
+        <polygon class="ed-play-icon" points="2,0 12,7 2,14" style="fill:var(--accent)"/>
+      </svg></button>
+    <span id="editor-time-display">0:00 / 0:00</span>
+    <div style="flex:1"></div>
+    <div class="ed-ctrl" id="ed-ctrl-rev" title="Toggle reverse" role="button" tabindex="0">
+      <svg viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3v8h8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="ed-ctrl-label">Reverse</span>
+    </div>
+    <div class="ed-ctrl" id="ed-ctrl-cut" title="Zoom to crop" role="button" tabindex="0">
+      <svg viewBox="0 0 16 16" fill="none"><circle cx="4.5" cy="11.5" r="2" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="11.5" r="2" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 10L14 2M10.5 10L2 2" stroke="currentColor" stroke-width="1.3"/></svg>
+      <span class="ed-ctrl-label">Crop</span>
+    </div>
+  </div>
+  <div id="editor-toolbar">
+    <div class="ed-slider-row" id="ed-gain-row">
+      <span class="ed-slider-label">Gain</span>
+      <input type="range" id="ed-gain-slider" min="-24" max="12" step="0.5" value="0">
+      <span class="ed-slider-val" id="ed-gain-val">0 dB</span>
+    </div>
+    <div class="ed-slider-row" id="ed-pitch-row">
+      <span class="ed-slider-label">Pitch</span>
+      <input type="range" id="ed-pitch-slider" min="-12" max="12" step="0.01" value="0">
+      <span class="ed-slider-val" id="ed-pitch-val">0.00 st</span>
+    </div>
+  </div>
+  <div id="editor-footer">
+    <span id="editor-footer-left">Drag fades · scroll gain · play to preview</span>
+    <div id="editor-drag-btn" title="Drag to DAW with edits (demo)">
+      <svg viewBox="0 0 14 14" fill="none"><circle cx="4" cy="3" r="1.2" fill="#111"/><circle cx="4" cy="7" r="1.2" fill="#111"/><circle cx="4" cy="11" r="1.2" fill="#111"/><circle cx="9" cy="3" r="1.2" fill="#111"/><circle cx="9" cy="7" r="1.2" fill="#111"/><circle cx="9" cy="11" r="1.2" fill="#111"/></svg>
+      Drag export
+    </div>
+  </div>
+</div>
+
+<section class="sec" id="echo">
+  <div class="wrap">
+    <div class="reveal">
+      <span class="sec-tag">Echo Vault</span>
+      <h2 class="sec-title">Selecciona un fragmento.<br><em>Encuentra su eco.</em></h2>
+      <p class="sec-lede">CLAP convierte 0,3 segundos de audio en un vector de 512 dimensiones. Echo Vault lo compara contra cada región indexada y devuelve los fragmentos que <strong>suenan igual</strong> — timbre, textura y envolvente, no etiquetas. Arrastra sobre la onda.</p>
+    </div>
+    <div class="echo-panel reveal" style="--d:.12s">
+      <div class="echo-topbar">
+        <span class="live"><i></i>ECHO VAULT</span>
+        <button class="echo-play-sel" id="echo-play-sel" hidden>▶ escuchar selección</button>
+        <span class="echo-hint" id="echo-hint">arrastra sobre la onda · sonidos reales de tu librería</span>
+        <span id="echoMs"></span>
+      </div>
+      <div class="echo-stage"><canvas id="echoCanvas" role="img" aria-label="Forma de onda. Arrastra horizontalmente para seleccionar un fragmento y buscar sonidos similares."></canvas></div>
+      <div class="echo-status" id="echoStatus" aria-live="polite">▸ arrastra sobre la forma de onda para seleccionar un fragmento</div>
+      <div class="echo-disclaimer">los sonidos son reales de tu librería · el ranking por similitud es ilustrativo (el motor CLAP corre en la app)</div>
+      <div class="echo-results" id="echoResults"></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="specs">
+  <div class="wrap">
+    <div class="reveal">
+      <span class="sec-tag">Specs</span>
+      <h2 class="sec-title">Hoja de datos.</h2>
+    </div>
+    <dl class="specs reveal" style="--d:.1s">
+      <div class="spec-row"><dt>Motor semántico</dt><dd>LAION CLAP · <code>htsat-unfused</code> · ONNX Runtime (local)</dd></div>
+      <div class="spec-row"><dt>Embeddings</dt><dd>512-D · normalizados L2 · <code>2.048 B</code> por sonido, cacheados</dd></div>
+      <div class="spec-row"><dt>Índice vectorial</dt><dd>HNSW (hnswlib) en background · brute-force como fallback inmediato</dd></div>
+      <div class="spec-row"><dt>Latencia</dt><dd><code>5–8 ms</code> sobre 70.000 vectores + <code>2 ms</code> de ordenación</dd></div>
+      <div class="spec-row"><dt>Base de datos</dt><dd>SQLite embebido (<code>better-sqlite3</code>) · metadata + embeddings</dd></div>
+      <div class="spec-row"><dt>Decodificación</dt><dd>ffmpeg → mono <code>48 kHz</code> float32 · WAV, AIFF, OGG, FLAC, MP3…</dd></div>
+      <div class="spec-row"><dt>Editor de audio</dt><dd>Fades y crop con handles · preview en tiempo real</dd></div>
+      <div class="spec-row"><dt>Integración DAW</dt><dd>REAPER (Lua) · drag &amp; drop nativo al explorador</dd></div>
+      <div class="spec-row"><dt>Privacidad</dt><dd><code>0</code> telemetría · <code>0</code> red · funciona desde el primer arranque</dd></div>
+      <div class="spec-row"><dt>Plataforma</dt><dd>Windows 10/11 x64 · instalador NSIS + portable · licencia MIT</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="sec" id="download">
+  <div class="wrap">
+    <div class="dl-box reveal">
+      <span class="sec-tag">Descarga</span>
+      <h2 class="dl-big">Tuyo.<br><em>Para siempre.</em></h2>
+      <p>Open source bajo licencia MIT. Sin cuenta, sin suscripción, sin telemetría: el instalador incluye el modelo CLAP y funciona offline desde el primer arranque.</p>
+      <div class="dl-btns">
+        <!-- TODO: pega aquí la URL real de tu repositorio / release -->
+        <a class="btn btn-primary" href="#" rel="noopener">Código en GitHub ↗</a>
+        <a class="btn btn-ghost" href="#specs">Ver specs</a>
+      </div>
+      <p class="dl-note">soundvault-1.0.0-Setup.exe · ~668 MB · NSIS per-user · Windows 10/11 x64 · script REAPER incluido</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div class="foot-brand">
+      <svg width="18" height="18" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="3" y="12" width="3" height="8" rx="1.5" fill="#e0ddd5"/>
+        <rect x="8.5" y="7" width="3" height="18" rx="1.5" fill="#e0ddd5"/>
+        <rect x="14" y="10" width="3" height="12" rx="1.5" fill="#e0ddd5"/>
+        <rect x="19.5" y="5" width="3" height="22" rx="1.5" fill="#c8f76d"/>
+        <rect x="25" y="13" width="3" height="6" rx="1.5" fill="#e0ddd5"/>
+      </svg>
+      SoundVault
+    </div>
+    <div class="foot-right">
+      <!-- TODO: reemplaza con tu nombre y enlaces reales -->
+      <span class="foot-author">Hecho por <strong>Santi Montali</strong> · <a href="#" rel="noopener">GitHub ↗</a></span>
+      <p class="legal">© 2026 · MIT · construido con Electron + ONNX (CLAP) y asistencia de IA · el audio de esta demo se sirve en OGG (48 kHz)</p>
+    </div>
+  </div>
+</footer>
+
+<script src="js/data.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
