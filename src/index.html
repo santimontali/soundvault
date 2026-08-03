@@ -53,7 +53,7 @@
     .player-volume,
     #new-folder-btn,
     #settings-overlay,
-    .sv-icon,
+    .sv-icon-stack,
     .btn-small,
     .context-menu,
     .modal-overlay,
@@ -108,18 +108,69 @@
       gap: 10px;
     }
 
-    .sv-icon {
+    .sv-icon-stack {
+      position: relative;
+      width: 22px;
+      height: 22px;
       flex-shrink: 0;
-      opacity: .9;
       cursor: pointer;
-      transition: opacity .2s, transform .2s cubic-bezier(.34,1.56,.64,1);
+      transition: transform .2s cubic-bezier(.34,1.56,.64,1);
     }
-    .sv-icon:hover {
+    .sv-icon-stack:hover { transform: scale(1.08); }
+    .sv-icon-stack:active { transform: scale(.94); transition: transform .08s ease-out; }
+    .sv-icon-eq,
+    .sv-icon-chest {
+      position: absolute;
+      inset: 0;
+      width: 22px;
+      height: 22px;
+      will-change: transform, opacity;
+    }
+    .sv-icon-chest path, .sv-icon-chest rect { transition: fill .35s ease; }
+    .sv-icon-eq {
       opacity: 1;
-      transform: scale(1.08);
+      transform: scale(1) rotate(0deg);
+      transition: opacity .26s ease .09s, transform .42s cubic-bezier(.34,1.56,.64,1) .09s;
     }
-    .sv-icon:active {
-      transform: scale(.94);
+    .sv-icon-chest {
+      opacity: 0;
+      transform: scale(.45) rotate(-20deg);
+      transition: opacity .18s ease, transform .32s cubic-bezier(.55,0,1,.45);
+    }
+    .sv-icon-stack.mode-vault .sv-icon-eq {
+      opacity: 0;
+      transform: scale(.45) rotate(20deg);
+      transition: opacity .18s ease, transform .32s cubic-bezier(.55,0,1,.45);
+    }
+    .sv-icon-stack.mode-vault .sv-icon-chest {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+      transition: opacity .26s ease .09s, transform .42s cubic-bezier(.34,1.56,.64,1) .09s;
+    }
+    .sv-icon-stack.mode-sound .sv-icon-eq {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+      transition: opacity .26s ease .09s, transform .42s cubic-bezier(.34,1.56,.64,1) .09s;
+    }
+    .sv-icon-stack.mode-sound .sv-icon-chest {
+      opacity: 0;
+      transform: scale(.45) rotate(-20deg);
+      transition: opacity .18s ease, transform .32s cubic-bezier(.55,0,1,.45);
+    }
+    .sv-eq-accent { transition: fill .35s ease; }
+    .sv-eq-bar { transform-box: view-box; transform-origin: 50% 50%; }
+    @keyframes eq-idle-1 { 0%,100%{transform:scaleY(1)} 35%{transform:scaleY(.68)} }
+    @keyframes eq-idle-2 { 0%,100%{transform:scaleY(1)} 35%{transform:scaleY(1.18)} }
+    @keyframes eq-idle-3 { 0%,100%{transform:scaleY(1)} 35%{transform:scaleY(.82)} }
+    @keyframes eq-idle-accent { 0%,100%{transform:scaleY(1)} 30%{transform:scaleY(.55)} }
+    .sv-icon-stack.mode-sound.eq-ready:hover .sv-eq-bar:nth-child(1) { animation: eq-idle-1 2.4s cubic-bezier(.4,0,.2,1) infinite; }
+    .sv-icon-stack.mode-sound.eq-ready:hover .sv-eq-bar:nth-child(2) { animation: eq-idle-2 1.8s cubic-bezier(.4,0,.2,1) infinite .3s; }
+    .sv-icon-stack.mode-sound.eq-ready:hover .sv-eq-bar:nth-child(3) { animation: eq-idle-3 2.1s cubic-bezier(.4,0,.2,1) infinite .1s; }
+    .sv-icon-stack.mode-sound.eq-ready:hover .sv-eq-bar:nth-child(4) { animation: eq-idle-accent 1.4s cubic-bezier(.4,0,.2,1) infinite .5s; }
+    .sv-icon-stack.mode-sound.eq-ready:hover .sv-eq-bar:nth-child(5) { animation: eq-idle-1 2.6s cubic-bezier(.4,0,.2,1) infinite .2s; }
+    .sv-icon-lock { transition: fill .35s ease; }
+    @media (prefers-reduced-motion: reduce) {
+      .sv-eq-bar, .logo-word { animation: none !important; }
     }
 
     .logo {
@@ -146,12 +197,12 @@
       font-weight: 700;
       text-transform: uppercase;
       color: var(--accent);
-      transition: color .35s ease;
+      transition: color .35s ease, text-shadow .25s ease;
       will-change: transform, opacity;
       line-height: 15px;
     }
     .logo:hover .logo-word {
-      text-shadow: 0 0 14px currentColor;
+      text-shadow: 0 0 10px color-mix(in srgb, currentColor 60%, transparent);
     }
     @keyframes logo-word-out {
       to { transform: translateY(-120%); opacity: 0; }
@@ -161,7 +212,7 @@
       to { transform: translateY(0); opacity: 1; }
     }
     .logo-word.swap-out { animation: logo-word-out .16s cubic-bezier(.55, 0, 1, .45) forwards; }
-    .logo-word.swap-in { animation: logo-word-in .3s cubic-bezier(.18, .89, .32, 1.15) forwards; }
+    .logo-word.swap-in { animation: logo-word-in .3s cubic-bezier(.18, .89, .32, 1.12) forwards; }
     .sv-icon-lock { transition: fill .35s ease; }
 
     /* AI icon rotation — 45° tilt when active, returns when inactive */
@@ -1326,20 +1377,153 @@
     .drop-zone {
       display: none;
       position: absolute;
-      inset: 0;
-      background: rgba(var(--accent-rgb), .05);
-      border: 2px dashed var(--accent);
-      border-radius: 8px;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 100%;
       z-index: 100;
       align-items: center;
       justify-content: center;
-      font-size: 14px;
-      color: var(--accent);
-      pointer-events: none
+      pointer-events: none;
+      background: rgba(13, 13, 16, .8);
+      backdrop-filter: blur(3px)
     }
 
     .drop-zone.active {
       display: flex
+    }
+
+    /* Marching-ants frame around the drop target */
+    .dz-ants {
+      position: absolute;
+      inset: 8px;
+      border-radius: 12px;
+      background-image:
+        repeating-linear-gradient(90deg, var(--accent) 0 8px, transparent 8px 16px),
+        repeating-linear-gradient(90deg, var(--accent) 0 8px, transparent 8px 16px),
+        repeating-linear-gradient(0deg, var(--accent) 0 8px, transparent 8px 16px),
+        repeating-linear-gradient(0deg, var(--accent) 0 8px, transparent 8px 16px);
+      background-size: 100% 1.5px, 100% 1.5px, 1.5px 100%, 1.5px 100%;
+      background-position: 0 0, 0 100%, 0 0, 100% 0;
+      background-repeat: no-repeat;
+      animation: dz-march .5s linear infinite
+    }
+
+    @keyframes dz-march {
+      to {
+        background-position: 16px 0, -16px 100%, 0 -16px, 100% 16px
+      }
+    }
+
+    .dz-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 9px;
+      padding: 24px 44px 20px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-hover);
+      border-radius: 14px;
+      box-shadow: 0 18px 50px rgba(0, 0, 0, .55), 0 0 0 1px rgba(var(--accent-rgb), .07), 0 0 44px rgba(var(--accent-rgb), .08);
+      text-align: center;
+      animation: dz-pop .3s cubic-bezier(.34, 1.56, .64, 1)
+    }
+
+    @keyframes dz-pop {
+      from {
+        opacity: 0;
+        transform: translateY(10px) scale(.94)
+      }
+    }
+
+    .dz-eq {
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      height: 30px;
+      margin-bottom: 3px
+    }
+
+    .dz-eq i {
+      width: 5px;
+      height: 100%;
+      border-radius: 2.5px;
+      background: var(--accent);
+      transform-origin: bottom;
+      animation: dz-eq .8s ease-in-out infinite alternate
+    }
+
+    .dz-eq i:nth-child(1) { animation-delay: -.7s; animation-duration: .75s }
+    .dz-eq i:nth-child(2) { animation-delay: -.3s; animation-duration: .6s }
+    .dz-eq i:nth-child(3) { animation-delay: -.5s; animation-duration: .9s }
+    .dz-eq i:nth-child(4) { animation-delay: -.1s; animation-duration: .55s }
+    .dz-eq i:nth-child(5) { animation-delay: -.6s; animation-duration: .85s }
+    .dz-eq i:nth-child(6) { animation-delay: -.25s; animation-duration: .7s }
+    .dz-eq i:nth-child(7) { animation-delay: -.45s; animation-duration: .95s }
+
+    @keyframes dz-eq {
+      from {
+        transform: scaleY(.22)
+      }
+
+      to {
+        transform: scaleY(1)
+      }
+    }
+
+    .dz-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: .2px;
+      color: var(--text-primary)
+    }
+
+    .dz-sub {
+      font-size: 12px;
+      color: var(--text-secondary)
+    }
+
+    .dz-sub b {
+      color: var(--accent);
+      font-weight: 600
+    }
+
+    .dz-chip {
+      margin-top: 2px;
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 1.4px;
+      color: var(--accent);
+      background: var(--accent-dim);
+      padding: 3.5px 10px;
+      border-radius: 99px;
+      font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace
+    }
+
+    /* No folder selected — muted, paused state */
+    .drop-zone.no-target .dz-ants {
+      background-image:
+        repeating-linear-gradient(90deg, var(--text-muted) 0 4px, transparent 4px 12px),
+        repeating-linear-gradient(90deg, var(--text-muted) 0 4px, transparent 4px 12px),
+        repeating-linear-gradient(0deg, var(--text-muted) 0 4px, transparent 4px 12px),
+        repeating-linear-gradient(0deg, var(--text-muted) 0 4px, transparent 4px 12px);
+      animation: none
+    }
+
+    .drop-zone.no-target .dz-eq i {
+      background: var(--text-muted);
+      animation-play-state: paused;
+      transform: scaleY(.22)
+    }
+
+    .drop-zone.no-target .dz-title {
+      color: var(--text-secondary)
+    }
+
+    .drop-zone.no-target .dz-chip {
+      color: var(--text-muted);
+      background: rgba(255, 255, 255, .05)
     }
 
     .empty-state {
@@ -2741,31 +2925,23 @@
   <div id="app">
     <div id="titlebar">
       <div class="logo-wrap">
-        <svg class="sv-icon" id="sv-icon-toggle" width="22" height="22" viewBox="0 0 996 964" xmlns="http://www.w3.org/2000/svg" title="Toggle Sound / Vault mode">
-          <g transform="translate(0,964) scale(0.1,-0.1)">
-            <g fill="#ffffff" stroke="none">
-              <path d="M1850 9625 c-154 -22 -246 -43 -404 -96 -761 -252 -1307 -910 -1421 -1711 -13 -89 -15 -506 -15 -2968 0 -1854 3 -2894 10 -2945 41 -331 160 -656 341 -930 305 -464 764 -789 1307 -925 208 -52 57 -50 3336 -50 2728 0 3059 2 3150 16 600 93 1130 436 1469 949 131 199 253 493 309 745 l23 105 3 2985 c2 2152 0 3007 -8 3065 -15 104 -51 247 -94 372 -262 751 -954 1302 -1751 1393 -60 6 -1107 10 -3125 9 -2451 -1 -3053 -4 -3130 -14z m6335 -502 c230 -55 416 -134 590 -251 358 -242 603 -619 687 -1059 l23 -118 0 -1685 0 -1685 -23 -70 c-38 -114 -81 -184 -162 -265 -83 -83 -171 -139 -270 -173 l-65 -22 -1262 -3 -1263 -2 0 -245 0 -245 1209 0 c801 0 1236 4 1288 11 146 20 330 91 476 185 37 24 70 44 72 44 10 0 5 -1443 -6 -1538 -25 -235 -75 -408 -174 -607 -85 -170 -175 -295 -310 -430 -136 -136 -261 -226 -430 -311 -145 -72 -259 -112 -421 -146 l-109 -23 -3020 0 c-2871 0 -3025 1 -3125 18 -121 21 -341 92 -442 143 -548 276 -894 788 -947 1399 -12 129 -15 1371 -5 1448 l6 45 67 -40 c158 -98 337 -165 495 -187 52 -7 478 -11 1277 -11 l1199 0 0 245 0 245 -1222 0 c-1353 0 -1295 -2 -1436 65 -145 69 -261 185 -327 330 -64 138 -60 27 -60 1820 0 1526 1 1648 18 1753 98 616 503 1103 1086 1306 95 33 246 69 331 79 19 2 1414 3 3100 3 l3065 -2 90 -21z"/>
-              <path d="M4925 8071 c-48 -22 -78 -54 -94 -100 -8 -25 -11 -456 -11 -1601 l0 -1567 23 -44 c70 -131 268 -113 316 30 16 47 16 3118 0 3176 -14 50 -64 100 -114 114 -54 15 -73 14 -120 -8z"/>
-              <path d="M4413 7549 c-45 -13 -96 -67 -110 -115 -8 -28 -10 -352 -9 -1134 3 -1193 -1 -1123 58 -1177 78 -73 216 -49 265 46 l23 44 0 1101 c0 1047 -1 1103 -19 1141 -22 49 -48 73 -98 91 -44 15 -65 16 -110 3z"/>
-              <path d="M5465 7548 c-36 -13 -82 -53 -101 -90 -12 -23 -14 -202 -14 -1146 l0 -1119 23 -33 c35 -52 70 -73 130 -78 70 -6 120 17 155 71 l27 41 3 1108 c2 1077 2 1111 -17 1153 -33 75 -132 120 -206 93z"/>
-              <path d="M2475 7232 c-48 -23 -78 -56 -94 -101 -14 -44 -16 -1788 -1 -1841 5 -20 24 -50 42 -67 80 -76 211 -59 270 35 l23 37 0 915 0 915 -23 37 c-46 75 -142 105 -217 70z"/>
-              <path d="M7393 7239 c-45 -13 -100 -71 -113 -118 -7 -27 -10 -326 -8 -933 l3 -893 23 -37 c33 -53 83 -81 145 -81 63 -1 106 20 144 70 l28 36 0 927 0 927 -29 37 c-31 41 -95 76 -136 75 -14 0 -40 -5 -57 -10z"/>
-              <path d="M3915 6957 c-57 -23 -75 -38 -95 -77 -20 -39 -20 -54 -18 -643 l3 -602 23 -33 c30 -41 90 -72 139 -72 53 1 116 31 144 71 l24 34 3 599 c2 590 2 599 -18 642 -12 24 -36 52 -54 64 -42 25 -112 33 -151 17z"/>
-              <path d="M5955 6952 c-46 -22 -79 -55 -94 -95 -7 -19 -11 -213 -11 -580 0 -518 2 -555 19 -593 68 -149 285 -127 321 31 10 46 13 966 4 1073 -5 49 -14 84 -28 105 -45 66 -140 93 -211 59z"/>
-              <path d="M2962 6779 c-28 -14 -49 -34 -62 -60 -19 -36 -20 -61 -20 -511 0 -533 -1 -522 75 -565 54 -31 116 -30 170 2 77 44 75 32 75 568 l0 474 -22 33 c-53 77 -137 100 -216 59z"/>
-              <path d="M6871 6778 c-83 -43 -81 -26 -81 -574 l0 -481 23 -33 c48 -71 145 -91 222 -45 77 44 75 32 75 568 l0 474 -22 33 c-53 78 -137 100 -217 58z"/>
-              <path d="M1944 6732 c-23 -11 -52 -35 -65 -53 l-24 -34 -3 -415 c-2 -228 0 -430 3 -448 8 -45 57 -97 112 -118 38 -15 52 -16 90 -6 61 17 91 38 114 83 18 36 19 62 19 459 0 467 0 466 -65 515 -48 37 -122 44 -181 17z"/>
-              <path d="M7900 6739 c-14 -6 -36 -20 -48 -32 -52 -49 -52 -45 -52 -502 0 -468 1 -473 60 -515 57 -41 155 -42 208 -3 15 10 37 39 50 64 l23 44 -3 420 c-3 413 -3 421 -25 455 -41 67 -139 98 -213 69z"/>
-              <path d="M3463 6500 c-46 -10 -80 -35 -98 -71 -14 -25 -16 -64 -13 -239 l3 -209 30 -31 c53 -55 132 -63 203 -20 57 35 64 67 60 285 -3 179 -5 196 -24 222 -38 51 -103 76 -161 63z"/>
-              <path d="M6447 6495 c-51 -18 -85 -50 -97 -94 -5 -20 -10 -112 -10 -206 0 -146 3 -176 20 -212 49 -109 220 -107 266 3 10 24 14 84 14 219 0 163 -2 190 -19 223 -32 62 -106 91 -174 67z"/>
-              <path d="M1399 6404 c-92 -28 -147 -123 -136 -233 19 -187 264 -248 371 -94 35 50 46 137 26 198 -19 59 -74 113 -133 130 -60 18 -68 18 -128 -1z"/>
-              <path d="M8443 6403 c-84 -29 -143 -133 -130 -228 8 -55 26 -91 64 -129 101 -103 288 -58 333 80 7 20 10 64 8 99 -5 84 -40 137 -111 171 -59 27 -103 29 -164 7z"/>
-            </g>
-            <g class="sv-icon-lock" style="fill:var(--accent)" stroke="none">
-              <path d="M3993 4119 c-98 -18 -186 -87 -229 -181 l-29 -63 0 -1025 0 -1025 23 -60 c53 -141 150 -240 290 -297 l57 -23 880 0 880 0 75 28 c41 15 96 43 122 62 60 44 130 143 160 225 l23 65 3 1005 c2 980 2 1007 -18 1071 -26 87 -79 148 -168 191 l-67 33 -980 1 c-539 0 -999 -3 -1022 -7z m1160 -702 c76 -35 171 -126 209 -201 75 -148 51 -320 -62 -449 l-40 -45 0 -260 c0 -253 -1 -260 -23 -293 -12 -18 -38 -44 -56 -56 -32 -22 -44 -23 -191 -23 -147 0 -159 1 -191 23 -18 12 -44 38 -56 56 -22 33 -23 40 -23 296 l0 261 -34 33 c-46 45 -94 143 -106 216 -19 118 21 244 106 336 60 63 92 86 163 116 48 20 69 23 151 20 77 -2 106 -8 153 -30z"/>
-            </g>
-          </g>
-        </svg>
+        <div class="sv-icon-stack mode-vault" id="sv-icon-toggle" role="button" tabindex="0" title="Toggle Sound / Vault mode">
+          <svg class="sv-icon-eq" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect class="sv-eq-bar" x="2.75" y="12" width="3.5" height="8" rx="1.75" fill="var(--text-primary)"/>
+            <rect class="sv-eq-bar" x="8.25" y="7" width="3.5" height="18" rx="1.75" fill="var(--text-primary)"/>
+            <rect class="sv-eq-bar" x="13.75" y="10" width="3.5" height="12" rx="1.75" fill="var(--text-primary)"/>
+            <rect class="sv-eq-bar sv-eq-accent" x="19.25" y="5" width="3.5" height="22" rx="1.75" fill="var(--accent)"/>
+            <rect class="sv-eq-bar" x="24.75" y="13" width="3.5" height="6" rx="1.75" fill="var(--text-primary)"/>
+          </svg>
+          <svg class="sv-icon-chest" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path fill-rule="evenodd" fill="var(--text-primary)" d="M8 4h16a5 5 0 0 1 5 5v14a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V9a5 5 0 0 1 5-5Zm0 3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H8Z"/>
+            <rect x="5.5" y="11" width="21" height="3" rx="1.5" fill="var(--text-primary)"/>
+            <rect x="11.5" y="15.5" width="1.8" height="4.5" rx="0.9" fill="var(--text-primary)"/>
+            <rect x="15.1" y="15.5" width="1.8" height="4.5" rx="0.9" fill="var(--text-primary)"/>
+            <rect x="18.7" y="15.5" width="1.8" height="4.5" rx="0.9" fill="var(--text-primary)"/>
+            <path class="sv-icon-lock" style="fill:var(--accent)" d="M14.5 23v-1.3a1.5 1.5 0 0 1 3 0V23h.4a.6.6 0 0 1 .6.6v3.3a.6.6 0 0 1-.6.6h-3.8a.6.6 0 0 1-.6-.6v-3.3a.6.6 0 0 1 .6-.6h.4Z"/>
+          </svg>
+        </div>
         <div class="logo" id="logo-interactive" title="Switch to Sound mode">
           <div class="logo-word-clip">
             <span class="logo-word" id="logo-word">VAULT</span>
@@ -2890,7 +3066,7 @@
           <button class="ct-close" id="ct-close-btn">×</button>
         </div>
         <div id="sound-list">
-          <div class="drop-zone" id="drop-zone">Drop WAV files here</div>
+          <div class="drop-zone" id="drop-zone"></div>
         </div>
         <div id="ai-suggestions">
           <div class="ai-sug-header" id="ai-sug-toggle">
@@ -3409,6 +3585,79 @@
 
     // UI
     function formatTime(s) { if (!s || isNaN(s)) return '0:00'; return Math.floor(s / 60) + ':' + Math.floor(s % 60).toString().padStart(2, '0') }
+
+    // ═══ Drag Ghost — waveform chip shown by the OS while dragging audio out ═══
+    function peaksFromSamples(f32, buckets = 240) {
+      const out = new Float32Array(buckets);
+      if (!f32 || !f32.length) return out;
+      const step = f32.length / buckets;
+      for (let i = 0; i < buckets; i++) {
+        const s = Math.floor(i * step), e = Math.min(f32.length, Math.floor((i + 1) * step) + 1);
+        let m = 0;
+        for (let j = s; j < e; j += 32) { const v = Math.abs(f32[j]); if (v > m) m = v; }
+        out[i] = m;
+      }
+      return out;
+    }
+
+    function makeDragGhost({ peaks = null, color = '#c8f76d', badge = '' } = {}) {
+      try {
+        // Compact icon-style tile: a designed container around a simple
+        // waveform. The OS draws the filename label itself, so no text here.
+        const W = 26, H = 26, S = 2;
+        const cv = document.createElement('canvas');
+        cv.width = W * S; cv.height = H * S;
+        const c = cv.getContext('2d');
+        c.scale(S, S);
+        const { r, g, b } = hexToRgb(color);
+        const rr = (x, y, w, h, rad) => { c.beginPath(); c.moveTo(x + rad, y); c.arcTo(x + w, y, x + w, y + h, rad); c.arcTo(x + w, y + h, x, y + h, rad); c.arcTo(x, y + h, x, y, rad); c.arcTo(x, y, x + w, y, rad); c.closePath(); };
+
+        // Tile body
+        rr(.5, .5, W - 1, H - 1, 6.5);
+        const bg = c.createLinearGradient(0, 0, 0, H);
+        bg.addColorStop(0, '#26262d'); bg.addColorStop(1, '#131317');
+        c.fillStyle = bg; c.fill();
+        c.lineWidth = 1; c.strokeStyle = `rgba(${r},${g},${b},.5)`; c.stroke();
+
+        // Waveform — rounded bars, normalized to the real peaks
+        const n = 5, bw = 2, gap = 1.5, maxH = 13, mid = H / 2;
+        const x0 = (W - (n * bw + (n - 1) * gap)) / 2;
+        let pks = new Float32Array(n);
+        if (peaks && peaks.length) {
+          const step = peaks.length / n;
+          for (let i = 0; i < n; i++) {
+            const s = Math.floor(i * step), e = Math.floor((i + 1) * step);
+            let m = 0;
+            for (let j = s; j < e; j += Math.max(1, Math.floor(step / 48))) { const v = Math.abs(peaks[j]); if (v > m) m = v; }
+            pks[i] = m;
+          }
+          const mx = Math.max(...pks);
+          if (mx > .001) for (let i = 0; i < n; i++) pks[i] /= mx;
+        } else {
+          pks = Float32Array.from([.5, .85, 1, .6, .9]);
+        }
+        const wfg = c.createLinearGradient(0, mid - maxH / 2, 0, mid + maxH / 2);
+        wfg.addColorStop(0, color);
+        wfg.addColorStop(.5, `rgba(${r},${g},${b},.8)`);
+        wfg.addColorStop(1, `rgba(${r},${g},${b},.45)`);
+        c.fillStyle = wfg;
+        for (let i = 0; i < n; i++) {
+          const bh = Math.max(2.5, pks[i] * maxH);
+          c.globalAlpha = .55 + .45 * pks[i];
+          c.beginPath(); c.roundRect(x0 + i * (bw + gap), mid - bh / 2, bw, bh, 1); c.fill();
+        }
+        c.globalAlpha = 1;
+
+        // Selection/edit marker dot
+        if (badge) {
+          c.beginPath(); c.arc(W - 5, 5, 2.25, 0, Math.PI * 2);
+          c.fillStyle = color; c.fill();
+          c.lineWidth = 1; c.strokeStyle = '#1c1c21'; c.stroke();
+        }
+
+        return cv.toDataURL('image/png');
+      } catch (e) { console.error('drag ghost:', e); return null; }
+    }
     function updatePlayerUI() { 
       document.getElementById('player-toggle').innerHTML = isPlaying ? `<svg width="18" height="18" viewBox="0 0 16 16"><rect x="3" y="2" width="3.5" height="12" rx="1" style="fill:var(--accent)"/><rect x="9.5" y="2" width="3.5" height="12" rx="1" style="fill:var(--accent)"/></svg>` : `<svg width="18" height="18" viewBox="0 0 16 16"><polygon points="3,1 13,8 3,15" style="fill:var(--accent)"/></svg>`; 
       document.getElementById('player-sel-badge').classList.toggle('visible', !!(selection && currentSound && selection.path === currentSound.path));
@@ -3443,7 +3692,7 @@
     async function selectCollection(n) { currentCollection = n; lastCollection = n; currentFolder = null; searchMode = false; document.getElementById('search-box').value = ''; document.getElementById('current-folder-name').textContent = '⬡ ' + n; document.getElementById('add-col-btn').style.display = 'none'; await loadCollections(); await loadCollectionSounds() }
     async function loadSounds() { if (!currentFolder) return; sounds = await window.api.getSounds(currentFolder); renderSounds(sounds) }
     async function loadCollectionSounds() { if (!currentCollection) return; sounds = await window.api.getCollectionSounds(currentCollection); renderSounds(sounds) }
-    async function deleteFolder(n) { if (await window.api.deleteFolder(n)) { if (currentFolder === n) { currentFolder = null; document.getElementById('current-folder-name').textContent = 'Select a folder'; document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>'; vList.pool = []; vList.sentinel = null; } await loadFolders() } }
+    async function deleteFolder(n) { if (await window.api.deleteFolder(n)) { if (currentFolder === n) { currentFolder = null; document.getElementById('current-folder-name').textContent = 'Select a folder'; document.getElementById('sound-list').innerHTML = DROP_ZONE_HTML; vList.pool = []; vList.sentinel = null; } await loadFolders() } }
 
     // Sound list
 
@@ -3461,6 +3710,9 @@
       const onU = () => { document.removeEventListener('mousemove', onM); document.removeEventListener('mouseup', onU) };
       document.addEventListener('mousemove', onM); document.addEventListener('mouseup', onU);
     }
+
+    const DROP_ZONE_INNER = '<div class="dz-ants"></div><div class="dz-card"><div class="dz-eq"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="dz-title">Drop your sounds</div><div class="dz-sub">into <b class="dz-folder">—</b></div><div class="dz-chip">WAV · DRAG &amp; DROP</div></div>';
+    const DROP_ZONE_HTML = '<div class="drop-zone" id="drop-zone">' + DROP_ZONE_INNER + '</div>';
 
     function createSoundItemElement() {
       const div = document.createElement('div');
@@ -3575,7 +3827,18 @@
       rh.addEventListener('mousedown', e => resize(e, 'right'), { signal });
 
       const fdEl = el.querySelector('.full-drag');
-      fdEl.addEventListener('dragstart', e => { e.preventDefault(); window.api.startDrag(sound.path) }, { signal });
+      fdEl.addEventListener('dragstart', e => {
+        e.preventDefault();
+        // Fully synchronous — startDrag must fire during the dragstart event or
+        // the OS drag session never begins. Icon generation is best-effort: the
+        // drag must work even if the ghost fails (falls back to OS default).
+        let icon = null;
+        try {
+          const pc = peakCache.get(sound.path);
+          icon = makeDragGhost({ peaks: pc?.peaks, name: sound.name.replace(/\.wav$/i, ''), duration: pc?.duration || 0, color: modeColor(sidebarMode) });
+        } catch (ex) { console.error('drag ghost:', ex); }
+        window.api.startDrag(sound.path, icon);
+      }, { signal });
 
       // Context menu
       const newEl = el; // el reference stays the same
@@ -3853,11 +4116,12 @@
       const ind = document.getElementById('logo-indicator');
       requestAnimationFrame(() => {
         ind.style.left = word.offsetLeft + 'px';
-        ind.style.width = word.offsetWidth + 'px';
+        ind.style.width = Math.max(0, word.offsetWidth - 3) + 'px';
       });
     }
 
     let logoSwapTimer = null;
+    let eqReadyTimer = null;
     function updateLogoVisuals(mode) {
       applyModeAccent();
       const word = document.getElementById('logo-word');
@@ -3866,8 +4130,18 @@
       const color = modeColor(mode);
       document.getElementById('logo-interactive').title =
         mode === 'sounds' ? 'Switch to Vault mode' : 'Switch to Sound mode';
-      const lock = document.querySelector('#sv-icon-toggle .sv-icon-lock');
+      const stack = document.getElementById('sv-icon-toggle');
+      stack.classList.toggle('mode-sound', mode === 'sounds');
+      stack.classList.toggle('mode-vault', mode === 'vault');
+      stack.classList.remove('eq-ready');
+      clearTimeout(eqReadyTimer);
+      if (mode === 'sounds') {
+        eqReadyTimer = setTimeout(() => stack.classList.add('eq-ready'), 900);
+      }
+      const lock = stack.querySelector('.sv-icon-lock');
       if (lock) lock.style.fill = color;
+      const eqAccent = stack.querySelector('.sv-eq-accent');
+      if (eqAccent) eqAccent.style.fill = color;
       ind.style.background = color;
 
       if (word.textContent === label) {
@@ -3923,7 +4197,7 @@
         if (f.length) await selectFolder(f[0].name);
         else {
           document.getElementById('current-folder-name').textContent = 'Select a folder';
-          document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>'; vList.pool = []; vList.sentinel = null;
+          document.getElementById('sound-list').innerHTML = DROP_ZONE_HTML; vList.pool = []; vList.sentinel = null;
           document.getElementById('sound-count').textContent = '';
         }
       }
@@ -3939,7 +4213,7 @@
         await selectCollection(target);
       } else {
         document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
-        document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>'; vList.pool = []; vList.sentinel = null;
+        document.getElementById('sound-list').innerHTML = DROP_ZONE_HTML; vList.pool = []; vList.sentinel = null;
         document.getElementById('sound-count').textContent = '';
       }
     }
@@ -4096,7 +4370,7 @@
       setSidebarMode('vault');
       await loadCollections();
       document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
-      document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>'; vList.pool = []; vList.sentinel = null;
+      document.getElementById('sound-list').innerHTML = DROP_ZONE_HTML; vList.pool = []; vList.sentinel = null;
       document.getElementById('sound-count').textContent = '';
       document.getElementById('add-col-btn').style.display = 'none';
     }
@@ -4192,9 +4466,36 @@
     });
     document.getElementById('refresh-btn').addEventListener('click', async () => { if (wfBatchTimer) { clearTimeout(wfBatchTimer); wfBatchTimer = null; } wfBatch = new Map(); if (currentCollection) await loadCollectionSounds(); else if (currentFolder) await loadSounds(); await loadFolders(); await loadCollections() });
     const sle = document.getElementById('sound-list');
-    sle.addEventListener('dragover', e => { e.preventDefault(); document.getElementById('drop-zone').classList.add('active') });
-    sle.addEventListener('dragleave', e => { if (!sle.contains(e.relatedTarget)) document.getElementById('drop-zone').classList.remove('active') });
-    sle.addEventListener('drop', async e => { e.preventDefault(); document.getElementById('drop-zone').classList.remove('active'); if (!currentFolder) return; const f = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.wav')).map(f => window.api.getPathForFile(f) || f.path).filter(Boolean); if (f.length) { await window.api.dropFiles(f, currentFolder); await loadSounds(); await loadFolders() } });
+    document.getElementById('drop-zone').innerHTML = DROP_ZONE_INNER;
+
+    function refreshDropZone() {
+      const dz = document.getElementById('drop-zone');
+      if (!dz) return;
+      const noTarget = !currentFolder;
+      dz.classList.toggle('no-target', noTarget);
+      const title = dz.querySelector('.dz-title'), sub = dz.querySelector('.dz-sub');
+      if (noTarget) {
+        title.textContent = 'No folder selected';
+        sub.textContent = 'Pick a folder in the sidebar first';
+      } else {
+        title.textContent = 'Drop your sounds';
+        sub.innerHTML = 'into <b class="dz-folder"></b>';
+        sub.querySelector('.dz-folder').textContent = currentFolder;
+      }
+    }
+
+    let importToastTimer = null;
+    function showImportToast(n, folder) {
+      const t = document.getElementById('collect-toast');
+      t.textContent = '↓ ' + n + ' sound' + (n !== 1 ? 's' : '') + ' → ' + folder;
+      t.classList.add('show');
+      clearTimeout(importToastTimer);
+      importToastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+    }
+
+    sle.addEventListener('dragover', e => { e.preventDefault(); refreshDropZone(); const dz = document.getElementById('drop-zone'); dz.style.top = sle.scrollTop + 'px'; dz.classList.add('active') });
+    sle.addEventListener('dragleave', e => { if (!sle.contains(e.relatedTarget)) document.getElementById('drop-zone')?.classList.remove('active') });
+    sle.addEventListener('drop', async e => { e.preventDefault(); document.getElementById('drop-zone')?.classList.remove('active'); if (!currentFolder) return; const f = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.wav')).map(f => window.api.getPathForFile(f) || f.path).filter(Boolean); if (f.length) { await window.api.dropFiles(f, currentFolder); showImportToast(f.length, currentFolder); await loadSounds(); await loadFolders() } });
 
     // Player
     document.getElementById('player-toggle').addEventListener('click', togglePlayback);
@@ -4249,7 +4550,7 @@
             } else if (sidebarMode === 'vault' && !currentCollection) {
                 // In vault mode with no collection selected, search all vault sounds
                 document.getElementById('current-folder-name').textContent = activeVaultData ? activeVaultData.name : 'Select a collection';
-                document.getElementById('sound-list').innerHTML = '<div class="drop-zone" id="drop-zone">Drop WAV files here</div>'; vList.pool = []; vList.sentinel = null;
+                document.getElementById('sound-list').innerHTML = DROP_ZONE_HTML; vList.pool = []; vList.sentinel = null;
                 document.getElementById('sound-count').textContent = '';
             }
             return; 
@@ -4662,6 +4963,8 @@
     document.getElementById('sound-list').addEventListener('scroll', () => {
       updateVirtualList();
       if (selection) positionGlobalToolbar();
+      const dz = document.getElementById('drop-zone');
+      if (dz && dz.classList.contains('active')) dz.style.top = sle.scrollTop + 'px';
     });
 
     // Redraw waveforms when the list container resizes (sidebar toggle, window resize)
@@ -4730,7 +5033,11 @@
       const nm = (snd ? snd.name.replace(/\.wav$/i, '') : 'selection') + '_sel.wav';
       const tmp = await window.api.renderSelectionWav({ channelData: cd, sampleRate: buf.sampleRate, numChannels: nc, bitDepth: 24, fileName: nm });
       e.target.closest('#gtb-drag').classList.remove('active');
-      if (tmp) window.api.startDrag(tmp);
+      if (tmp) {
+        let icon = null;
+        try { icon = makeDragGhost({ peaks: peaksFromSamples(cd[0]), name: snd ? snd.name.replace(/\.wav$/i, '') : 'selection', duration: len / buf.sampleRate, color: modeColor(sidebarMode), badge: 'SELECTION' }); } catch (ex) { console.error('drag ghost:', ex); }
+        window.api.startDrag(tmp, icon);
+      }
     });
 
     // ── Global toolbar: editor open ──
@@ -5435,7 +5742,11 @@
       const snd = sounds.find(x => x.path === selection?.path);
       const nm = (snd ? snd.name.replace(/\.wav$/i, '') : 'edit') + '_edit.wav';
       const tmp = await window.api.renderSelectionWav({ channelData: cd, sampleRate: sr, numChannels: nc, bitDepth: 24, fileName: nm });
-      if (tmp) window.api.startDrag(tmp);
+      if (tmp) {
+        let icon = null;
+        try { icon = makeDragGhost({ peaks: peaksFromSamples(cd[0]), name: snd ? snd.name.replace(/\.wav$/i, '') : 'edit', duration: processed.duration, color: modeColor(sidebarMode), badge: 'EDIT' }); } catch (ex) { console.error('drag ghost:', ex); }
+        window.api.startDrag(tmp, icon);
+      }
     });
 
 

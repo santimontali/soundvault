@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   renderSelectionWav: d=>ipcRenderer.invoke('render-selection-wav',d),
   overwriteAudioFile: d=>ipcRenderer.invoke('overwrite-audio-file',d),
   createNewAudioVersion: d=>ipcRenderer.invoke('create-new-audio-version',d),
-  startDrag: fp=>ipcRenderer.send('ondragstart',fp),
+  startDrag: (fp,icon)=>ipcRenderer.send('ondragstart', icon ? { file: fp, icon } : fp),
   revealInFinder: p=>ipcRenderer.invoke('reveal-in-finder',p),
   // Collections (now scoped to active Vault)
   getCollections: ()=>ipcRenderer.invoke('get-collections'),

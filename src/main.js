@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, nativeImage, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -16,6 +16,11 @@ const CONFIG_PATH = path.join(app.getPath('userData'), 'soundvault-config.json')
 
 // Allow AudioContext to work without user gesture — needed for waveform peak extraction on startup
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
+// SoundVault is a dark UI — force the dark native theme so framework-drawn
+// widgets (e.g. the file-drag pill Chromium composites around our drag icon)
+// render dark instead of the default light system style.
+nativeTheme.themeSource = 'dark';
 function getConfig() { try { if (fs.existsSync(CONFIG_PATH)) return JSON.parse(fs.readFileSync(CONFIG_PATH,'utf-8')); } catch(e){} return { libraryPath: path.join(app.getPath('documents'),'SoundVault') }; }
 function saveConfig(c) { fs.writeFileSync(CONFIG_PATH, JSON.stringify(c,null,2)); }
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
@@ -491,10 +496,25 @@ ipcMain.handle('create-new-audio-version', (_, { originalPath, suffix, channelDa
   }catch(e){console.error('create-new-audio-version:',e);return null;}
 });
 
-// Drag — uses the valid PNG file on disk
-ipcMain.on('ondragstart', (event, filePath) => {
-  if (fs.existsSync(filePath)) {
-    event.sender.startDrag({ file: filePath, icon: DRAG_ICON_PATH });
+// Drag — the renderer renders a waveform "ghost" chip (canvas → data URL) so
+// the OS drag image shows the actual sound instead of a bare file path.
+// Falls back to the valid 1x1 PNG on disk when no ghost is provided.
+ipcMain.on('ondragstart', (event, payload) => {
+  const filePath = typeof payload === 'string' ? payload : payload?.file;
+  if (!filePath || !fs.existsSync(filePath)) return;
+  let icon = DRAG_ICON_PATH;
+  if (payload && typeof payload === 'object' && typeof payload.icon === 'string' && payload.icon.startsWith('data:image/')) {
+    try {
+      const ni = nativeImage.createFromDataURL(payload.icon);
+      if (!ni.isEmpty()) icon = ni;
+    } catch (e) { console.error('[IPC] drag icon:', e); }
+  }
+  try {
+    event.sender.startDrag({ file: filePath, icon });
+  } catch (e) {
+    // Never let a bad custom icon kill the drag itself
+    console.error('[IPC] startDrag with custom icon failed, retrying with fallback:', e);
+    try { event.sender.startDrag({ file: filePath, icon: DRAG_ICON_PATH }); } catch (e2) { console.error('[IPC] startDrag fallback failed:', e2); }
   }
 });
 
