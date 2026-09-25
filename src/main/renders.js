@@ -94,13 +94,22 @@ class Renders {
         });
     }
 
-    /** Remove staged (never dragged) renders. */
-    pruneStaging() {
+    /**
+     * Remove staged (never dragged) renders. With `before` (ms since epoch) only
+     * the ones written earlier: at startup that clears the last session's
+     * previews without touching what this session is preparing right now (a
+     * render being written, or one about to be dragged).
+     */
+    pruneStaging({ before = Infinity } = {}) {
         let n = 0;
         try {
             for (const d of fs.readdirSync(this.stagingDir, { withFileTypes: true })) {
                 if (!d.isFile()) continue;
-                try { fs.unlinkSync(path.join(this.stagingDir, d.name)); n++; } catch (e) { /* in use: next time */ }
+                const f = path.join(this.stagingDir, d.name);
+                try {
+                    if (before !== Infinity && fs.statSync(f).mtimeMs >= before) continue;
+                    fs.unlinkSync(f); n++;
+                } catch (e) { /* in use or gone: next time */ }
             }
         } catch (e) { /* no staging dir */ }
         for (const [k, v] of this._byKey) if (!fs.existsSync(v)) this._byKey.delete(k);

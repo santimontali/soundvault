@@ -610,7 +610,8 @@ app.on('second-instance', () => {
 
 app.whenReady().then(async () => {
     audioProtocol.handle(protocol, isPathAllowed);
-    setTimeout(() => renders.pruneStaging(), 5000);   // previews never dragged last session
+    const bootAt = Date.now();
+    setTimeout(() => renders.pruneStaging({ before: bootAt }), 5000);   // previews never dragged last session (not this one's)
     mainWindow = createMainWindow({
         preload: path.join(__dirname, 'preload.js'),
         indexHtml: path.join(__dirname, 'renderer', 'index.html'),

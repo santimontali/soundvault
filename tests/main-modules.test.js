@@ -211,6 +211,14 @@ test('Renders: unique persistent names and de-dup by key', async () => {
     assert.strictEqual(again.path, p1, 'key de-dup follows the promoted file');
     assert.deepStrictEqual(r.promote(['C:\\elsewhere\\x.wav']), ['C:\\elsewhere\\x.wav'], 'non-staged paths untouched');
     assert.strictEqual((await r.stats()).files, 1);
-    assert.strictEqual(r.pruneStaging(), 1, 'the undragged preview is removed');
+    // Startup prune: only the previous session's previews, never one this session is preparing.
+    const bootAt = Date.now() - 1000;
+    const fresh = await r.render({ channels: ch, sampleRate: 48000, baseName: 'Fresh', suffix: '[edit]' });
+    const old = path.join(r.stagingDir, 'Old preview [edit].wav');
+    fs.writeFileSync(old, 'x');
+    fs.utimesSync(old, new Date(bootAt - 60000), new Date(bootAt - 60000));
+    assert.strictEqual(r.pruneStaging({ before: bootAt }), 1, 'only the old preview goes at startup');
+    assert.ok(fs.existsSync(fresh.path) && !fs.existsSync(old), 'the render made this session stays');
+    assert.strictEqual(r.pruneStaging(), 2, 'on quit every undragged preview is removed');
     assert.ok(fs.existsSync(p1), 'dragged renders are never pruned');
 });
