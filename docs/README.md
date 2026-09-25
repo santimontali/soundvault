@@ -5,6 +5,7 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Cómo está hecha la app hoy: procesos, datos, búsqueda, Echo, arranque. Leelo antes de tocar el núcleo. |
 | [CASOS_DE_USO.md](CASOS_DE_USO.md) | Catálogo de casos de uso con su comportamiento y cómo quedó verificado cada uno (tests y mediciones). |
 | [research/RECOMENDACIONES_VAULT.md](research/RECOMENDACIONES_VAULT.md) | Investigación para el Brief del vault: modelos de imagen, licencias, vocabulario UCS, presupuesto de rendimiento. |
+| [research/LIBRERIAS_ONLINE.md](research/LIBRERIAS_ONLINE.md) | Investigación para sumar librerías online (Freesound y otras): APIs, licencias, cómo lo hacen SoundQ y otras apps, diseño técnico, riesgos y plan por fases. |
 | [design/](design/) | Maquetas y exploraciones visuales (HTML autocontenidos, se abren con doble clic). |
 | [archive/1.x/](archive/1.x/) | Planes y RFC de SoundVault 1.x. Históricos: describen la app anterior, no la actual. |
 

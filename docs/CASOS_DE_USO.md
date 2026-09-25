@@ -8,7 +8,7 @@ Qué hace la app en cada situación de uso tradicional y cómo quedó verificado
 Referencias a tests:
 - `npm test`: 92 tests unitarios.
 - `npm run test:engine`: motor completo en Electron (33 verificaciones) y espectrograma CLAP.
-- `npm run test:e2e`: app completa con carpeta de usuario aislada, pruebas smoke y engine (14 verificaciones), el Brief (38 verificaciones) y 7 pruebas del editor (134 verificaciones).
+- `npm run test:e2e`: app completa con carpeta de usuario aislada, pruebas smoke y engine (14 verificaciones), el Brief (49 verificaciones), modos y colores (20 verificaciones: cambio de modo, barra de título, color del vault) y 7 pruebas del editor (134 verificaciones).
 - `node tests/e2e/packaged-smoke.js`: la app ya compilada (8 verificaciones, incluidos el Brief y el modelo de imágenes).
 
 ---
@@ -38,6 +38,7 @@ Referencias a tests:
 | B5 | Cambios hechos con la app cerrada | Reconciliación al abrir, por `mtime` de carpeta | ✅ test "persisted index … offline changes" |
 | B6 | Nombres difíciles (ñ, 日本語, emoji, `%`, `&`, `#`, 260+ caracteres) | Se ven y reproducen. El protocolo de audio no decodifica dos veces (antes fallaba con `%`) | ✅ fixtures E2E |
 | B7 | Carpetas ignoradas (`.git`, `node_modules`, `$RECYCLE.BIN`, `System Volume Information`) | Se excluyen por nombre de carpeta, no por ruta absoluta (antes una librería dentro de `x.github.io` quedaba vacía) | ✅ test |
+| B8 | Cambiar de modo (clic en la marca, Ctrl+Tab) con toda la librería en la lista | La animación de la marca no espera ni se traba: mientras se mueve, el panel muestra filas de relleno quietas y la lista llega al terminar, en el mismo lugar. La causa del tirón era recibir la librería entera como 70k objetos (la ventana quedaba congelada ~0,45 s en plena animación); ahora viaja empaquetada (~20 ms) y volver a una lista sin cambios no la transfiere de nuevo | ✅ E2E modes · **librería sintética de 70k: ninguna tarea larga durante la animación, la lista aparece a ~0,6 s (antes ~1,1 s, con la ventana congelada ~0,45 s en plena animación)** |
 
 ## C. Audición
 
@@ -127,12 +128,13 @@ Referencias a tests:
 | I1 | Crear, renombrar, borrar, colorear colecciones (con deshacer). Nombres con comillas o `<script>` son texto inerte | ✅ `VaultStore` test |
 | I2 | Agregar (menú, tecla C, arrastrar a la colección, Resonance) y quitar (con deshacer) | ✅ |
 | I3 | Archivos que faltan (movidos o borrados por fuera) | Banner "Remove missing". Si se movieron dentro de la app, las rutas se actualizan solas en todos los vaults | ✅ |
-| I4 | Vaults: crear, editar, duplicar, borrar, cambiar. El color del vault es identidad (logo, punto, barra de colección), nunca pinta la interfaz de "peligro" | ✅ |
+| I4 | Vaults: crear, editar, duplicar, borrar, cambiar. En modo Vault el color del vault tiñe la interfaz (botones, selección, foco, progreso, el botón de reproducir) con un tono legible sobre el fondo oscuro: uno muy oscuro se aclara, uno rojo pasa a un rosa claro para que los errores y las acciones destructivas conserven su rojo. El logo y la palabra del modo llevan el tono del vault; en modo Sound vuelve el acento global | ✅ E2E modes (vault rojo y vault oscuro, contraste AA) |
 | I5 | Resonance: sugerencias para una colección. Una colección mixta (pasos + explosiones) recibe de ambos. Duplicados exactos se muestran una sola vez | ✅ |
 | I6 | `vaults.json` dañado | Se recupera del `.bak` (antes se reemplazaba por un vault vacío y se perdían todas las colecciones) | ✅ test |
 | I7 | Brief del vault: palabras, sonidos de referencia e imágenes se convierten en colecciones sugeridas, cada una con sus candidatos. Un sonido aparece en una sola tarjeta. Lo que no tiene material fuerte en la librería se informa como "sin coincidencia" en vez de inventar una tarjeta floja | ✅ engine test (brief) · **librería real: 10 palabras dan 7 tarjetas en 52 ms, ningún sonido repetido** |
 | I8 | Imagen de referencia: se reconocen las cosas que muestra, con palabras del vocabulario UCS atadas a su categoría ("tiger" → wild cat, "sneakers", "glacier" → tundra), mirando la imagen entera y recortes (centro, extremos y zoom) para no perder lo chico. Cada palabra tiene que estar respaldada por la categoría: así no pasan las letras que el modelo "lee" ("MASHIK" como "mash"). La búsqueda prueba la palabra y la categoría y se queda con la que encuentra más en la librería | ✅ **librería real, ~50 imágenes: un tigre trae rugidos de tigre de Bengala y leopardo negro, una playa grabaciones de costa, un lago olas y un pantano con ranas, una portada gore "gore", "blood" y "vomit", una de armas pistolas y disparos.** 🟡 Las portadas de producto llenas de texto dan palabras flojas ("laserdisc") y el arte muy estilizado se entiende poco: el key art de un juego con una criatura en la oscuridad solo da "glitch". Una etiqueta se quita con un clic |
 | I9 | Imágenes compartidas entre vaults: se guardan una vez por contenido y se borran cuando ningún vault las usa | ✅ `VaultStore` test |
+| I10 | Inicio del vault: sus colecciones en tarjetas (color, nombre, cantidad y los primeros sonidos para escuchar); un clic abre la colección y soltar archivos sobre una tarjeta los agrega. Las sugerencias aparecen solo al pedirlas ("Suggest collections", o "Start from a brief" en un vault vacío) y quedan abiertas durante la sesión; "Find more" en cada tarjeta trae sonidos afines para revisar. Nada se calcula en segundo plano | ✅ E2E brief (cuenta los pedidos de sugerencias en el proceso principal: cero mientras no se piden) · **150 colecciones sobre la librería de 70k: primera pantalla en ~25 ms, desplazamiento a 60 fps, formas de onda cargadas a medida que aparecen** |
 
 ## J. Gestión de archivos
 
@@ -169,14 +171,14 @@ Referencias a tests:
 |---|---|---|
 | L1 | Librería, rescan, vigilar cambios, análisis automático | ✅ |
 | L2 | Reproducción automática, loop, volumen, carpeta de renders (validada fuera de la librería) | ✅ |
-| L3 | Color de acento | Un solo acento interactivo. Contraste AA en textos | ✅ |
+| L3 | Color de acento | El acento global rige el modo Sound; en modo Vault manda el color del vault (ver I4). Contraste AA en textos | ✅ |
 | L4 | Hoja de atajos | ✅ |
 
 ## M. Ventana y sistema
 
 | # | Caso | Estado |
 |---|---|---|
-| M1 | Barra de título integrada (WCO), sin menú, tema oscuro nativo | ✅ |
+| M1 | Barra de título integrada (WCO), sin menú, tema oscuro nativo. La marca (cambio de modo) ocupa solo el logo y la palabra; el resto de la barra arrastra la ventana | ✅ E2E modes (1280 y 1440 px) |
 | M2 | Ventanas chicas, zoom 150%, DPI 125/150% | ✅ auditoría UI |
 | M3 | Cerrar durante el catálogo | Se guarda el estado, se cierra la base, el índice HNSW se persiste, los workers terminan limpio y se borran las previsualizaciones no arrastradas | ✅ |
 | M4 | Si el motor IA no puede cargar (antivirus, DLL faltante), la librería igual funciona | Los modelos se cargan en diferido | ✅ packaging test |
