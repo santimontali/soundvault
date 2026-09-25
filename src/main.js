@@ -1,685 +1,476 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, nativeImage, nativeTheme } = require('electron');
+'use strict';
+/**
+ * SoundVault: main process bootstrap.
+ * Heavy work lives elsewhere: peaks in a worker, CLAP/Echo in the engine
+ * host worker, audio rendering is a single typed-array pass. This file wires
+ * modules together and exposes a validated IPC surface.
+ */
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, nativeImage, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const os = require('os');
-const zlib = require('zlib');
-const semanticEngine = require('./semantic-engine');
-// Pure, Electron-free search/audio modules (Phase 2/3 refactor: extracted so
-// the logic is unit-testable in plain Node and has a single source of truth).
+
+const audioProtocol = require('./main/audio-protocol');
+audioProtocol.registerPrivileges(protocol);   // must precede app 'ready'
+
+const { createMainWindow } = require('./main/window');
+const { SettingsStore } = require('./main/settings-store');
+const { VaultStore } = require('./main/vault-store');
+const { LibraryIndex } = require('./main/library-index');
+const { LibraryWatcher } = require('./main/library-watcher');
+const { FileOps } = require('./main/file-ops');
+const { Renders } = require('./main/renders');
+const { PeaksService } = require('./main/peaks-service');
+const { createEngine } = require('./main/engine-client');
+const P = require('./main/paths');
 const { searchSounds, tokenizeEntry } = require('./search/lexical-search');
-const { dedupeByPath } = require('./search/vector-search');
-const audioPeaks = require('./audio/peaks');
-const extractPeaksFromWAV = audioPeaks.extractPeaksFromWAV;
-const extractPeaksWithFFmpeg = audioPeaks.extractPeaksWithFFmpeg;
+const { translateQuery } = require('./search/translate');
+const { resolveFfmpegPath } = require('./packaging/ffmpeg-path');
 
-const CONFIG_PATH = path.join(app.getPath('userData'), 'soundvault-config.json');
-
-// Allow AudioContext to work without user gesture — needed for waveform peak extraction on startup
+nativeTheme.themeSource = 'dark';
+if (process.platform === 'win32') app.setAppUserModelId('com.soundvault.app');
+// Auditioning must start on the first click/keypress (and auto-play on arrow keys).
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 
-// SoundVault is a dark UI — force the dark native theme so framework-drawn
-// widgets (e.g. the file-drag pill Chromium composites around our drag icon)
-// render dark instead of the default light system style.
-nativeTheme.themeSource = 'dark';
-function getConfig() { try { if (fs.existsSync(CONFIG_PATH)) return JSON.parse(fs.readFileSync(CONFIG_PATH,'utf-8')); } catch(e){} return { libraryPath: path.join(app.getPath('documents'),'SoundVault') }; }
-function saveConfig(c) { fs.writeFileSync(CONFIG_PATH, JSON.stringify(c,null,2)); }
-function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
-
-// ═══ Create a VALID 1x1 PNG file on disk ═══
-// Electron's startDrag needs an icon file that actually loads as an image.
-const DRAG_ICON_PATH = path.join(app.getPath('userData'), 'sv-drag.png');
-function createDragIcon() {
-  if (fs.existsSync(DRAG_ICON_PATH)) return;
-  // Construct a valid 1x1 RGBA PNG manually
-  const width = 1, height = 1;
-  // Raw pixel data: 1 filter byte (0=None) + 4 bytes RGBA per pixel
-  const rawData = Buffer.from([0, 0, 0, 0, 0]); // filter=0, R=0, G=0, B=0, A=0 (transparent)
-  const compressed = zlib.deflateSync(rawData);
-  const png = Buffer.alloc(8 + 25 + (12 + compressed.length) + 12);
-  let off = 0;
-  // PNG signature
-  Buffer.from([137,80,78,71,13,10,26,10]).copy(png, off); off += 8;
-  // IHDR chunk
-  png.writeUInt32BE(13, off); off += 4;
-  png.write('IHDR', off); off += 4;
-  png.writeUInt32BE(width, off); off += 4;
-  png.writeUInt32BE(height, off); off += 4;
-  png.writeUInt8(8, off++); // bit depth
-  png.writeUInt8(6, off++); // color type RGBA
-  png.writeUInt8(0, off++); // compression
-  png.writeUInt8(0, off++); // filter
-  png.writeUInt8(0, off++); // interlace
-  const ihdrData = png.slice(off - 17, off);
-  const crc1 = crc32(Buffer.concat([Buffer.from('IHDR'), ihdrData.slice(4)]));
-  png.writeInt32BE(crc1, off); off += 4;
-  // IDAT chunk
-  png.writeUInt32BE(compressed.length, off); off += 4;
-  png.write('IDAT', off); off += 4;
-  compressed.copy(png, off); off += compressed.length;
-  const crc2 = crc32(Buffer.concat([Buffer.from('IDAT'), compressed]));
-  png.writeInt32BE(crc2, off); off += 4;
-  // IEND chunk
-  png.writeUInt32BE(0, off); off += 4;
-  png.write('IEND', off); off += 4;
-  const crc3 = crc32(Buffer.from('IEND'));
-  png.writeInt32BE(crc3, off); off += 4;
-  fs.writeFileSync(DRAG_ICON_PATH, png.slice(0, off));
-}
-// CRC32 for PNG chunks
-function crc32(buf) {
-  let crc = 0xFFFFFFFF;
-  for (let i = 0; i < buf.length; i++) {
-    crc ^= buf[i];
-    for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
-  }
-  return (crc ^ 0xFFFFFFFF) | 0;
+if (!app.requestSingleInstanceLock()) {
+    app.quit();
+    return;
 }
 
-// ═══ Vaults System ═══
-// Vaults are curatorial layers over the shared library. Each vault has its own collections.
-// The library (libraryPath) is shared — vaults only differ in which collections they hold.
-const VAULTS_PATH = path.join(app.getPath('userData'), 'soundvault-vaults.json');
+const USER_DATA = app.getPath('userData');
+const settings = new SettingsStore(path.join(USER_DATA, 'soundvault-config.json'), { documentsDir: app.getPath('documents') });
+const vaults = new VaultStore(path.join(USER_DATA, 'soundvault-vaults.json'), () => settings.get().libraryPath);
+const library = new LibraryIndex({ tokenizeEntry, cacheFile: path.join(USER_DATA, 'soundvault-library.json') });
+const watcher = new LibraryWatcher(library);
+const fileOps = new FileOps({ library, trashItem: p => shell.trashItem(p) });
+const renders = new Renders(() => settings.rendersDir);
+const FFMPEG = resolveFfmpegPath(require('ffmpeg-static'));
+const peaks = new PeaksService({ dbPath: path.join(USER_DATA, 'soundvault-peaks.db'), ffmpegPath: FFMPEG });
+const engine = createEngine({ userData: USER_DATA, isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, ffmpegPath: FFMPEG });
 
-function loadVaultsData() {
-  try { if (fs.existsSync(VAULTS_PATH)) return JSON.parse(fs.readFileSync(VAULTS_PATH, 'utf-8')); } catch(e){}
-  return null;
+let mainWindow = null;
+const send = (channel, data) => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, data); };
+
+// ── library lifecycle ──────────────────────────────────────────────────
+async function openLibrary(root) {
+    watcher.stop();
+    // Only the default library (Documents\SoundVault) is created on demand. A
+    // user-chosen folder that is missing (unplugged drive, renamed folder) is
+    // reported as "Library not found" instead of being silently re-created empty.
+    const isDefault = P.key(root || '') === P.key(path.join(app.getPath('documents'), 'SoundVault'));
+    if (isDefault) { try { fs.mkdirSync(root, { recursive: true }); } catch (e) { /* reported via status */ } }
+    const stats = await library.setRoot(root);
+    if (settings.get().watcher) watcher.start();
+    engine.setLibrary(root);
+    send('library:status', libraryStatus());
+    return stats;
 }
-function saveVaultsData(data) { fs.writeFileSync(VAULTS_PATH, JSON.stringify(data, null, 2)); }
 
-function generateVaultId() {
-  return 'v_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+function libraryStatus() {
+    return {
+        root: library.root,
+        exists: !!library.root && library.rootExists,
+        ready: library.ready,
+        scanning: !!library.scanning,
+        syncing: !!library.background,
+        progress: library.progress,
+        count: library.size,
+        scan: library.scanStats,
+        watching: watcher.enabled,
+    };
 }
 
-function initVaults() {
-  let data = loadVaultsData();
-  if (data && data.vaults && data.vaults.length > 0) return data;
-  // First run or migration: create default vault, migrate old collections if they exist
-  const defaultId = generateVaultId();
-  let collections = {};
-  let collectionColors = {};
-  // Migrate from old .soundvault-collections.json
-  const oldColPath = path.join(getConfig().libraryPath, '.soundvault-collections.json');
-  try {
-    if (fs.existsSync(oldColPath)) {
-      const old = JSON.parse(fs.readFileSync(oldColPath, 'utf-8'));
-      collectionColors = old.__colors || {};
-      delete old.__colors;
-      collections = old;
+// The library index is the single source of truth for what exists on disk:
+// every change (watcher, reconcile, imports, deletes, saves) reaches the AI
+// engine through here. Moves/renames additionally go through applyMoves() so
+// vectors and fingerprints follow the file instead of being re-analysed.
+library.on('changed', ev => {
+    send('library:changed', ev);
+    if (ev.reset) { scheduleCatalog(); return; }
+    const added = (ev.added || []).map(p => { const e = library.get(p); return e ? { path: e.path, mtime: e.mtime, size: e.size } : { path: p }; });
+    if (added.length || (ev.removed && ev.removed.length)) engine.filesChanged({ added, removed: ev.removed || [] });
+});
+library.on('stats-filled', () => scheduleCatalog());
+library.on('progress', p => send('library:progress', p));
+let engineWasReady = false;
+engine.onStatus(st => {
+    send('engine:status', st);
+    // Started or restarted after a crash (a new host has an empty queue): catch up.
+    if (st.ready && !engineWasReady) scheduleCatalog(500);
+    engineWasReady = !!st.ready;
+});
+
+// ── AI catalog ─────────────────────────────────────────────────────────
+let catalogTimer = null;
+let catalogFor = null;                              // library version + engine host of the last automatic diff
+function scheduleCatalog(delay = 2000) {
+    clearTimeout(catalogTimer);
+    if (settings.get().autoCatalog === false) return;
+    catalogTimer = setTimeout(() => runCatalog({ auto: true }).catch(e => console.warn('[catalog]', e.message)), delay);
+}
+/**
+ * Diff the whole library against the AI index (~0.4 s of engine time for 70k
+ * files). Automatic runs are skipped when neither the library nor the engine
+ * host changed since the last one (startup used to diff twice in a row).
+ */
+async function runCatalog(opts = {}) {
+    if (!library.root || !library.ready) return null;
+    if (library.scanning) await library.scanning;
+    if (!engine.status().ready) return null;        // the engine's ready status schedules one
+    const key = library.version + ':' + engine.hostGen();
+    if (opts.auto && key === catalogFor) return null;
+    const all = library.all();
+    const n = all.length;
+    const files = { paths: new Array(n), mtimes: new Float64Array(n), sizes: new Float64Array(n) };
+    for (let i = 0; i < n; i++) { const e = all[i]; files.paths[i] = e.path; files.mtimes[i] = e.mtime || 0; files.sizes[i] = e.size || 0; }
+    const res = await engine.index(files, { retryFailed: !!opts.retryFailed });
+    if (res && !res.deferred) catalogFor = key;
+    return res;
+}
+
+/** Propagate moves/renames to collections (all vaults), the engine DB and peaks cache. */
+function applyMoves(moves) {
+    if (!moves || !moves.length) return;
+    vaults.remapPaths(moves);
+    engine.pathsMoved(moves);
+    watcher.suppress(moves.flatMap(m => [m.from, m.to]));
+    send('collections:changed', {});
+}
+
+// ── helpers ────────────────────────────────────────────────────────────
+const str = v => typeof v === 'string' ? v : '';
+const strArr = v => Array.isArray(v) ? v.filter(x => typeof x === 'string' && x) : [];
+const pub = e => LibraryIndex.public(e);
+
+function scopeEntries({ scope, folder, collection, recursive = true } = {}) {
+    if (scope === 'folder') return library.list({ folder: str(folder), recursive, sort: 'name' });
+    if (scope === 'collection') return library.resolvePaths(vaults.collectionPaths(str(collection)) || []);
+    if (scope === 'vault') return library.resolvePaths(vaults.vaultPaths());
+    return library.all();
+}
+
+function isPathAllowed(p) {
+    return (library.root && P.isInside(library.root, p)) || P.isInside(settings.rendersDir, p) || library.has(p)
+        || vaults.vaultPaths().some(v => P.key(v) === P.key(p));
+}
+
+// ── IPC: app & settings ───────────────────────────────────────────────
+ipcMain.handle('app:info', () => ({ version: app.getVersion(), platform: process.platform, userData: USER_DATA, isPackaged: app.isPackaged }));
+ipcMain.handle('settings:get', () => settings.public());
+ipcMain.handle('settings:set', (_e, patch) => {
+    const before = settings.get();
+    const was = { watcher: before.watcher, autoCatalog: before.autoCatalog };
+    const out = settings.set(patch && typeof patch === 'object' ? patch : {});
+    if (was.watcher !== out.watcher) { if (out.watcher) watcher.start(); else watcher.stop(); send('library:status', libraryStatus()); }
+    if (was.autoCatalog === false && out.autoCatalog !== false) scheduleCatalog(500);       // resumed: catch up
+    return out;
+});
+ipcMain.handle('settings:choose-library', async () => {
+    const r = await dialog.showOpenDialog(mainWindow, { title: 'Choose your sound library folder', properties: ['openDirectory', 'createDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const root = r.filePaths[0];
+    if (P.isInside(root, settings.rendersDir)) return { error: 'The renders folder cannot be inside the library.' };
+    const prevRoot = settings.get().libraryPath;
+    settings.setInternal(d => { d.libraryPath = root; d.lastState = { mode: d.lastState.mode, folder: '', collection: d.lastState.collection }; });
+    await openLibrary(root);
+    const relinked = relinkCollections(prevRoot, root);
+    send('settings:changed', settings.public());
+    return { ...settings.public(), relinked };
+});
+
+/**
+ * The library moved (new drive letter, copied to another disk): collection
+ * items that exist at the same relative path under the new root follow it.
+ * (The AI engine relinks its own data the same way on the next catalog.)
+ */
+function relinkCollections(prevRoot, root) {
+    if (!prevRoot || P.key(prevRoot) === P.key(root)) return 0;
+    const moves = [];
+    let stranded = 0;
+    for (const p of vaults.allPaths()) {
+        if (!P.isInside(prevRoot, p) || library.has(p)) continue;
+        stranded++;
+        const to = path.join(root, path.relative(prevRoot, p));
+        if (library.has(to)) moves.push({ from: p, to });
     }
-  } catch(e) {}
-  data = {
-    activeVaultId: defaultId,
-    vaults: [{
-      id: defaultId,
-      name: 'Main Vault',
-      color: '#c8f76d',
-      description: '',
-      createdAt: Date.now(),
-      collections: collections,
-      collectionColors: collectionColors
-    }]
-  };
-  saveVaultsData(data);
-  return data;
+    // A moved library matches (nearly) everything; a different library that
+    // happens to share a few relative paths is left alone.
+    if (!moves.length || moves.length < stranded * 0.3) return 0;
+    vaults.remapPaths(moves);
+    send('collections:changed', {});
+    return moves.length;
 }
+ipcMain.handle('settings:choose-renders-dir', async () => {
+    const r = await dialog.showOpenDialog(mainWindow, { title: 'Folder for rendered selections and edits', properties: ['openDirectory', 'createDirectory'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    if (library.root && P.isInside(library.root, r.filePaths[0])) return { error: 'Choose a folder outside the library so renders are not indexed.' };
+    settings.setInternal(d => { d.rendersDir = r.filePaths[0]; });
+    send('settings:changed', settings.public());
+    return settings.public();
+});
+ipcMain.handle('settings:open-folder', async (_e, which) => {
+    const target = which === 'renders' ? settings.rendersDir : which === 'data' ? USER_DATA : library.root;
+    if (!target) return false;
+    fs.mkdirSync(target, { recursive: true });
+    return (await shell.openPath(target)) === '';
+});
 
-function getActiveVault() {
-  const data = initVaults();
-  return data.vaults.find(v => v.id === data.activeVaultId) || data.vaults[0];
+// ── IPC: library ───────────────────────────────────────────────────────
+ipcMain.handle('library:status', () => libraryStatus());
+ipcMain.handle('library:tree', async () => { if (library.scanning) await library.scanning; return library.tree(); });
+ipcMain.handle('library:list', async (_e, opts = {}) => {
+    if (library.scanning) await library.scanning;
+    const list = library.list({ folder: str(opts.folder), recursive: opts.recursive !== false, sort: str(opts.sort) || 'name' });
+    return list.map(pub);
+});
+/**
+ * File-name search. Spanish queries also search their English translation
+ * ("pasos grava" → footsteps gravel): libraries are named in English.
+ */
+function lexical(pool, q, limit) {
+    const res = searchSounds(pool, q, { limit });
+    const tq = translateQuery(q);
+    if (!tq.changed) return res;
+    const extra = searchSounds(pool, tq.text, { limit });
+    const full = res.filter(r => !r.partial);
+    const seen = new Set(full.map(r => r.path));
+    for (const r of extra) if (!r.partial && !seen.has(r.path)) { full.push(r); seen.add(r.path); }
+    if (full.length) return full.slice(0, limit);
+    return res.length ? res : extra;
 }
+ipcMain.handle('library:search', async (_e, opts = {}) => {
+    if (library.scanning) await library.scanning;
+    const q = str(opts.q).slice(0, 300);
+    const pool = scopeEntries(opts);
+    const limit = Math.max(1, Math.min(5000, opts.limit | 0 || 2000));
+    return lexical(pool, q, limit).map(r => ({ ...pub(r), score: r.score, partial: !!r.partial }));
+});
+ipcMain.handle('library:resolve', (_e, paths) => library.resolvePaths(strArr(paths)).map(pub));
+ipcMain.handle('library:rescan', async () => { await library.rescan(); library.save(); scheduleCatalog(500); return libraryStatus(); });
 
-// Collections now read/write from active vault
-function loadCollections() {
-  const vault = getActiveVault();
-  if (!vault) return {};
-  const result = { ...vault.collections };
-  result.__colors = vault.collectionColors || {};
-  return result;
-}
-function saveCollections(cols) {
-  const data = initVaults();
-  const vault = data.vaults.find(v => v.id === data.activeVaultId);
-  if (!vault) return;
-  const colors = cols.__colors || {};
-  delete cols.__colors;
-  vault.collections = cols;
-  vault.collectionColors = colors;
-  saveVaultsData(data);
-}
+// ── IPC: file operations ───────────────────────────────────────────────
+ipcMain.handle('files:import', async (_e, paths, targetRel) => {
+    const sources = strArr(paths);
+    const res = await fileOps.importPaths(sources, str(targetRel), p => send('files:progress', { op: 'import', ...p }));
+    watcher.suppress(res.added);
+    return res;
+});
+ipcMain.handle('files:import-dialog', async (_e, targetRel) => {
+    const r = await dialog.showOpenDialog(mainWindow, { title: 'Import sounds', properties: ['openFile', 'multiSelections'], filters: [{ name: 'WAV audio', extensions: ['wav'] }] });
+    if (r.canceled || !r.filePaths.length) return null;
+    const res = await fileOps.importPaths(r.filePaths, str(targetRel), p => send('files:progress', { op: 'import', ...p }));
+    watcher.suppress(res.added);
+    return res;
+});
+ipcMain.handle('files:move', async (_e, paths, targetRel) => {
+    const res = await fileOps.moveFiles(strArr(paths), str(targetRel));
+    applyMoves(res.moves);
+    return res;
+});
+ipcMain.handle('files:rename', async (_e, p, name) => {
+    const res = await fileOps.renameFile(str(p), str(name));
+    if (res.ok) applyMoves(res.moves);
+    return res;
+});
+ipcMain.handle('files:trash', async (_e, paths) => {
+    const res = await fileOps.trashFiles(strArr(paths));
+    watcher.suppress(res.removed);
+    peaks.forget(res.removed);
+    return res;
+});
+ipcMain.handle('files:mkdir', (_e, parentRel, name) => fileOps.createFolder(str(parentRel), str(name)));
+ipcMain.handle('files:rename-folder', async (_e, rel, name) => {
+    const res = await fileOps.renameFolder(str(rel), str(name));
+    if (res.ok) { applyMoves([res.dirMove]); engine.pathsMoved(res.moves); peaks.forget(res.moves.map(m => m.from)); }
+    return res;
+});
+ipcMain.handle('files:trash-folder', async (_e, rel) => {
+    const res = await fileOps.trashFolder(str(rel));
+    if (res.ok) { watcher.suppress(res.removed); peaks.forget(res.removed); }
+    return res;
+});
+ipcMain.handle('files:reveal', (_e, p) => { if (str(p)) shell.showItemInFolder(p); return true; });
+ipcMain.handle('files:open-folder', async (_e, rel) => {
+    try { const dir = P.fromRel(library.root, str(rel)); return (await shell.openPath(dir)) === ''; } catch (e) { return false; }
+});
 
-let mainWindow;
-function createWindow() {
-  mainWindow = new BrowserWindow({ width:1100, height:700, minWidth:800, minHeight:500, backgroundColor:'#1a1a1e', titleBarStyle:'hiddenInset', trafficLightPosition:{x:15,y:15},
-    webPreferences:{ nodeIntegration:false, contextIsolation:true, sandbox:false, preload:path.join(__dirname,'preload.js') }
-  });
-  mainWindow.loadFile(path.join(__dirname,'index.html'));
-  if (process.argv.includes('--dev')) mainWindow.webContents.openDevTools();
-}
-
-function registerProtocol() {
-  protocol.handle('soundvault', req => {
-    const url=new URL(req.url), fp=decodeURIComponent(url.searchParams.get('path')||'');
-    if(!fp||!fs.existsSync(fp)) return new Response('Not found',{status:404});
-    if(!fp.toLowerCase().endsWith('.wav')) return new Response('Forbidden',{status:403});
-    const fileUrl = require('url').pathToFileURL(fp).href;
-    return net.fetch(fileUrl);
-  });
-}
-
-let soundCache = [];
-let soundCacheReady = false;
-let soundCacheResolve = null;
-let soundCachePromise = new Promise(r => { soundCacheResolve = r; });
-let soundCacheMap = new Map();
-function rebuildSoundCacheMap() {
-  soundCacheMap = new Map();
-  for (const s of soundCache) soundCacheMap.set(s.path, s);
-}
-async function initSoundCache() {
-  soundCacheReady = false;
-  soundCachePromise = new Promise(r => { soundCacheResolve = r; });
-  const lib = getConfig().libraryPath;
-  try {
-    const arr = await fs.promises.readdir(lib, { recursive: true, withFileTypes: true });
-    soundCache = [];
-    const batch = [];
-    for (const p of arr) {
-      if (!p.isFile() || !p.name.toLowerCase().endsWith('.wav')) continue;
-      // Skip node_modules etc
-      if (p.parentPath.includes('node_modules') || p.parentPath.includes('.git')) continue;
-      const fullPath = path.join(p.parentPath, p.name);
-      const rel = path.relative(lib, fullPath);
-      const item = {
-        name: p.name,
-        path: fullPath,
-        folder: path.dirname(rel).replace(/\\/g, '/'),
-        topLevel: rel.split(path.sep)[0]
-      };
-      item._tokens = tokenizeEntry(item);
-      batch.push(item);
+// ── IPC: audio ─────────────────────────────────────────────────────────
+ipcMain.handle('audio:peaks', async (_e, items) => {
+    if (!Array.isArray(items)) return {};
+    const clean = [];
+    for (const it of items.slice(0, 400)) {
+        const p = typeof it === 'string' ? it : it && str(it.path);
+        if (!p) continue;
+        let e = library.get(p);
+        if (e && !e.mtime) {   // first run: sizes/dates are filled lazily
+            const st = await fs.promises.stat(p).catch(() => null);
+            if (st) { e.size = st.size; e.mtime = st.mtimeMs; }
+        }
+        clean.push({ path: p, mtime: e ? e.mtime : (it.mtime || 0), size: e ? e.size : (it.size || 0) });
     }
-    
-    // Async stat chunks to prevent blocking event loop for 70k files
-    const chunkSize = 2500;
-    for (let i = 0; i < batch.length; i += chunkSize) {
-      const chunk = batch.slice(i, i + chunkSize);
-      await Promise.all(chunk.map(async (item) => {
-        try {
-          const st = await fs.promises.stat(item.path);
-          item.size = st.size;
-          item.dateAdded = st.mtimeMs;
-        } catch(e) { item.size = 0; item.dateAdded = 0; }
-      }));
-      soundCache.push(...chunk);
-    }
-    soundCache.sort((a,b) => b.dateAdded - a.dateAdded);
-  } catch(e) { console.error('Cache init fail', e); }
-  rebuildSoundCacheMap();
-  soundCacheReady = true;
-  soundCacheResolve();
+    return peaks.get(clean);
+});
+function channelsFrom(arr) {
+    return (Array.isArray(arr) ? arr : []).map(c => c instanceof Float32Array ? c : new Float32Array(c.buffer || c, c.byteOffset || 0, (c.byteLength || c.length * 4) / 4));
 }
+ipcMain.handle('audio:render', async (_e, o = {}) => {
+    const channels = channelsFrom(o.channels);
+    if (!channels.length || !channels[0].length || !(o.sampleRate > 0)) return { error: 'Nothing to render' };
+    return renders.render({ channels, sampleRate: o.sampleRate | 0, bitDepth: o.float ? 32 : o.bitDepth === 16 ? 16 : 24, float: !!o.float, baseName: str(o.baseName), suffix: str(o.suffix), key: str(o.key) || undefined });
+});
+ipcMain.handle('audio:save-to-library', async (_e, o = {}) => {
+    const src = str(o.sourcePath);
+    const channels = channelsFrom(o.channels);
+    if (!channels.length || !channels[0].length || !(o.sampleRate > 0)) return { error: 'Nothing to save' };
+    const dir = src && library.root && P.isInside(library.root, src) ? path.dirname(src) : P.fromRel(library.root, str(o.folder));
+    const name = (str(o.name) || path.basename(src, path.extname(src)) + ' edit').replace(/\.wav$/i, '') + '.wav';
+    const err = P.validateName(name);
+    if (err) return { error: err };
+    const dest = P.uniquePath(dir, name);
+    const { encodeWav } = require('./audio/wav');
+    await fs.promises.writeFile(dest, encodeWav({ channels, sampleRate: o.sampleRate | 0, bitDepth: o.float ? 32 : o.bitDepth === 16 ? 16 : 24, float: !!o.float }));
+    const e = library.upsert(dest);
+    watcher.suppress([dest]);
+    if (e) library.notify([e], []);
+    return { path: dest };
+});
+
+// ── drag out (sync, must happen inside the renderer's dragstart) ──────
+const DRAG_FALLBACK_ICON = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+ipcMain.on('drag:start', (event, payload) => {
+    // A staged render (selection / editor preview) becomes a permanent file in
+    // the Renders folder only now that it is actually being dragged.
+    const files = renders.promote(strArr(payload && payload.paths)).filter(p => fs.existsSync(p));
+    if (!files.length) return;
+    let icon = DRAG_FALLBACK_ICON;
+    if (payload && typeof payload.icon === 'string' && payload.icon.startsWith('data:image/')) {
+        try { const ni = nativeImage.createFromDataURL(payload.icon); if (!ni.isEmpty()) icon = ni; } catch (e) { /* fallback */ }
+    }
+    try { event.sender.startDrag(files.length === 1 ? { file: files[0], icon } : { file: files[0], files, icon }); }
+    catch (e) { try { event.sender.startDrag({ file: files[0], icon: DRAG_FALLBACK_ICON }); } catch (e2) { console.error('[drag] failed:', e2.message); } }
+});
+
+// ── IPC: vaults & collections ──────────────────────────────────────────
+ipcMain.handle('vaults:list', () => vaults.listVaults());
+ipcMain.handle('vaults:create', (_e, name, color) => vaults.createVault(str(name), str(color)));
+ipcMain.handle('vaults:switch', (_e, id) => vaults.switchVault(str(id)));
+ipcMain.handle('vaults:update', (_e, id, patch) => vaults.updateVault(str(id), patch && typeof patch === 'object' ? patch : {}));
+ipcMain.handle('vaults:remove', (_e, id) => vaults.deleteVault(str(id)));
+ipcMain.handle('vaults:duplicate', (_e, id) => vaults.duplicateVault(str(id)));
+ipcMain.handle('collections:list', () => vaults.collections());
+ipcMain.handle('collections:create', (_e, name) => vaults.createCollection(str(name)));
+ipcMain.handle('collections:rename', (_e, a, b) => vaults.renameCollection(str(a), str(b)));
+ipcMain.handle('collections:remove', (_e, name) => vaults.deleteCollection(str(name)));
+ipcMain.handle('collections:set-color', (_e, name, color) => vaults.setCollectionColor(str(name), str(color)));
+ipcMain.handle('collections:add', (_e, name, paths) => vaults.addToCollection(str(name), strArr(paths)));
+ipcMain.handle('collections:remove-items', (_e, name, paths) => vaults.removeFromCollection(str(name), strArr(paths)));
+ipcMain.handle('collections:sounds', async (_e, name) => {
+    if (library.scanning) await library.scanning;
+    const paths = vaults.collectionPaths(str(name)) || [];
+    const sounds = [], missing = [];
+    for (const p of paths) {
+        const e = library.get(p);
+        if (e) { sounds.push(pub(e)); continue; }
+        // Outside the library (or not scanned yet) but still on disk → still usable
+        const st = await fs.promises.stat(p).catch(() => null);
+        if (st && st.isFile()) sounds.push({ path: p, name: path.basename(p), dir: path.dirname(p), size: st.size, mtime: st.mtimeMs, external: true });
+        else missing.push(p);
+    }
+    return { sounds, missing };
+});
+
+// ── IPC: engine (semantic search, suggestions, echo, indexing) ────────
+ipcMain.handle('engine:status', () => engine.status());
+ipcMain.handle('engine:index', (_e, opts = {}) => runCatalog({ retryFailed: !!(opts && opts.retryFailed) }));
+ipcMain.handle('engine:cancel-index', () => engine.cancelIndex());
+ipcMain.handle('engine:failures', async () => (await engine.failures()).map(f => ({ path: f.path, name: path.basename(f.path), error: f.error })));
+/**
+ * AI search. Ranking (semantic audit, P@20 0.52 AI-only → 0.77): files whose
+ * NAME matches come first, ordered by how much they sound like the query;
+ * then sounds found only by listening. Name matches the model considers
+ * unrelated (below its similarity floor) drop behind the AI results.
+ */
+ipcMain.handle('engine:search', async (_e, query, opts = {}) => {
+    const q = str(query).slice(0, 300).trim();
+    if (!q) return { results: [], words: [] };
+    if (library.scanning) await library.scanning;
+    const scoped = !!(opts && opts.scope && opts.scope !== 'library');
+    const pool = scopeEntries(opts);
+    const limit = Math.max(1, Math.min(2000, opts.limit | 0 || 500));
+    const weights = opts.weights && typeof opts.weights === 'object' ? opts.weights : null;
+    const ai = await engine.search(q, { paths: scoped ? pool.map(e => e.path) : null, weights, topK: limit });
+    if (ai.notReady || ai.error) return { results: [], words: [], error: ai.error || null, notReady: !!ai.notReady };
+    const names = lexical(pool, q, 5000).filter(r => !r.partial);
+    const aiScore = new Map();
+    if (names.length) for (const r of await engine.score(q, names.map(r => r.path), { weights })) aiScore.set(r.path, r.score);
+    const floor = ai.cutoff || 0;
+    const strong = [], weak = [];
+    names.forEach((r, i) => { const sc = aiScore.get(r.path); (sc == null || sc >= floor ? strong : weak).push({ path: r.path, score: sc ?? null, i }); });
+    const byScore = (a, b) => ((b.score ?? -2) - (a.score ?? -2)) || a.i - b.i;
+    strong.sort(byScore); weak.sort(byScore);
+    const out = [], seen = new Set();
+    const add = (p, score, match) => { if (seen.has(p)) return; const e = library.get(p); if (!e) return; seen.add(p); out.push({ ...pub(e), score, match }); };
+    for (const r of strong) add(r.path, r.score, 'name');
+    for (const r of ai.results) add(r.path, r.score, aiScore.has(r.path) ? 'name' : 'ai');
+    for (const r of weak) add(r.path, r.score, 'name');
+    return { results: out.slice(0, limit), total: out.length, words: ai.words, query: ai.query, translated: !!ai.translated, nameMatches: names.length };
+});
+ipcMain.handle('engine:suggest', async (_e, name, limit) => {
+    const paths = vaults.collectionPaths(str(name)) || [];
+    const res = await engine.suggest(paths, Math.min(100, limit | 0 || 24));
+    return res.map(r => { const e = library.get(r.path); return e ? { ...pub(e), score: r.score } : null; }).filter(Boolean);
+});
+const decorate = r => {
+    const e = library.get(r.path);
+    return { ...r, ...(e ? pub(e) : { name: path.basename(r.path), dir: '' }), copies: (r.copies || []).filter(p => library.has(p)) };
+};
+ipcMain.handle('engine:echo', async (_e, params = {}) => {
+    const raw = params && params.pcm;
+    const pcm = raw instanceof Float32Array ? raw : raw && raw.buffer ? new Float32Array(raw.buffer, raw.byteOffset || 0, (raw.byteLength / 4) | 0) : null;
+    if (!pcm || !pcm.length || !(params.sampleRate > 0)) return { results: [], error: 'too-short' };
+    const res = await engine.echo({
+        pcm, sampleRate: params.sampleRate | 0, pre: Math.max(0, params.pre | 0), post: Math.max(0, params.post | 0),
+        weights: params.weights && typeof params.weights === 'object' ? params.weights : null,
+        exclude: strArr(params.exclude), maxResults: Math.max(1, Math.min(100, params.maxResults | 0 || 50)),
+    });
+    return { ...res, results: (res.results || []).filter(r => library.has(r.path)).map(decorate) };
+});
+ipcMain.handle('engine:echo-file', async (_e, p, opts = {}) => {
+    const res = await engine.echoFile(str(p), { weights: opts && opts.weights, maxResults: Math.max(1, Math.min(100, (opts && opts.maxResults) | 0 || 50)) });
+    return { ...res, results: (res.results || []).filter(r => library.has(r.path)).map(decorate) };
+});
+
+// ── lifecycle ──────────────────────────────────────────────────────────
+app.on('second-instance', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+});
 
 app.whenReady().then(async () => {
-  createDragIcon();
-  registerProtocol();
-  createWindow();
-  ensureDir(getConfig().libraryPath);
-  
-  // Initialize Vaults system (migrates old collections if needed)
-  initVaults();
-  
-  // Initialize Cache in background
-  initSoundCache();
-  
-  // Initialize AI Semantic Engine in background
-  try {
-    await semanticEngine.init();
-    console.log("Semantic Engine initialized in main process.");
-    // Start watching library for incremental indexing (Phase C — fs.watch recursive)
-    const lib = getConfig().libraryPath;
-    if (lib) semanticEngine.startWatching(lib);
-  } catch(e) {
-    console.error("Failed to initialize Semantic Engine:", e);
-  }
-});
-app.on('window-all-closed', () => { if(process.platform!=='darwin') app.quit(); });
-app.on('activate', () => { if(BrowserWindow.getAllWindows().length===0) createWindow(); });
-
-// ═══ IPC ═══
-ipcMain.handle('get-library-path', ()=>getConfig().libraryPath);
-ipcMain.handle('set-library-path', async()=>{const r=await dialog.showOpenDialog(mainWindow,{properties:['openDirectory']});if(!r.canceled&&r.filePaths[0]){const c=getConfig();c.libraryPath=r.filePaths[0];saveConfig(c);ensureDir(c.libraryPath);initSoundCache();if(semanticEngine.isReady) semanticEngine.startWatching(c.libraryPath);return c.libraryPath;}return null;});
-ipcMain.handle('set-watcher', (_,enabled)=>{ const lib=getConfig().libraryPath; if(!lib||!semanticEngine.isReady) return; if(enabled) semanticEngine.startWatching(lib); else semanticEngine.stopWatching(); return enabled; });
-ipcMain.handle('get-accent-color', ()=>getConfig().accentColor||null);
-ipcMain.handle('set-accent-color', (_,color)=>{const c=getConfig();c.accentColor=color;saveConfig(c);return color;});
-ipcMain.handle('get-folders', async ()=>{ 
-    if (!soundCacheReady) await soundCachePromise;
-    const counts = {};
-    for (const c of soundCache) counts[c.topLevel] = (counts[c.topLevel]||0) + 1;
-    return Object.keys(counts).map(name => ({name, count: counts[name]})).sort((a,b)=>a.name.localeCompare(b.name));
-});
-ipcMain.handle('create-folder',(_,n)=>{const p=path.join(getConfig().libraryPath,n);if(!fs.existsSync(p)){fs.mkdirSync(p,{recursive:true});return true;}return false;});
-ipcMain.handle('rename-folder',(_,o,n)=>{const c=getConfig().libraryPath;if(fs.existsSync(path.join(c,o))&&!fs.existsSync(path.join(c,n))){fs.renameSync(path.join(c,o),path.join(c,n));initSoundCache();return true;}return false;});
-ipcMain.handle('delete-folder',async(_,n)=>{const fp=path.join(getConfig().libraryPath,n);const r=await dialog.showMessageBox(mainWindow,{type:'warning',buttons:['Cancel','Delete'],defaultId:0,message:`Delete "${n}"?`,detail:'Cannot be undone.'});if(r.response===1){fs.rmSync(fp,{recursive:true,force:true});initSoundCache();return true;}return false;});
-ipcMain.handle('get-sounds', async (_,f)=>{
-    if (!soundCacheReady) await soundCachePromise;
-    return soundCache.filter(c => c.topLevel === f);
-});
-ipcMain.handle('delete-sound',async(_,fp)=>{const r=await dialog.showMessageBox(mainWindow,{type:'warning',buttons:['Cancel','Delete'],defaultId:0,message:'Delete this sound?',detail:'Cannot be undone.'});if(r.response===1&&fs.existsSync(fp)){fs.unlinkSync(fp);soundCache=soundCache.filter(s=>s.path!==fp);rebuildSoundCacheMap();return true;}return false;});
-ipcMain.handle('move-sound',(_,fp,tf)=>{const d=path.join(getConfig().libraryPath,tf,path.basename(fp));if(fs.existsSync(fp)&&!fs.existsSync(d)){fs.renameSync(fp,d);initSoundCache();return true;}return false;});
-ipcMain.handle('import-files',async(_,tf)=>{const r=await dialog.showOpenDialog(mainWindow,{properties:['openFile','multiSelections'],filters:[{name:'WAV',extensions:['wav']}]});if(!r.canceled){const tp=path.join(getConfig().libraryPath,tf);ensureDir(tp);const res=r.filePaths.map(fp=>{const d=path.join(tp,path.basename(fp));fs.copyFileSync(fp,d);return d;});initSoundCache();return res;}return[];});
-ipcMain.handle('drop-files',(_,fps,tf)=>{console.log('[IPC] drop-files called, fps:', JSON.stringify(fps), 'tf:', tf);const tp=path.join(getConfig().libraryPath,tf);ensureDir(tp);const res=(fps||[]).filter(fp=>fp&&typeof fp==='string'&&fp.toLowerCase().endsWith('.wav')&&fs.existsSync(fp)).map(fp=>{const d=path.join(tp,path.basename(fp));fs.copyFileSync(fp,d);console.log('[IPC] Copied',fp,'->',d);return d;});initSoundCache();return res;});
-ipcMain.handle('read-audio-file',async(_,fp)=>{try{if(!fp||!fs.existsSync(fp)||!fp.toLowerCase().endsWith('.wav'))return null;return await fs.promises.readFile(fp);}catch(e){return null;}});
-
-// ═══ Peak Extraction (optimized) ═══
-// Three-tier peak extraction:
-//   1. SQLite DB cache (populated during indexing) — instant
-//   2. Direct WAV parser (reads PCM bytes from disk, no ffmpeg) — ~1-5ms
-//   3. ffmpeg fallback (for non-WAV formats: FLAC, AIFF, OGG, MP3) — ~30-80ms
-const WAV_EXTENSIONS = new Set(['.wav']);
-
-// The Tier-2 (direct WAV parser) and Tier-3 (ffmpeg fallback) implementations
-// live in `./audio/peaks` — pure, unit-tested, and now also support
-// WAVE_FORMAT_EXTENSIBLE 24-bit / 32-bit-float WAVs (which previously fell
-// through to the slow ffmpeg subprocess). See `tests/audio-peaks.test.js`.
-// `extractPeaksFromWAV` / `extractPeaksWithFFmpeg` are imported above.
-
-ipcMain.handle('get-peaks', async (_, fp) => {
-    try {
-        if (!fp || !fs.existsSync(fp)) return null;
-
-        // Tier 1: SQLite DB cache (instant — populated during indexing)
-        if (semanticEngine.isReady) {
-            const dbPeaks = semanticEngine.getPeaksFromDB(fp);
-            if (dbPeaks) return dbPeaks;
-        }
-
-        // Tier 2: Direct WAV parser (fast — no subprocess)
-        const ext = path.extname(fp).toLowerCase();
-        if (WAV_EXTENSIONS.has(ext)) {
-            const result = await extractPeaksFromWAV(fp);
-            if (result) return result;
-            // If WAV parsing failed (corrupted header), fall through to ffmpeg
-        }
-
-        // Tier 3: ffmpeg fallback (for non-WAV or corrupted WAV files)
-        return await extractPeaksWithFFmpeg(fp);
-    } catch (e) {
-        console.error('get-peaks error:', e.message);
-        return null;
-    }
+    audioProtocol.handle(protocol, isPathAllowed);
+    setTimeout(() => renders.pruneStaging(), 5000);   // previews never dragged last session
+    mainWindow = createMainWindow({
+        preload: path.join(__dirname, 'preload.js'),
+        indexHtml: path.join(__dirname, 'renderer', 'index.html'),
+        state: settings.get().window,
+        onStateChange: st => settings.setInternal(d => { d.window = st; }),
+        icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+    });
+    if (process.argv.includes('--dev')) mainWindow.webContents.openDevTools({ mode: 'detach' });
+    const root = settings.get().libraryPath;
+    const scan = openLibrary(root);
+    engine.start(root).catch(e => console.error('[engine] start failed:', e));      // ready status → catalog
+    await scan;
 });
 
-ipcMain.handle('get-peaks-batch', async (_, paths) => {
-    if (!Array.isArray(paths) || paths.length === 0) return {};
-    const results = {};
-    const CHUNK = 6;
-    for (let i = 0; i < paths.length; i += CHUNK) {
-      await Promise.all(paths.slice(i, i + CHUNK).map(async (fp) => {
-        try {
-            if (!fp || !fs.existsSync(fp)) return;
-            if (semanticEngine.isReady) {
-                const dbPeaks = semanticEngine.getPeaksFromDB(fp);
-                if (dbPeaks) { results[fp] = dbPeaks; return; }
-            }
-            const ext = path.extname(fp).toLowerCase();
-            if (ext === '.wav') {
-                const result = await extractPeaksFromWAV(fp);
-                if (result) { results[fp] = result; return; }
-            }
-            const result = await extractPeaksWithFFmpeg(fp);
-            if (result) results[fp] = result;
-        } catch (e) {}
-      }));
-    }
-    return results;
+let quitting = false;
+app.on('before-quit', async e => {
+    if (quitting) return;
+    quitting = true;
+    e.preventDefault();
+    try { settings.flush(); vaults.flush(); library.save(); renders.pruneStaging(); } catch (err) { console.error('[quit] flush failed', err); }
+    watcher.stop();
+    await Promise.race([Promise.all([engine.stop(), peaks.stop()]), new Promise(r => setTimeout(r, 3000))]);
+    app.exit(process.exitCode || 0);
 });
-
-// Collections
-ipcMain.handle('get-collections', () => loadCollections());
-ipcMain.handle('create-collection', (_, name) => { if(name==='__colors')return false; const c=loadCollections(); if(!c[name]){c[name]=[];saveCollections(c);return true;} return false; });
-ipcMain.handle('delete-collection', (_, name) => { if(name==='__colors')return false; const c=loadCollections(); if(c[name]!==undefined){delete c[name];if(c.__colors)delete c.__colors[name];saveCollections(c);return true;} return false; });
-ipcMain.handle('rename-collection', (_, old, nu) => { const c=loadCollections(); if(c[old]!==undefined&&!c[nu]){c[nu]=c[old];delete c[old];if(c.__colors&&c.__colors[old]){c.__colors[nu]=c.__colors[old];delete c.__colors[old]}saveCollections(c);return true;} return false; });
-ipcMain.handle('set-collection-color', (_, name, color) => { const c=loadCollections(); if(!c.__colors)c.__colors={};if(color)c.__colors[name]=color;else delete c.__colors[name];saveCollections(c);return true; });
-ipcMain.handle('add-to-collection', (_, name, filePath) => { const c=loadCollections(); if(!c[name])c[name]=[]; if(!c[name].includes(filePath)){c[name].push(filePath);saveCollections(c);return true;} return false; });
-ipcMain.handle('remove-from-collection', (_, name, filePath) => { const c=loadCollections(); if(c[name]){c[name]=c[name].filter(p=>p!==filePath);saveCollections(c);return true;} return false; });
-ipcMain.handle('get-collection-sounds', async (_, name) => {
-  const c = loadCollections(); const paths = (c[name] && name !== '__colors' ? c[name] : []);
-  const results = await Promise.all(paths.map(async p => {
-    try { const st = await fs.promises.stat(p); return { path: p, name: path.basename(p), size: st.size, dateAdded: st.mtimeMs }; }
-    catch(e) { return null; }
-  }));
-  return results.filter(Boolean);
-});
-
-// ═══ Vault IPC ═══
-ipcMain.handle('get-vaults', () => {
-  const data = initVaults();
-  return {
-    activeVaultId: data.activeVaultId,
-    vaults: data.vaults.map(v => ({
-      id: v.id,
-      name: v.name,
-      color: v.color,
-      description: v.description || '',
-      createdAt: v.createdAt,
-      collectionCount: Object.keys(v.collections || {}).length,
-      soundCount: Object.values(v.collections || {}).reduce((sum, arr) => sum + arr.length, 0)
-    }))
-  };
-});
-ipcMain.handle('create-vault', (_, name, color) => {
-  const data = initVaults();
-  const id = generateVaultId();
-  data.vaults.push({
-    id,
-    name: name || 'New Vault',
-    color: color || '#c8f76d',
-    description: '',
-    createdAt: Date.now(),
-    collections: {},
-    collectionColors: {}
-  });
-  saveVaultsData(data);
-  return id;
-});
-ipcMain.handle('switch-vault', (_, id) => {
-  const data = initVaults();
-  const vault = data.vaults.find(v => v.id === id);
-  if (!vault) return false;
-  data.activeVaultId = id;
-  saveVaultsData(data);
-  return true;
-});
-ipcMain.handle('rename-vault', (_, id, newName) => {
-  const data = initVaults();
-  const vault = data.vaults.find(v => v.id === id);
-  if (!vault) return false;
-  vault.name = newName;
-  saveVaultsData(data);
-  return true;
-});
-ipcMain.handle('set-vault-color', (_, id, color) => {
-  const data = initVaults();
-  const vault = data.vaults.find(v => v.id === id);
-  if (!vault) return false;
-  vault.color = color;
-  saveVaultsData(data);
-  return true;
-});
-ipcMain.handle('delete-vault', (_, id) => {
-  const data = initVaults();
-  if (data.vaults.length <= 1) return false; // always keep at least one vault
-  data.vaults = data.vaults.filter(v => v.id !== id);
-  if (data.activeVaultId === id) data.activeVaultId = data.vaults[0].id;
-  saveVaultsData(data);
-  return true;
-});
-ipcMain.handle('duplicate-vault', (_, id) => {
-  const data = initVaults();
-  const source = data.vaults.find(v => v.id === id);
-  if (!source) return null;
-  const newId = generateVaultId();
-  data.vaults.push({
-    id: newId,
-    name: source.name + ' (copy)',
-    color: source.color,
-    description: source.description || '',
-    createdAt: Date.now(),
-    collections: JSON.parse(JSON.stringify(source.collections)),
-    collectionColors: JSON.parse(JSON.stringify(source.collectionColors || {}))
-  });
-  saveVaultsData(data);
-  return newId;
-});
-ipcMain.handle('set-vault-description', (_, id, description) => {
-  const data = initVaults();
-  const vault = data.vaults.find(v => v.id === id);
-  if (!vault) return false;
-  vault.description = description || '';
-  saveVaultsData(data);
-  return true;
-});
-
-// Render selection WAV
-ipcMain.handle('render-selection-wav', (_, { channelData, sampleRate, numChannels, bitDepth, fileName }) => {
-  try {
-    const tmpDir=path.join(os.tmpdir(),'soundvault-temp');ensureDir(tmpDir);
-    const tmpPath=path.join(tmpDir,fileName||'selection.wav');
-    const channels=channelData.map(ch=>new Float32Array(ch.buffer,ch.byteOffset,ch.byteLength/4));
-    const ns=channels[0].length,bps=bitDepth/8,dataSize=ns*numChannels*bps,buf=Buffer.alloc(44+dataSize);
-    buf.write('RIFF',0);buf.writeUInt32LE(36+dataSize,4);buf.write('WAVE',8);buf.write('fmt ',12);buf.writeUInt32LE(16,16);buf.writeUInt16LE(1,20);buf.writeUInt16LE(numChannels,22);buf.writeUInt32LE(sampleRate,24);buf.writeUInt32LE(sampleRate*numChannels*bps,28);buf.writeUInt16LE(numChannels*bps,32);buf.writeUInt16LE(bitDepth,34);buf.write('data',36);buf.writeUInt32LE(dataSize,40);
-    let off=44;
-    for(let i=0;i<ns;i++){for(let ch=0;ch<numChannels;ch++){const s=Math.max(-1,Math.min(1,channels[ch][i]||0));
-    if(bitDepth===16){buf.writeInt16LE(Math.round(s*32767),off);off+=2}
-    else if(bitDepth===24){let v=Math.round(s*8388607);v=Math.max(-8388608,Math.min(8388607,v));const u=v<0?v+16777216:v;buf.writeUInt8(u&0xFF,off);buf.writeUInt8((u>>8)&0xFF,off+1);buf.writeUInt8((u>>16)&0xFF,off+2);off+=3}}}
-    fs.writeFileSync(tmpPath,buf);return tmpPath;
-  }catch(e){console.error('render-selection-wav:',e);return null;}
-});
-
-// Overwrite audio file (used by Scissors crop)
-ipcMain.handle('overwrite-audio-file', (_, { filePath, channelData, sampleRate, numChannels, bitDepth }) => {
-  try {
-    if (!fs.existsSync(filePath)) return false;
-    const channels=channelData.map(ch=>new Float32Array(ch.buffer,ch.byteOffset,ch.byteLength/4));
-    const ns=channels[0].length,bps=bitDepth/8,dataSize=ns*numChannels*bps,buf=Buffer.alloc(44+dataSize);
-    buf.write('RIFF',0);buf.writeUInt32LE(36+dataSize,4);buf.write('WAVE',8);buf.write('fmt ',12);buf.writeUInt32LE(16,16);buf.writeUInt16LE(1,20);buf.writeUInt16LE(numChannels,22);buf.writeUInt32LE(sampleRate,24);buf.writeUInt32LE(sampleRate*numChannels*bps,28);buf.writeUInt16LE(numChannels*bps,32);buf.writeUInt16LE(bitDepth,34);buf.write('data',36);buf.writeUInt32LE(dataSize,40);
-    let off=44;
-    for(let i=0;i<ns;i++){for(let ch=0;ch<numChannels;ch++){const s=Math.max(-1,Math.min(1,channels[ch][i]||0));
-    if(bitDepth===16){buf.writeInt16LE(Math.round(s*32767),off);off+=2}
-    else if(bitDepth===24){let v=Math.round(s*8388607);v=Math.max(-8388608,Math.min(8388607,v));const u=v<0?v+16777216:v;buf.writeUInt8(u&0xFF,off);buf.writeUInt8((u>>8)&0xFF,off+1);buf.writeUInt8((u>>16)&0xFF,off+2);off+=3}}}
-    fs.writeFileSync(filePath,buf);return true;
-  }catch(e){console.error('overwrite-audio-file:',e);return false;}
-});
-
-// Create new audio version (used by Scissors crop)
-ipcMain.handle('create-new-audio-version', (_, { originalPath, suffix, channelData, sampleRate, numChannels, bitDepth }) => {
-  try {
-    const ext = path.extname(originalPath);
-    const base = path.basename(originalPath, ext);
-    const dir = path.dirname(originalPath);
-    let newName = `${base}${suffix}${ext}`;
-    let newPath = path.join(dir, newName);
-    let counter = 1;
-    while(fs.existsSync(newPath)) {
-      newName = `${base}${suffix}_${counter}${ext}`;
-      newPath = path.join(dir, newName);
-      counter++;
-    }
-    const channels=channelData.map(ch=>new Float32Array(ch.buffer,ch.byteOffset,ch.byteLength/4));
-    const ns=channels[0].length,bps=bitDepth/8,dataSize=ns*numChannels*bps,buf=Buffer.alloc(44+dataSize);
-    buf.write('RIFF',0);buf.writeUInt32LE(36+dataSize,4);buf.write('WAVE',8);buf.write('fmt ',12);buf.writeUInt32LE(16,16);buf.writeUInt16LE(1,20);buf.writeUInt16LE(numChannels,22);buf.writeUInt32LE(sampleRate,24);buf.writeUInt32LE(sampleRate*numChannels*bps,28);buf.writeUInt16LE(numChannels*bps,32);buf.writeUInt16LE(bitDepth,34);buf.write('data',36);buf.writeUInt32LE(dataSize,40);
-    let off=44;
-    for(let i=0;i<ns;i++){for(let ch=0;ch<numChannels;ch++){const s=Math.max(-1,Math.min(1,channels[ch][i]||0));
-    if(bitDepth===16){buf.writeInt16LE(Math.round(s*32767),off);off+=2}
-    else if(bitDepth===24){let v=Math.round(s*8388607);v=Math.max(-8388608,Math.min(8388607,v));const u=v<0?v+16777216:v;buf.writeUInt8(u&0xFF,off);buf.writeUInt8((u>>8)&0xFF,off+1);buf.writeUInt8((u>>16)&0xFF,off+2);off+=3}}}
-    fs.writeFileSync(newPath,buf);return newPath;
-  }catch(e){console.error('create-new-audio-version:',e);return null;}
-});
-
-// Drag — the renderer renders a waveform "ghost" chip (canvas → data URL) so
-// the OS drag image shows the actual sound instead of a bare file path.
-// Falls back to the valid 1x1 PNG on disk when no ghost is provided.
-ipcMain.on('ondragstart', (event, payload) => {
-  const filePath = typeof payload === 'string' ? payload : payload?.file;
-  if (!filePath || !fs.existsSync(filePath)) return;
-  let icon = DRAG_ICON_PATH;
-  if (payload && typeof payload === 'object' && typeof payload.icon === 'string' && payload.icon.startsWith('data:image/')) {
-    try {
-      const ni = nativeImage.createFromDataURL(payload.icon);
-      if (!ni.isEmpty()) icon = ni;
-    } catch (e) { console.error('[IPC] drag icon:', e); }
-  }
-  try {
-    event.sender.startDrag({ file: filePath, icon });
-  } catch (e) {
-    // Never let a bad custom icon kill the drag itself
-    console.error('[IPC] startDrag with custom icon failed, retrying with fallback:', e);
-    try { event.sender.startDrag({ file: filePath, icon: DRAG_ICON_PATH }); } catch (e2) { console.error('[IPC] startDrag fallback failed:', e2); }
-  }
-});
-
-ipcMain.handle('reveal-in-finder',(_,fp)=>shell.showItemInFolder(fp));
-
-ipcMain.handle('search-all-sounds', async (_, q, limit) => {
-    if (!soundCacheReady) await soundCachePromise;
-    // Tokenized AND search over name/folder/topLevel with relevance ranking,
-    // routed through the pure `src/search/lexical-search` module. Fixes the
-    // multi-word query bug (e.g. "kick drum") that the old whole-query literal
-    // substring match silently dropped. See tests/lexical-search.test.js.
-    return searchSounds(soundCache, q, { limit: limit || 200 });
-});
-
-// ═══ Semantic Search IPC ═══
-ipcMain.handle('semantic-is-ready', () => semanticEngine.isReady);
-ipcMain.handle('semantic-get-progress', () => semanticEngine.progress);
-ipcMain.handle('semantic-start-indexing', () => {
-    if (!semanticEngine.isReady) return false;
-    const lib = getConfig().libraryPath;
-    semanticEngine.startIndexing(lib).catch(e => console.error("Indexing error:", e));
-    return true;
-});
-ipcMain.handle('semantic-search', async (_, queryText, weights) => {
-    if (!semanticEngine.isReady) return { results: [], words: [] };
-    
-    try {
-        const res = await semanticEngine.search(queryText, weights);
-        if (!res || !Array.isArray(res.results)) return { results: [], words: res?.words || [] };
-
-        // Defense-in-depth: collapse duplicate-path rows so the renderer never
-        // sees the same file twice. The engine's in-memory `_paths[]` cache can
-        // duplicate entries on watcher-triggered re-index (see the root-cause
-        // fix in `SemanticEngine._appendToCache`); even with that fix, this
-        // guard protects against any cache drift across releases/sessions.
-        // `res.results` is already sorted desc by score, so the FIRST copy of
-        // any duplicate path is the highest-score one and is the one kept.
-        const ranked = dedupeByPath(res.results);
-
-        const finalResults = [];
-        for (const r of ranked) {
-            const cached = soundCacheMap.get(r.path);
-            if (cached) {
-                finalResults.push({
-                    name: cached.name,
-                    path: cached.path,
-                    folder: cached.folder,
-                    size: cached.size,
-                    dateAdded: cached.dateAdded,
-                    score: r.score
-                });
-            }
-        }
-        return { results: finalResults, words: res.words || [] };
-    } catch(e) {
-        console.error('semantic-search error:', e);
-        return { results: [], words: [] };
-    }
-});
-
-// Semantic suggestions for a collection (centroid-based)
-ipcMain.handle('semantic-suggest', async (_, collectionName) => {
-    if (!semanticEngine.isReady) return [];
-    try {
-        const cols = loadCollections();
-        const paths = (cols[collectionName] && collectionName !== '__colors') ? cols[collectionName] : [];
-        if (!paths.length) return [];
-        
-        const suggestions = semanticEngine.suggestForCollection(paths, 12);
-        
-        return suggestions.map(r => {
-            const cached = soundCacheMap.get(r.path);
-            if (!cached) return null;
-            return { name: cached.name, path: cached.path, folder: cached.folder, size: cached.size, dateAdded: cached.dateAdded, score: r.score };
-        }).filter(Boolean);
-    } catch(e) {
-        console.error('semantic-suggest error:', e);
-        return [];
-    }
-});
-
-// ═══ Echo Vault IPC ═══
-ipcMain.handle('echo-search', async (_, params) => {
-    if (!semanticEngine.isReady) return { results: [], searchTimeMs: 0, totalCandidates: 0, totalMatches: 0 };
-    try {
-        // Reconstruct Float32Array robustly.
-        // Electron's contextBridge serializes TypedArrays via structured clone, which means
-        // a Float32Array from the renderer may arrive as a Uint8Array, a Node Buffer, or in
-        // rare edge-cases as a plain object (e.g. when the ArrayBuffer was already detached).
-        // We must handle all cases to avoid "Cannot read properties of undefined (reading 'buffer')".
-        const raw = params.pcmData;
-        if (!raw) throw new Error('echo-search: pcmData is missing. lastSearchParams must be of type "fragment".');
-        let pcmData;
-        if (raw instanceof Float32Array) {
-            // Already correct (same-process path or future Electron behaviour)
-            pcmData = raw;
-        } else if (raw.buffer instanceof ArrayBuffer && raw.byteLength > 0) {
-            // Standard IPC path: arrives as Uint8Array with a valid backing ArrayBuffer
-            pcmData = new Float32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
-        } else if (Buffer.isBuffer(raw)) {
-            // Node Buffer — copy into a fresh Float32Array to avoid alignment issues
-            const ab = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
-            pcmData = new Float32Array(ab);
-        } else {
-            // Fallback: plain/array-like object (detached buffer, or unusual serialisation).
-            // Copy values element-by-element into a new Float32Array.
-            const len = raw.length ?? (raw.byteLength != null ? Math.floor(raw.byteLength / 4) : 0);
-            if (!len) throw new Error('echo-search: pcmData has zero length or unrecognised format.');
-            pcmData = new Float32Array(len);
-            for (let i = 0; i < len; i++) pcmData[i] = raw[i] ?? 0;
-        }
-        const res = await semanticEngine.echoSearch({
-            pcmData,
-            sampleRate: params.sampleRate,
-            duration: params.duration,
-            weights: params.weights || null,
-            maxResults: params.maxResults || 50,
-            sourceFilePath: params.sourceFilePath || null,
-        });
-
-        // Defense-in-depth: dedup by path (same root-cause / engine cache drift
-        // pattern as `semantic-search`). Echo results render in the #echo-results
-        // panel, not the explorer grid, but the same guard belongs here.
-        res.results = dedupeByPath(res.results).map(r => {
-            const cached = soundCacheMap.get(r.path);
-            return {
-                ...r,
-                name: cached ? cached.name : path.basename(r.path),
-                folder: cached ? cached.folder : '',
-                topLevel: cached ? cached.topLevel : '',
-                size: cached ? cached.size : 0,
-                dateAdded: cached ? cached.dateAdded : 0,
-            };
-        });
-        return res;
-    } catch(e) {
-        console.error('echo-search error:', e);
-        return { results: [], searchTimeMs: 0, totalCandidates: 0, totalMatches: 0 };
-    }
-});
-
-ipcMain.handle('echo-file', async (_, filePath, weights) => {
-    if (!semanticEngine.isReady) return { results: [], searchTimeMs: 0, totalCandidates: 0, totalMatches: 0 };
-    try {
-        const res = await semanticEngine.echoFile(filePath, weights || null);
-
-        // Defense-in-depth: dedup by path — see `semantic-search` for rationale.
-        res.results = dedupeByPath(res.results).map(r => {
-            const cached = soundCacheMap.get(r.path);
-            return {
-                ...r,
-                name: cached ? cached.name : path.basename(r.path),
-                folder: cached ? cached.folder : '',
-                topLevel: cached ? cached.topLevel : '',
-                size: cached ? cached.size : 0,
-                dateAdded: cached ? cached.dateAdded : 0,
-            };
-        });
-        return res;
-    } catch(e) {
-        console.error('echo-file error:', e);
-        return { results: [], searchTimeMs: 0, totalCandidates: 0, totalMatches: 0 };
-    }
-});
-
-ipcMain.handle('spectral-is-ready', () => semanticEngine.spectralReady);
-ipcMain.handle('spectral-get-progress', () => semanticEngine.spectralProgress);
-
+app.on('window-all-closed', () => app.quit());

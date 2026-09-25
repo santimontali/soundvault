@@ -1,58 +1,92 @@
+'use strict';
+// SoundVault preload: the only bridge between the sandboxed renderer and the
+// main process. Namespaced, promise-based API plus push events (no polling).
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
-contextBridge.exposeInMainWorld('api', {
-  // Electron 32+ removed `File.path`; webUtils.getPathForFile is the
-  // sanctioned replacement for drag-and-drop file paths (audit C3).
-  getPathForFile: f => webUtils.getPathForFile(f),
-  getLibraryPath: ()=>ipcRenderer.invoke('get-library-path'),
-  setLibraryPath: ()=>ipcRenderer.invoke('set-library-path'),
-  getFolders: ()=>ipcRenderer.invoke('get-folders'),
-  createFolder: n=>ipcRenderer.invoke('create-folder',n),
-  renameFolder: (o,n)=>ipcRenderer.invoke('rename-folder',o,n),
-  deleteFolder: n=>ipcRenderer.invoke('delete-folder',n),
-  getSounds: f=>ipcRenderer.invoke('get-sounds',f),
-  deleteSound: p=>ipcRenderer.invoke('delete-sound',p),
-  moveSound: (p,f)=>ipcRenderer.invoke('move-sound',p,f),
-  importFiles: f=>ipcRenderer.invoke('import-files',f),
-  dropFiles: (ps,f)=>ipcRenderer.invoke('drop-files',ps,f),
-  searchAllSounds: q=>ipcRenderer.invoke('search-all-sounds',q),
-  readAudioFile: p=>ipcRenderer.invoke('read-audio-file',p),
-  renderSelectionWav: d=>ipcRenderer.invoke('render-selection-wav',d),
-  overwriteAudioFile: d=>ipcRenderer.invoke('overwrite-audio-file',d),
-  createNewAudioVersion: d=>ipcRenderer.invoke('create-new-audio-version',d),
-  startDrag: (fp,icon)=>ipcRenderer.send('ondragstart', icon ? { file: fp, icon } : fp),
-  revealInFinder: p=>ipcRenderer.invoke('reveal-in-finder',p),
-  // Collections (now scoped to active Vault)
-  getCollections: ()=>ipcRenderer.invoke('get-collections'),
-  createCollection: n=>ipcRenderer.invoke('create-collection',n),
-  deleteCollection: n=>ipcRenderer.invoke('delete-collection',n),
-  renameCollection: (o,n)=>ipcRenderer.invoke('rename-collection',o,n),
-  addToCollection: (n,p)=>ipcRenderer.invoke('add-to-collection',n,p),
-  removeFromCollection: (n,p)=>ipcRenderer.invoke('remove-from-collection',n,p),
-  getCollectionSounds: n=>ipcRenderer.invoke('get-collection-sounds',n),
-  setCollectionColor: (n,c)=>ipcRenderer.invoke('set-collection-color',n,c),
-  // Vaults
-  getVaults: ()=>ipcRenderer.invoke('get-vaults'),
-  createVault: (n,c)=>ipcRenderer.invoke('create-vault',n,c),
-  switchVault: id=>ipcRenderer.invoke('switch-vault',id),
-  renameVault: (id,n)=>ipcRenderer.invoke('rename-vault',id,n),
-  setVaultColor: (id,c)=>ipcRenderer.invoke('set-vault-color',id,c),
-  deleteVault: id=>ipcRenderer.invoke('delete-vault',id),
-  duplicateVault: id=>ipcRenderer.invoke('duplicate-vault',id),
-  setVaultDescription: (id,d)=>ipcRenderer.invoke('set-vault-description',id,d),
-  // Semantic Search
-  semanticIsReady: ()=>ipcRenderer.invoke('semantic-is-ready'),
-  semanticGetProgress: ()=>ipcRenderer.invoke('semantic-get-progress'),
-  semanticStartIndex: ()=>ipcRenderer.invoke('semantic-start-indexing'),
-  semanticSearch: (q, w)=>ipcRenderer.invoke('semantic-search', q, w),
-  semanticSuggest: n=>ipcRenderer.invoke('semantic-suggest', n),
-  // Echo Vault
-  echoSearch: params=>ipcRenderer.invoke('echo-search', params),
-  echoFile: (fp, w)=>ipcRenderer.invoke('echo-file', fp, w),
-  spectralIsReady: ()=>ipcRenderer.invoke('spectral-is-ready'),
-  spectralGetProgress: ()=>ipcRenderer.invoke('spectral-get-progress'),
-  getPeaks: p=>ipcRenderer.invoke('get-peaks', p),
-  getPeaksBatch: (paths) => ipcRenderer.invoke('get-peaks-batch', paths),
-  setWatcher: enabled=>ipcRenderer.invoke('set-watcher', enabled),
-  getAccentColor: ()=>ipcRenderer.invoke('get-accent-color'),
-  setAccentColor: c=>ipcRenderer.invoke('set-accent-color', c),
+
+const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
+const subscribe = channel => cb => {
+    const h = (_e, data) => cb(data);
+    ipcRenderer.on(channel, h);
+    return () => ipcRenderer.removeListener(channel, h);
+};
+
+contextBridge.exposeInMainWorld('sv', {
+    platform: process.platform,
+    /** Absolute path of a dropped File (Electron ≥32 removed File.path). */
+    pathForFile: f => { try { return webUtils.getPathForFile(f) || ''; } catch (e) { return ''; } },
+
+    app: {
+        info: () => invoke('app:info'),
+        onToast: subscribe('app:toast'),
+    },
+    settings: {
+        get: () => invoke('settings:get'),
+        set: patch => invoke('settings:set', patch),
+        chooseLibrary: () => invoke('settings:choose-library'),
+        chooseRendersDir: () => invoke('settings:choose-renders-dir'),
+        openFolder: which => invoke('settings:open-folder', which),
+        onChanged: subscribe('settings:changed'),
+    },
+    library: {
+        status: () => invoke('library:status'),
+        tree: () => invoke('library:tree'),
+        list: opts => invoke('library:list', opts),
+        search: opts => invoke('library:search', opts),
+        resolve: paths => invoke('library:resolve', paths),
+        rescan: () => invoke('library:rescan'),
+        onChanged: subscribe('library:changed'),
+        onProgress: subscribe('library:progress'),
+    },
+    files: {
+        import: (paths, targetRel) => invoke('files:import', paths, targetRel),
+        importDialog: targetRel => invoke('files:import-dialog', targetRel),
+        move: (paths, targetRel) => invoke('files:move', paths, targetRel),
+        rename: (path, newName) => invoke('files:rename', path, newName),
+        trash: paths => invoke('files:trash', paths),
+        mkdir: (parentRel, name) => invoke('files:mkdir', parentRel, name),
+        renameFolder: (rel, name) => invoke('files:rename-folder', rel, name),
+        trashFolder: rel => invoke('files:trash-folder', rel),
+        reveal: path => invoke('files:reveal', path),
+        openFolder: rel => invoke('files:open-folder', rel),
+        onProgress: subscribe('files:progress'),
+    },
+    audio: {
+        peaks: items => invoke('audio:peaks', items),
+        render: opts => invoke('audio:render', opts),
+        saveToLibrary: opts => invoke('audio:save-to-library', opts),
+        url: path => 'soundvault://audio/?path=' + encodeURIComponent(path),
+    },
+    drag: {
+        start: (paths, icon) => ipcRenderer.send('drag:start', { paths: Array.isArray(paths) ? paths : [paths], icon: icon || null }),
+    },
+    vaults: {
+        list: () => invoke('vaults:list'),
+        create: (name, color) => invoke('vaults:create', name, color),
+        switch: id => invoke('vaults:switch', id),
+        update: (id, patch) => invoke('vaults:update', id, patch),
+        remove: id => invoke('vaults:remove', id),
+        duplicate: id => invoke('vaults:duplicate', id),
+    },
+    collections: {
+        list: () => invoke('collections:list'),
+        create: name => invoke('collections:create', name),
+        rename: (oldName, newName) => invoke('collections:rename', oldName, newName),
+        remove: name => invoke('collections:remove', name),
+        setColor: (name, color) => invoke('collections:set-color', name, color),
+        add: (name, paths) => invoke('collections:add', name, paths),
+        removeItems: (name, paths) => invoke('collections:remove-items', name, paths),
+        sounds: name => invoke('collections:sounds', name),
+        onChanged: subscribe('collections:changed'),
+    },
+    engine: {
+        status: () => invoke('engine:status'),
+        onStatus: subscribe('engine:status'),
+        index: opts => invoke('engine:index', opts || {}),
+        failures: () => invoke('engine:failures'),
+        cancelIndex: () => invoke('engine:cancel-index'),
+        search: (query, opts) => invoke('engine:search', query, opts),
+        suggest: (name, limit) => invoke('engine:suggest', name, limit),
+        echo: params => invoke('engine:echo', params),
+        echoFile: (path, opts) => invoke('engine:echo-file', path, opts),
+    },
 });
