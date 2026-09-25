@@ -3,7 +3,8 @@
  * Smoke test of the BUILT app (dist/win-unpacked/soundvault.exe): isolated
  * user data + fixture library, driven over the DevTools protocol.
  * Checks: boots offline with the bundled models, analyses the library, AI
- * search, Echo, and exits cleanly within 10 s of closing the window.
+ * search, Echo, the vault Brief with the bundled image model, and exits
+ * cleanly within 10 s of closing the window.
  *
  *   node tests/e2e/packaged-smoke.js [path\to\soundvault.exe]
  */
@@ -74,6 +75,25 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
         return (res.results || []).slice(0, 5).map(r => r.name);
     })()`);
     ok('Echo inside the package', echo.filter(n => /fam01_/.test(n)).length >= 2, echo.join(', '));
+    const brief = await evaluate(`(async () => {
+        let st = await window.sv.brief.update({ words: ['rain'] });
+        const model = st.imageModel;
+        // a generated picture: whether it shows anything is not the point, that the image model runs is
+        const c = new OffscreenCanvas(320, 200), g = c.getContext('2d');
+        const grad = g.createLinearGradient(0, 0, 320, 200); grad.addColorStop(0, '#3a6ea5'); grad.addColorStop(1, '#e0c080');
+        g.fillStyle = grad; g.fillRect(0, 0, 320, 200);
+        const bytes = new Uint8Array(await (await c.convertToBlob({ type: 'image/png' })).arrayBuffer());
+        const s = new OffscreenCanvas(224, 224), sg = s.getContext('2d'); sg.drawImage(c, 0, 0, 224, 224);
+        const rgba = sg.getImageData(0, 0, 224, 224).data, pixels = new Uint8Array(224 * 224 * 3);
+        for (let i = 0; i < 224 * 224; i++) { pixels[i * 3] = rgba[i * 4]; pixels[i * 3 + 1] = rgba[i * 4 + 1]; pixels[i * 3 + 2] = rgba[i * 4 + 2]; }
+        const t = performance.now();
+        st = await window.sv.brief.addImage({ name: 'gradient.png', bytes, palette: ['#3a6ea5'], pixels });
+        const ms = Math.round(performance.now() - t);
+        const res = await window.sv.brief.suggest();
+        return { model, analyzed: st.images.length === 1 && st.images[0].analyzed, ms, cards: (res.cards || []).map(c => c.title) };
+    })()`);
+    ok('the image model ships and runs inside the package', brief.model === 'ready' && brief.analyzed, `analyzed in ${brief.ms} ms`);
+    ok('the vault Brief suggests collections inside the package', brief.cards.includes('rain'), brief.cards.join(', '));
     const tClose = Date.now();
     await evaluate(`window.close(), true`).catch(() => {});
     for (let i = 0; i < 60 && !exitedAt; i++) await sleep(500);
