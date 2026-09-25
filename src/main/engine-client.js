@@ -116,6 +116,8 @@ function createEngine({ userData, isPackaged, resourcesPath, ffmpegPath, hnswMin
         search: safe('search', e => ({ results: [], words: [], error: e.message })),
         score: safe('score', []),
         suggest: safe('suggest', []),
+        brief: safe('brief', e => ({ cards: [], error: e.message })),
+        imageConcepts: safe('imageConcepts', e => ({ concepts: [], error: e.message })),
         echo: safe('echo', e => ({ results: [], error: e.message })),
         echoFile: safe('echoFile', e => ({ results: [], error: e.message })),
         failures: safe('failures', []),

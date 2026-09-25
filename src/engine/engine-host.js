@@ -33,6 +33,7 @@ const engine = new SemanticEngine({
     ffmpegPath: wd.ffmpegPath,
     hnswMin: wd.hnswMin,
     echo,
+    imageModelDir: wd.isPackaged && wd.resourcesPath ? path.join(wd.resourcesPath, 'models', 'siglip2') : path.join(__dirname, '..', '..', 'build-assets', 'models', 'siglip2'),
 });
 engine.on('status', s => reply({ event: 'status', data: s }));
 
@@ -58,6 +59,8 @@ const methods = {
     search: (q, opts) => engine.search(q, opts || {}),
     score: (q, paths, opts) => engine.score(q, paths, opts || {}),
     suggest: (paths, k) => engine.suggest(paths, k),
+    brief: o => engine.brief(o || {}),
+    imageConcepts: pixels => engine.imageConcepts(pixels),
     echo: params => engine.echoQuery(params || {}),
     echoFile: (p, opts) => engine.echoFile(p, opts || {}),
     filesChanged: ch => engine.filesChanged(ch || {}),

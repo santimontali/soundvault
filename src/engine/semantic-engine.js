@@ -24,6 +24,7 @@ const { EventEmitter } = require('events');
 const { openDb, EmbeddingsTable } = require('./db');
 const { VectorStore, DIM } = require('./vector-store');
 const { translateQuery } = require('../search/translate');
+const { ImageConcepts } = require('./image-concepts');
 
 const MODEL_ID = 'Xenova/clap-htsat-unfused';
 const FULL_MAX_MS = 10500;
@@ -44,6 +45,8 @@ class LRU {
 }
 
 /** Similarity floor for text→audio results (semantic audit: < 0.30 cosine was ≤ 8% relevant). */
+const clampInt = (v, lo, hi, dflt) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt; };
+
 function cutoffFor(top1) {
     return Math.max(Math.min(0.30, top1 - 0.05), top1 - 0.25);
 }
@@ -91,6 +94,8 @@ class SemanticEngine extends EventEmitter {
         this._changeTimer = null;
         this._saveTimer = null;
         this._hnswFile = null;
+        // Image understanding for the vault brief (optional: the model may not be bundled).
+        this.images = new ImageConcepts(o.imageModelDir || null);
     }
 
     // ── lifecycle ────────────────────────────────────────────────────────
@@ -158,6 +163,7 @@ class SemanticEngine extends EventEmitter {
 
     async close() {
         this._stopWorker();
+        this.images.release();
         if (this.echo) { this.echo.releaseMemory(); this.echo.stopMigration(); }
         clearTimeout(this._changeTimer);
         clearTimeout(this._saveTimer);
@@ -335,6 +341,7 @@ class SemanticEngine extends EventEmitter {
             hnswSource: this.hnswSource || null,
             echo: this.echo ? this.echo.count : 0,
             echoUpgrade: this.echo && this.echo.migration ? this.echo.migration : null,
+            imageModel: this.images.available ? 'ready' : 'unavailable',
         };
     }
 
@@ -460,6 +467,182 @@ class SemanticEngine extends EventEmitter {
             out.push({ path: c.path, score: c.score });
         }
         return out;
+    }
+
+    /**
+     * Suggested collections for a vault brief.
+     *
+     * Every brief item is a query: words and image concepts are embedded as
+     * text (with the vault description as a light context), reference sounds
+     * use their own vector. Words also bring the files whose NAME matches
+     * (from main), ranked by how much they sound like the query, like the
+     * hybrid search. Per query the scores are rescaled to that query's own
+     * range, so text→audio (~0.3-0.7) and audio→audio (~0.8-1) queries are
+     * comparable. Queries whose results overlap are one card; cards without
+     * enough good candidates are left out (unless pinned); each sound goes to
+     * one card only, and every card is diversified (MMR, near-duplicates and
+     * several takes from the same folder are pushed down).
+     *
+     * @param {object} o
+     * @param {{key:string,title:string,kind:string,text?:string,path?:string,weight?:number,pinned?:boolean,names?:string[]}[]} o.queries
+     * @param {string} [o.context]      vault description (biases text queries a little)
+     * @param {string[]} [o.exclude]    paths never suggested (already in the vault, the references)
+     * @param {number} [o.perCard]
+     * @param {number} [o.maxCards]
+     */
+    async brief(o = {}) {
+        if (!this.ready) return { cards: [], notReady: true };
+        const t0 = Date.now();
+        const store = this.store;
+        const perCard = clampInt(o.perCard, 6, 60, 24), maxCards = clampInt(o.maxCards, 1, 16, 8);
+        // Excluded: what the vault already holds and the reference sounds themselves.
+        const exclude = new Set([...(o.exclude || []), ...(o.queries || []).filter(q => q.kind === 'sound' && q.path).map(q => q.path)].map(keyOf));
+        const ctx = o.context && String(o.context).trim() ? (await this.queryVector(String(o.context).slice(0, 300))).vec : null;
+        const runs = [];
+        for (const q of (o.queries || []).slice(0, 40)) {
+            let vec = null;
+            if (q.kind === 'sound') vec = q.path ? store.vector(q.path) : null;
+            else if (q.text || q.title) {
+                const base = (await this.queryVector(String(q.text || q.title).slice(0, 200))).vec;
+                vec = base;
+                if (ctx) {                                             // a pinch of the project's mood
+                    vec = new Float32Array(DIM);
+                    let s = 0; for (let d = 0; d < DIM; d++) { vec[d] = base[d] + 0.2 * ctx[d]; s += vec[d] * vec[d]; }
+                    const k = 1 / Math.sqrt(s || 1); for (let d = 0; d < DIM; d++) vec[d] *= k;
+                }
+            }
+            if (!vec) continue;
+            const ai = store.search(vec, 220).filter(r => !exclude.has(keyOf(r.path)));
+            if (!ai.length) continue;
+            const top = ai[0].score;
+            // Only results that clear the calibrated floor count (the same floor
+            // search uses); a sound reference keeps its close neighbours.
+            const floor = q.kind === 'sound' ? Math.max(0.75, top - 0.15) : cutoffFor(top);
+            let hits = ai.filter(r => r.score >= floor), named = 0;
+            if (Array.isArray(q.names) && q.names.length && q.kind !== 'sound') {
+                const strong = store.search(vec, q.names.length, q.names).filter(r => r.score >= floor && !exclude.has(keyOf(r.path)));
+                // Evidence counts only files named exactly for it (q.exact: a concept's UCS
+                // CatID or label); looser matches (its synonyms) only lift the ranking.
+                const exact = Array.isArray(q.exact) ? new Set(q.exact.map(keyOf)) : null;
+                named = exact ? strong.filter(r => exact.has(keyOf(r.path))).length : strong.length;
+                const seen = new Set(strong.map(r => r.path));
+                hits = [...strong.map(r => ({ path: r.path, score: r.score + 0.08 })), ...hits.filter(r => !seen.has(r.path))].sort((a, b) => b.score - a.score);
+            }
+            if (!hits.length) continue;
+            // Rescale to this query's own range (1 = its best, 0 = its floor) so text
+            // and sound queries can share a card and compete for the same sounds.
+            const hi = hits[0].score;
+            const norm = hits.map(r => ({ path: r.path, score: hi > floor ? Math.max(0, (r.score - floor) / (hi - floor)) : 1 }));
+            // Card quality: enough results above the floor and either a few files
+            // named after it that also sound right, or a strong top 8. On the real 70k library the
+            // cards people would keep ("rain", "thunder", "metal chains") score a
+            // mean top-8 cosine of 0.59-0.72; loose ones ("ropes and rigging",
+            // "footsteps on wet wood" without such files) 0.47-0.50. Concepts seen in
+            // a picture were not typed by anyone, so they need firmer ground: "seaside",
+            // "gore", "pistol" 0.63-0.75; "tundra", "wild animal" 0.39-0.56 with at most
+            // 3 of hundreds of named files sounding right.
+            const strength = hits.slice(0, 8).reduce((s, r) => s + r.score, 0) / Math.min(8, hits.length);
+            const good = hits.length >= 5 && (q.kind === 'sound'
+                || (q.kind === 'concept' ? named >= 5 || strength >= 0.58 : named >= 3 || strength >= 0.52));
+            runs.push({ q, vec, hits: norm, raw: hits, good, named, strength, weight: (q.pinned ? 2 : 1) * (Number(q.weight) || 0.5) });
+        }
+        const heard = new Set(runs.map(r => r.q.key));
+        const unmatched = (o.queries || []).filter(q => !heard.has(q.key)).map(q => q.title);
+        // Cards: near-synonymous queries ("rain", "heavy rain") share one card, named
+        // by the heaviest; distinct words the user typed stay distinct cards.
+        runs.sort((a, b) => b.weight - a.weight);
+        const cards = [];
+        const sim = (a, b) => { let s = 0; for (let d = 0; d < DIM; d++) s += a[d] * b[d]; return s; };
+        for (const run of runs) {
+            const twin = run.q.kind === 'sound' ? null : cards.find(c => c.runs[0].q.kind !== 'sound' && sim(c.runs[0].vec, run.vec) > 0.9);
+            if (twin) { twin.runs.push(run); continue; }
+            cards.push({ runs: [run] });
+        }
+        // Weak cards (no good run, not pinned) drop out before sounds are shared out,
+        // so they cannot take sounds from the cards that stay.
+        const standing = cards.map(c => c.runs.some(r => r.good || r.q.pinned));
+        cards.forEach((c, ci) => { if (!standing[ci]) unmatched.push(...c.runs.map(r => r.q.title)); });
+        // Each sound goes to the card where it ranks best.
+        const home = new Map();
+        cards.forEach((c, ci) => {
+            if (standing[ci]) for (const run of c.runs) run.hits.forEach(h => { const cur = home.get(h.path); if (!cur || h.score * run.weight > cur.s) home.set(h.path, { ci, s: h.score * run.weight }); });
+        });
+        const reasonsOf = c => c.runs.map(r => ({ key: r.q.key, kind: r.q.kind, label: r.q.kind === 'sound' ? r.q.label || r.q.title : r.q.title }));
+        const built = new Map(), absorbed = [];
+        cards.forEach((c, ci) => {
+            if (!standing[ci]) return;
+            const pinned = c.runs.some(r => r.q.pinned);
+            const good = c.runs.some(r => r.good);
+            const pool = new Map();
+            for (const run of c.runs) for (const h of run.hits) {
+                if (home.get(h.path).ci !== ci) continue;
+                const s = h.score * (0.6 + 0.4 * Math.min(1, run.weight));
+                if (!pool.has(h.path) || pool.get(h.path) < s) pool.set(h.path, s);
+            }
+            const picked = this._diverse([...pool].map(([path, score]) => ({ path, score })), perCard);
+            if (picked.length < 4) {
+                // Its sounds went to other cards ("rain" into a pinned "interior rain"): it
+                // joins the card that holds most of its best ones instead of reading as unmatched.
+                const votes = new Map();
+                for (const run of c.runs) for (const h of run.hits.slice(0, 24)) { const t = home.get(h.path).ci; if (t !== ci) votes.set(t, (votes.get(t) || 0) + 1); }
+                const best = [...votes].sort((a, b) => b[1] - a[1])[0];
+                if (best) absorbed.push([ci, best[0]]); else unmatched.push(...c.runs.map(r => r.q.title));
+                return;
+            }
+            const lead = c.runs[0].q;
+            const strength = c.runs[0].strength;
+            built.set(ci, {
+                key: lead.key, title: lead.title, reasons: reasonsOf(c),
+                candidates: picked.map(p => ({ path: p.path, score: +Math.max(0, Math.min(1, p.score)).toFixed(3) })),
+                total: pool.size, strength: +strength.toFixed(3), weak: !good, pinned,
+                order: (pinned ? 10 : 0) + c.runs.reduce((s, r) => s + r.weight, 0) * (0.5 + strength),
+            });
+        });
+        for (const [ci, t] of absorbed) {
+            if (built.has(t)) built.get(t).reasons.push(...reasonsOf(cards[ci]));
+            else unmatched.push(...cards[ci].runs.map(r => r.q.title));
+        }
+        const out = [...built.values()];
+        out.sort((a, b) => b.order - a.order);
+        const cardsOut = out.slice(0, maxCards).map(({ order, ...c }) => c);
+        console.log(`[Engine] brief: ${runs.length} queries → ${cardsOut.length} cards (${out.length} good${unmatched.length ? `, no good match: ${unmatched.join(', ')}` : ''}) in ${Date.now() - t0} ms`);
+        return { cards: cardsOut, more: Math.max(0, out.length - cardsOut.length), unmatched, ms: Date.now() - t0 };
+    }
+
+    /** Concepts a picture shows (224x224 RGB bytes) → { concepts: [{ key, label, score }] }. */
+    async imageConcepts(pixels) {
+        if (!this.images.available) return { concepts: [], error: 'unavailable' };
+        const t0 = Date.now();
+        const concepts = await this.images.concepts(pixels);
+        console.log(`[Engine] image → ${concepts.map(c => c.label).join(', ') || 'nothing that stands out'} in ${Date.now() - t0} ms`);
+        return { concepts, ms: Date.now() - t0 };
+    }
+
+    /** MMR over [{path, score}] (score 0..1): relevant first, then different, one take per folder at a time. */
+    _diverse(pool, n) {
+        const store = this.store;
+        pool.sort((a, b) => b.score - a.score);
+        const cand = pool.slice(0, 160).map(p => ({ ...p, v: store.vector(p.path), dir: path.dirname(p.path) })).filter(p => p.v);
+        const picked = [], dirs = new Map();
+        const dot = (a, b) => { let s = 0; for (let d = 0; d < DIM; d++) s += a[d] * b[d]; return s; };
+        const maxSim = new Float32Array(cand.length);          // incremental: max similarity to anything picked
+        const used = new Uint8Array(cand.length);
+        while (picked.length < n) {
+            let bi = -1, bv = -Infinity;
+            for (let i = 0; i < cand.length; i++) {
+                if (used[i]) continue;
+                const v = 0.72 * cand[i].score - 0.28 * maxSim[i] - 0.06 * (dirs.get(cand[i].dir) || 0);
+                if (v > bv) { bv = v; bi = i; }
+            }
+            if (bi < 0) break;
+            used[bi] = 1;
+            const c = cand[bi];
+            if (picked.length && maxSim[bi] > 0.985) continue;   // same sound, another file
+            picked.push({ path: c.path, score: c.score });
+            dirs.set(c.dir, (dirs.get(c.dir) || 0) + 1);
+            for (let i = 0; i < cand.length; i++) if (!used[i]) { const s = dot(c.v, cand[i].v); if (s > maxSim[i]) maxSim[i] = s; }
+        }
+        return picked;
     }
 
     /** Audio → vector for Echo queries (audio model loaded on first use). */
