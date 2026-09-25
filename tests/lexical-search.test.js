@@ -97,12 +97,34 @@ test('two-word "rain forest" matches the cross-token file even though no field c
     assert.ok(!names.includes('rain_hard_loop.wav'), '"loop" file lacks the "forest" token');
 });
 
-test('AND semantics avoid excessive false positives', () => {
+test('AND semantics: no file has every word → only flagged partial matches', () => {
     const c = corpus();
-    // "kick vocal" — no file has both, expect zero
-    assert.equal(searchSounds(c, 'kick vocal').length, 0);
-    // "synth drum" — no file has both
-    assert.equal(searchSounds(c, 'synth drum').length, 0);
+    // "kick vocal": no file has both: nothing is presented as a full match
+    const kv = searchSounds(c, 'kick vocal');
+    assert.ok(kv.length > 0 && kv.every(h => h.partial), 'fallback results are all flagged partial');
+    assert.ok(searchSounds(c, 'synth drum').every(h => h.partial));
+    // when a full match exists, partial matches are never mixed in
+    assert.ok(searchSounds(c, 'synth lead').every(h => !h.partial));
+});
+
+test('word boundaries: "rain" never matches train/grain/brain; compound tails still match', () => {
+    const lib = ['Train Horn.wav', 'Grain Mill.wav', 'Brain Freeze.wav', 'Rain Heavy.wav', 'Raining Roof.wav', 'Firewood Crackle.wav', 'Voice Line.wav']
+        .map(name => ({ name, folder: '', topLevel: '' }));
+    assert.deepEqual(searchSounds(lib, 'rain').map(h => h.name).sort(), ['Rain Heavy.wav', 'Raining Roof.wav']);
+    assert.deepEqual(searchSounds(lib, 'wood').map(h => h.name), ['Firewood Crackle.wav']);
+    assert.equal(searchSounds(lib, 'ice').length, 0);
+});
+
+test('plurals, -ing forms and library abbreviations match', () => {
+    const lib = ['Explosion 3.wav', 'Explosions Big.wav', 'Whooshes Fast.wav', 'Whoosh 12.wav', 'Sliding Door.wav', 'IMPT_Metal.wav', 'WOODImpt_02.wav', 'Footsteps Gravel.wav']
+        .map(name => ({ name, folder: '', topLevel: '' }));
+    const names = q => searchSounds(lib, q).map(h => h.name).sort();
+    assert.deepEqual(names('explosions'), ['Explosion 3.wav', 'Explosions Big.wav']);
+    assert.deepEqual(names('whoosh'), ['Whoosh 12.wav', 'Whooshes Fast.wav']);
+    assert.deepEqual(names('slide'), ['Sliding Door.wav']);
+    assert.deepEqual(names('impact'), ['IMPT_Metal.wav', 'WOODImpt_02.wav']);
+    assert.deepEqual(names('footstep'), ['Footsteps Gravel.wav']);
+    assert.deepEqual(names('the sound of whooshes'), ['Whoosh 12.wav', 'Whooshes Fast.wav']);
 });
 
 test('non-matching query returns empty', () => {
