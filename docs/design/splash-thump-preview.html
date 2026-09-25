@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  :root { --bg-main: #1a1a1e; --accent: #c8f76d; --accent-rgb: 200, 247, 109; --text-primary: #e0ddd5; --text-muted: #666; }
+  body { margin: 0; background: var(--bg-main); display: flex; gap: 40px; padding: 40px; font-family: -apple-system, 'Segoe UI', sans-serif; }
+  .col { text-align: center; }
+  .label { color: #999; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 16px; }
+  .splash-ring-wrap { position: relative; width: 184px; height: 184px; display: flex; align-items: center; justify-content: center; background: radial-gradient(1100px 700px at 50% 42%, #1d1d23 0%, var(--bg-main) 55%, #121215 100%); border-radius: 12px; }
+  .splash-ring { position: absolute; inset: 0; animation: splash-spin 2.2s linear infinite; }
+  .splash-ring circle { fill: none; }
+  .ring-track { stroke: #26262c; stroke-width: 1.5; }
+  .ring-arc { stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round; stroke-dasharray: 110 342; filter: drop-shadow(0 0 5px rgba(var(--accent-rgb), .35)); }
+  @keyframes splash-spin { to { transform: rotate(360deg); } }
+  .splash-logo { position: relative; opacity: .95; }
+  .squash { animation: thump-squash .32s cubic-bezier(.45, 0, .55, 1) infinite; }
+  .stretch { animation: thump-stretch .32s cubic-bezier(.45, 0, .55, 1) infinite; }
+  .rest { }
+  @keyframes thump-squash { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.982); } }
+  @keyframes thump-stretch { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.022); } }
+</style>
+</head>
+<body>
+  <div class="col">
+    <div class="label">Squash (anticipación)</div>
+    <div class="splash-ring-wrap">
+      <svg class="splash-ring" viewBox="0 0 160 160"><circle class="ring-track" cx="80" cy="80" r="72"/><circle class="ring-arc" cx="80" cy="80" r="72"/></svg>
+      <svg class="splash-logo squash" width="80" height="80" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" fill="#e0ddd5" d="M6.5 2.9h19a3.6 3.6 0 0 1 3.6 3.6v19a3.6 3.6 0 0 1-3.6 3.6h-19a3.6 3.6 0 0 1-3.6-3.6v-19a3.6 3.6 0 0 1 3.6-3.6Zm-2.1 1.5h21.2a1.4 1.4 0 0 1 1.4 1.4v12.9H4.4V5.8a1.4 1.4 0 0 1 1.4-1.4Zm0 16h22.6v2.2a4.4 4.4 0 0 1-4.4 4.4H8.8a4.4 4.4 0 0 1-4.4-4.4v-2.2Z"/>
+        <rect x="7.3" y="10.2" width="2.9" height="4.4" fill="#e0ddd5"/>
+        <rect x="11.6" y="10.2" width="2.9" height="1.4" fill="#e0ddd5"/>
+        <rect x="14.5" y="8.7" width="2.9" height="5.8" fill="#e0ddd5"/>
+        <rect x="18.9" y="10.2" width="2.9" height="1.4" fill="#e0ddd5"/>
+        <rect x="21.8" y="10.2" width="2.9" height="4.4" fill="#e0ddd5"/>
+        <rect x="5.8" y="11.6" width="20.4" height="1.5" fill="#e0ddd5"/>
+        <path fill-rule="evenodd" fill="#c8f76d" d="M13.1 17.5h5.8v2.9h-5.8v-2.9Zm0 2.9h5.8v4.4h-5.8v-4.4Zm1.5 0h2.9v2.9h-2.9v-2.9Z"/>
+      </svg>
+    </div>
+  </div>
+  <div class="col">
+    <div class="label">Stretch (golpe interior)</div>
+    <div class="splash-ring-wrap">
+      <svg class="splash-ring" viewBox="0 0 160 160"><circle class="ring-track" cx="80" cy="80" r="72"/><circle class="ring-arc" cx="80" cy="80" r="72"/></svg>
+      <svg class="splash-logo stretch" width="80" height="80" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" fill="#e0ddd5" d="M6.5 2.9h19a3.6 3.6 0 0 1 3.6 3.6v19a3.6 3.6 0 0 1-3.6 3.6h-19a3.6 3.6 0 0 1-3.6-3.6v-19a3.6 3.6 0 0 1 3.6-3.6Zm-2.1 1.5h21.2a1.4 1.4 0 0 1 1.4 1.4v12.9H4.4V5.8a1.4 1.4 0 0 1 1.4-1.4Zm0 16h22.6v2.2a4.4 4.4 0 0 1-4.4 4.4H8.8a4.4 4.4 0 0 1-4.4-4.4v-2.2Z"/>
+        <rect x="7.3" y="10.2" width="2.9" height="4.4" fill="#e0ddd5"/>
+        <rect x="11.6" y="10.2" width="2.9" height="1.4" fill="#e0ddd5"/>
+        <rect x="14.5" y="8.7" width="2.9" height="5.8" fill="#e0ddd5"/>
+        <rect x="18.9" y="10.2" width="2.9" height="1.4" fill="#e0ddd5"/>
+        <rect x="21.8" y="10.2" width="2.9" height="4.4" fill="#e0ddd5"/>
+        <rect x="5.8" y="11.6" width="20.4" height="1.5" fill="#e0ddd5"/>
+        <path fill-rule="evenodd" fill="#c8f76d" d="M13.1 17.5h5.8v2.9h-5.8v-2.9Zm0 2.9h5.8v4.4h-5.8v-4.4Zm1.5 0h2.9v2.9h-2.9v-2.9Z"/>
+      </svg>
+    </div>
+  </div>
+  <div class="col">
+    <div class="label">Reposo</div>
+    <div class="splash-ring-wrap">
+      <svg class="splash-ring" viewBox="0 0 160 160"><circle class="ring-track" cx="80" cy="80" r="72"/><circle class="ring-arc" cx="80" cy="80" r="72"/></svg>
+      <svg class="splash-logo rest" width="80" height="80" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" fill="#e0ddd5" d="M6.5 2.9h19a3.6 3.6 0 0 1 3.6 3.6v19a3.6 3.6 0 0 1-3.6 3.6h-19a3.6 3.6 0 0 1-3.6-3.6v-19a3.6 3.6 0 0 1 3.6-3.6Zm-2.1 1.5h21.2a1.4 1.4 0 0 1 1.4 1.4v12.9H4.4V5.8a1.4 1.4 0 0 1 1.4-1.4Zm0 16h22.6v2.2a4.4 4.4 0 0 1-4.4 4.4H8.8a4.4 4.4 0 0 1-4.4-4.4v-2.2Z"/>
+        <rect x="7.3" y="10.2" width="2.9" height="4.4" fill="#e0ddd5"/>
+        <rect x="11.6" y="10.2" width="2.9" height="1.4" fill="#e0ddd5"/>
+        <rect x="14.5" y="8.7" width="2.9" height="5.8" fill="#e0ddd5"/>
+        <rect x="18.9" y="10.2" width="2.9" height="1.4" fill="#e0ddd5"/>
+        <rect x="21.8" y="10.2" width="2.9" height="4.4" fill="#e0ddd5"/>
+        <rect x="5.8" y="11.6" width="20.4" height="1.5" fill="#e0ddd5"/>
+        <path fill-rule="evenodd" fill="#c8f76d" d="M13.1 17.5h5.8v2.9h-5.8v-2.9Zm0 2.9h5.8v4.4h-5.8v-4.4Zm1.5 0h2.9v2.9h-2.9v-2.9Z"/>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

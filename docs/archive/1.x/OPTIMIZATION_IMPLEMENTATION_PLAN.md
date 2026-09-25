@@ -1,8 +1,8 @@
-# SoundVault — Plan de Implementación de Optimización
+# SoundVault: Plan de Implementación de Optimización
 
 ## Contexto para el agente ejecutor
 
-Este documento contiene instrucciones de implementación exactas para cada optimización. Cada tarea especifica los archivos a modificar, las funciones exactas a reemplazar, las firmas, y el código esperado. **No improvises ni cambies la arquitectura**. SoundVault es vanilla JS/HTML/CSS sobre Electron — no introduzcas frameworks, bundlers, ni dependencias externas.
+Este documento contiene instrucciones de implementación exactas para cada optimización. Cada tarea especifica los archivos a modificar, las funciones exactas a reemplazar, las firmas, y el código esperado. **No improvises ni cambies la arquitectura**. SoundVault es vanilla JS/HTML/CSS sobre Electron, no introduzcas frameworks, bundlers, ni dependencias externas.
 
 Las reglas de arquitectura de SoundVault que DEBES respetar siempre:
 
@@ -35,7 +35,7 @@ Agregar estas variables después de la línea `let sidebarMode = 'vault';` (lín
 
 ```javascript
 // ═══ Virtual List State ═══
-const ITEM_HEIGHT = 57;        // px — measured height of .sound-item
+const ITEM_HEIGHT = 57;        // px, measured height of .sound-item
 const BUFFER_COUNT = 10;       // extra items above/below viewport
 let vList = {
   data: [],                    // full data array (sound objects)
@@ -47,7 +47,7 @@ let vList = {
 };
 ```
 
-### Nuevo `renderSounds(list)` — reemplazar COMPLETAMENTE la función actual (líneas 2830-2838)
+### Nuevo `renderSounds(list)`: reemplazar COMPLETAMENTE la función actual (líneas 2830-2838)
 
 ```javascript
 function renderSounds(list) {
@@ -109,7 +109,7 @@ function renderSounds(list) {
 }
 ```
 
-### Nuevo `createSoundItemElement()` — función helper que crea un nodo reutilizable
+### Nuevo `createSoundItemElement()`: función helper que crea un nodo reutilizable
 
 Insertar ANTES de `renderSounds`:
 
@@ -122,7 +122,7 @@ function createSoundItemElement() {
 }
 ```
 
-### Nuevo `bindSoundItem(poolEntry, sound, index)` — función que asigna data a un nodo reciclado
+### Nuevo `bindSoundItem(poolEntry, sound, index)`: función que asigna data a un nodo reciclado
 
 ```javascript
 function bindSoundItem(poolEntry, sound, index) {
@@ -260,7 +260,7 @@ function bindSoundItem(poolEntry, sound, index) {
 }
 ```
 
-### Nuevo `updateVirtualList()` — el corazón del reciclaje
+### Nuevo `updateVirtualList()`: el corazón del reciclaje
 
 ```javascript
 function updateVirtualList() {
@@ -343,7 +343,7 @@ Las funciones `redrawWf`, `updateWfPh`, `updateSelUI`, y `positionGlobalToolbar`
 
 ### Adaptar `fadeDrag`
 
-La función `fadeDrag` (inlineada en la línea 2913 del código actual) se usa dentro de `bindSoundItem` — ya está migrada arriba. **Copiar la implementación exacta de fadeDrag que ya existe en el codebase actual dentro de bindSoundItem.** La función actual es:
+La función `fadeDrag` (inlineada en la línea 2913 del código actual) se usa dentro de `bindSoundItem`, ya está migrada arriba. **Copiar la implementación exacta de fadeDrag que ya existe en el codebase actual dentro de bindSoundItem.** La función actual es:
 
 ```javascript
 function fadeDrag(ev, side, snd, wc2) {
@@ -378,16 +378,16 @@ Esta función debe existir en el scope del `<script>` (fuera de bindSoundItem) p
 Mover la extracción de peaks de waveform del renderer al main process. El renderer actualmente envía un WAV completo (hasta 50MB) por IPC via `readAudioFile`, lo decodifica con Web Audio API, y extrae 4000 peaks. Esto es extremadamente ineficiente. El main process debe hacer la extracción y cachear los peaks.
 
 ### Archivos a modificar
-- `main.js` — nuevo handler IPC
-- `preload.js` — exponer nuevo canal
-- `index.html` — modificar `loadPeaks`
+- `main.js`: nuevo handler IPC
+- `preload.js`: exponer nuevo canal
+- `index.html`: modificar `loadPeaks`
 
 ### Paso 2.1: Nuevo handler IPC en `main.js`
 
 Agregar DESPUÉS de la línea del handler `read-audio-file` (línea 243):
 
 ```javascript
-// ═══ Peak Extraction (optimized — avoids sending full WAV to renderer) ═══
+// ═══ Peak Extraction (optimized, avoids sending full WAV to renderer) ═══
 // Decodes first few seconds of a WAV file and returns 4000 peak values + duration.
 // Uses ffmpeg to decode to raw f32le, then calculates peaks in main process.
 const _peakCache = new Map(); // path → { peaks: Float32Array(4000), duration: number, mtime: number }
@@ -499,7 +499,7 @@ async function loadPeaks(fp) {
 - Las waveforms deben dibujarse igual que antes.
 - La duración mostrada debe ser correcta.
 - Verificar con DevTools Network/Performance que los transfers IPC son ~16KB (4000 * 4 bytes) en vez de megabytes.
-- La cola de waveforms (`wfQ` / `processWfQ`) debe funcionar igual — ahora simplemente es más rápida.
+- La cola de waveforms (`wfQ` / `processWfQ`) debe funcionar igual, ahora simplemente es más rápida.
 
 ---
 
@@ -656,9 +656,9 @@ function findBestSegment(queryMatrix, queryLen, fileMatrix, fileLen, featureWeig
 Cuando el indexing worker decodifica un archivo para CLAP o spectral, extraer los peaks en el mismo paso. Esto evita que el renderer tenga que solicitar peaks por separado via IPC + ffmpeg.
 
 ### Archivos a modificar
-- `main.js` — agregar tabla SQLite para peaks y cargar al iniciar
-- `indexing-worker.js` — extraer peaks durante indexing
-- `semantic-engine.js` — exponer peaks desde la DB
+- `main.js`: agregar tabla SQLite para peaks y cargar al iniciar
+- `indexing-worker.js`: extraer peaks durante indexing
+- `semantic-engine.js`: exponer peaks desde la DB
 
 ### Paso 5.1: Crear tabla de peaks en `semantic-engine.js`
 
@@ -915,20 +915,20 @@ Agregar el mismo bloque de adaptive pruning (copiar exactamente el bloque de arr
 
 Implementar EN ESTE ORDEN EXACTO. Cada tarea es independiente y se puede testear por separado.
 
-1. **Tarea 4** (early-exit en findBestSegment) — Cambio más autocontenido, un solo archivo, zero riesgo de regresión. Testear.
-2. **Tarea 3** (paginación search-all-sounds) — Una línea cambiada, impacto inmediato. Testear.
-3. **Tarea 6** (adaptive candidate count) — Cambio pequeño, autocontenido. Testear.
-4. **Tarea 2** (peaks en main process) — Nuevo canal IPC, cambio en loadPeaks. Testear que waveforms se dibujan correctamente.
-5. **Tarea 5** (peaks en indexing pipeline) — Depende de Tarea 2. Extiende la DB y el worker. Testear con re-index.
-6. **Tarea 1** (virtualización) — Cambio más grande y de mayor riesgo. Se implementa ÚLTIMO porque toca mucho código del renderer. Testear extensivamente: scroll, play, selection, drag, context menu, search.
+1. **Tarea 4** (early-exit en findBestSegment), Cambio más autocontenido, un solo archivo, zero riesgo de regresión. Testear.
+2. **Tarea 3** (paginación search-all-sounds): Una línea cambiada, impacto inmediato. Testear.
+3. **Tarea 6** (adaptive candidate count), Cambio pequeño, autocontenido. Testear.
+4. **Tarea 2** (peaks en main process), Nuevo canal IPC, cambio en loadPeaks. Testear que waveforms se dibujan correctamente.
+5. **Tarea 5** (peaks en indexing pipeline), Depende de Tarea 2. Extiende la DB y el worker. Testear con re-index.
+6. **Tarea 1** (virtualización): Cambio más grande y de mayor riesgo. Se implementa ÚLTIMO porque toca mucho código del renderer. Testear extensivamente: scroll, play, selection, drag, context menu, search.
 
 ## Resumen de Archivos Modificados por Tarea
 
 | Tarea | spectral-engine.js | semantic-engine.js | main.js | preload.js | index.html | indexing-worker.js |
 |-------|---|---|---|---|---|---|
-| 1 — Virtualización | | | | | ✅ MAYOR | |
-| 2 — Peaks Main | | | ✅ | ✅ | ✅ | |
-| 3 — Pagination | | | ✅ | | | |
-| 4 — Early-exit | ✅ | | | | | |
-| 5 — Peaks Indexing | | ✅ | ✅ | | | ✅ |
-| 6 — Adaptive Candidates | | ✅ | | | | |
+| 1: Virtualización | | | | | ✅ MAYOR | |
+| 2: Peaks Main | | | ✅ | ✅ | ✅ | |
+| 3: Pagination | | | ✅ | | | |
+| 4: Early-exit | ✅ | | | | | |
+| 5: Peaks Indexing | | ✅ | ✅ | | | ✅ |
+| 6: Adaptive Candidates | | ✅ | | | | |

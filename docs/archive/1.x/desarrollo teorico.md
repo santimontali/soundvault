@@ -2,11 +2,11 @@
 
 ### Arquitectura de Búsqueda Semántica con IA
 
-##### Programa de Estudio Técnico — Diseño de Sonido & IA
+##### Programa de Estudio Técnico: Diseño de Sonido & IA
 
 ```
 5 Módulos · Del .wav al Vector · Optimización y Producción Real
-Ingeniero de Software — Audio Digital & IA
+Ingeniero de Software: Audio Digital & IA
 ```
 
 ## Introducción: ¿Qué estamos estudiando?
@@ -264,7 +264,7 @@ multiplicación en punto flotante ejecuta JavaScript en el peor caso para respon
 búsqueda.
 
 
-## Módulo 4: Optimización — Velocidad a Escala
+## Módulo 4: Optimización: Velocidad a Escala
 
 **Tema central:** Por qué JavaScript es lento para álgebra vectorial masiva, índices HNSW,
 sqlite-vss y aceleración WebGPU.

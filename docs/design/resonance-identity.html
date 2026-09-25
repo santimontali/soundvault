@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SoundVault · Resonance</title>
+<style>
+:root {
+  --bg-0: #0e0e11; --bg-1: #141417; --bg-2: #19191d; --bg-3: #212126; --bg-4: #2a2a31; --bg-5: #34343c;
+  --line: #25252b; --line-2: #303038; --line-3: #4d4d58;
+  --fg-1: #ecebe6; --fg-2: #a4a2ab; --fg-3: #8a8893; --fg-4: #5c5b64;
+  --accent: #c8f76d; --accent-rgb: 200, 247, 109; --accent-ink: #11140b;
+  --accent-soft: rgba(var(--accent-rgb), .12); --accent-soft-2: rgba(var(--accent-rgb), .2); --accent-line: rgba(var(--accent-rgb), .42);
+  --warn: #f5c56b; --ok: #7ee0a1;
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg-0); color: var(--fg-1); font: 13px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+.page { max-width: 1120px; margin: 0 auto; padding: 44px 28px 80px; }
+.i { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.i.sm { width: 13px; height: 13px; } .i.xs { width: 11px; height: 11px; }
+.bigmark { display: block; overflow: visible; }
+
+/* header */
+.hero { display: grid; grid-template-columns: 1fr auto; gap: 40px; align-items: center; padding-bottom: 34px; border-bottom: 1px solid var(--line); }
+.overline { font-size: 10.5px; font-weight: 700; letter-spacing: 2.2px; text-transform: uppercase; color: var(--fg-3); display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.overline::before { content: ""; width: 18px; height: 2px; border-radius: 1px; background: var(--accent); }
+h1 { font: 700 34px/1.1 var(--font-display); letter-spacing: -.01em; }
+h1 em { font-style: normal; color: var(--accent); }
+.intro { color: var(--fg-2); max-width: 64ch; margin-top: 12px; font-size: 13.5px; }
+.lockup { display: flex; align-items: center; gap: 22px; padding: 26px 34px; border-radius: 16px; background: radial-gradient(120% 120% at 30% 20%, #1c1c21, var(--bg-0) 70%); border: 1px solid var(--line); }
+.lockup .word { font: 700 15px/1 var(--font); letter-spacing: 4px; text-transform: uppercase; color: var(--fg-1); }
+.lockup .word i { display: block; height: 2px; border-radius: 1px; background: var(--accent); margin-top: 8px; width: 100%; opacity: .85; }
+.lockup .sub { display: block; font: 500 11px/1.4 var(--font); letter-spacing: .3px; text-transform: none; color: var(--fg-3); margin-top: 10px; }
+
+/* naming + family strip */
+.grid2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 18px; margin: 30px 0 10px; }
+.card { background: var(--bg-1); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+.card h3 { font-size: 10.5px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--fg-3); margin-bottom: 12px; }
+.naming { display: grid; grid-template-columns: auto 1fr; gap: 9px 14px; align-items: baseline; font-size: 13px; color: var(--fg-2); }
+.naming b { color: var(--fg-1); font-weight: 600; white-space: nowrap; display: inline-flex; align-items: center; gap: 7px; }
+.naming b .i { color: var(--accent); align-self: center; }
+.family { display: flex; align-items: center; gap: 16px; padding: 12px 14px; border-radius: 8px; background: var(--bg-2); color: var(--fg-2); }
+.family .hl { color: var(--accent); }
+.family.lg .i { width: 24px; height: 24px; }
+.family + .family { margin-top: 8px; }
+.cap { font-size: 11.5px; color: var(--fg-3); margin-top: 10px; }
+.swap { display: flex; align-items: center; gap: 12px; margin-top: 12px; color: var(--fg-3); font-size: 12px; }
+
+/* direction sections */
+.dir { margin-top: 44px; padding: 26px 26px 24px; border-radius: 16px; background: var(--bg-1); border: 1px solid var(--line); }
+.dir.rec { border-color: var(--accent-line); box-shadow: 0 0 0 4px rgba(var(--accent-rgb), .05); }
+.dir-head { display: flex; align-items: center; gap: 12px; }
+.num { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--bg-3); color: var(--fg-2); font-weight: 700; font-size: 12px; }
+.rec .num { background: var(--accent); color: var(--accent-ink); }
+.dir h2 { font: 650 22px/1.2 var(--font-display); }
+.dir h2 em { font: 400 13px var(--font); font-style: normal; color: var(--fg-3); margin-left: 6px; }
+.badge { margin-left: auto; font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); }
+.lede { color: var(--fg-2); margin: 10px 0 18px; max-width: 80ch; font-size: 13.5px; }
+
+.ramps { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ramp .rl { font-size: 11px; color: var(--fg-3); margin-bottom: 7px; }
+.tiles { display: flex; align-items: flex-end; gap: 8px; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.tile .sq { width: 44px; height: 44px; border-radius: 9px; display: grid; place-items: center; }
+.tile.big .sq { width: 66px; height: 66px; }
+.tile.xl .sq { width: 118px; height: 118px; border-radius: 14px; }
+.tile.dark .sq { background: var(--bg-0); color: var(--fg-1); border: 1px solid var(--line); }
+.tile.lime .sq { background: var(--accent); color: var(--accent-ink); }
+.tile figcaption { font-size: 10.5px; color: var(--fg-4); font-variant-numeric: tabular-nums; }
+
+.construct { display: flex; align-items: center; gap: 18px; margin-top: 16px; padding: 14px 18px; border-radius: 12px; background: var(--bg-0); border: 1px solid var(--line); }
+.construct figure { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+.construct figcaption { font-size: 12px; color: var(--fg-2); max-width: 22ch; }
+.construct .arrow { color: var(--fg-4); font-size: 18px; }
+.mocks { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+.mock-card { background: var(--bg-0); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px 14px; min-width: 0; }
+.mc-label { font-size: 11px; color: var(--fg-3); margin-bottom: 10px; }
+.st { font-size: 10.5px; color: var(--fg-4); }
+
+/* app primitives (from tokens.css / layout.css / list.css / overlays.css) */
+.chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 4px; background: var(--bg-3); color: var(--fg-2); font-size: 11px; white-space: nowrap; }
+.chip.ai.on { background: var(--accent-soft-2); color: var(--accent); }
+.chip.ai.disabled { opacity: .5; }
+.kbd { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--line-3); border-bottom-width: 2px; color: var(--fg-2); font: 600 10.5px var(--font); margin-left: 6px; }
+.tip { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 4px; background: var(--bg-5); color: var(--fg-1); font-size: 11px; box-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
+.btn { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line-2); color: var(--fg-2); font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.switch { width: 34px; height: 20px; border-radius: 10px; background: var(--bg-5); position: relative; flex-shrink: 0; }
+.switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--fg-2); }
+.switch.on { background: var(--accent); }
+.switch.on::after { transform: translateX(14px); background: var(--accent-ink); }
+
+.m-titlebar { display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 10px; background: var(--bg-0); border: 1px solid var(--line); border-radius: 8px; }
+.m-brand { display: flex; align-items: center; gap: 9px; }
+.m-word { font: 700 12.5px/15px var(--font); letter-spacing: 3px; color: var(--accent); text-transform: uppercase; }
+.m-search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 4px 0 10px; border-radius: 8px; background: var(--bg-1); border: 1px solid var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); color: var(--fg-3); }
+.m-q { flex: 1; min-width: 0; color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-states { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.m-states .st { margin-right: 8px; }
+.m-tipwrap { margin-top: 10px; }
+
+.m-pills { display: grid; gap: 8px; }
+.m-pillrow { display: flex; align-items: center; gap: 10px; }
+.status-pill { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--bg-2); border: 1px solid var(--line); color: var(--fg-2); font-size: 11px; white-space: nowrap; }
+.status-pill .rz-led { color: var(--fg-3); }
+.status-pill.busy .rz-led { color: var(--accent); }
+.status-pill.warn .rz-led { color: var(--warn); }
+.status-pill .meter { width: 54px; height: 4px; border-radius: 2px; background: var(--bg-4); overflow: hidden; }
+.status-pill .meter i { display: block; height: 100%; background: var(--accent); }
+
+.m-settings { background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 14px 16px; }
+.m-settings h4 { font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--fg-3); margin-bottom: 10px; }
+.set-row { display: flex; align-items: center; gap: 12px; min-height: 34px; }
+.set-row + .set-row { margin-top: 8px; }
+.set-row .lbl { flex: 1; min-width: 0; color: var(--fg-1); font-size: 12px; }
+.set-row .lbl small { display: block; color: var(--fg-3); font-size: 11px; margin-top: 1px; line-height: 1.4; }
+
+.m-resonance { border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); overflow: hidden; }
+.rs-head { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px 0 14px; color: var(--fg-2); font-size: 12px; }
+.rs-head .i { color: var(--accent); }
+.rs-head .rs-t { color: var(--fg-1); }
+.rs-head .rs-c { color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.rs-head .chev { margin-left: auto; transform: rotate(180deg); }
+.rs-list { display: flex; gap: 6px; padding: 2px 14px 12px; overflow: hidden; }
+.rs-item { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 4px 0 10px; border-radius: 999px; background: var(--bg-3); border: 1px solid var(--line-2); color: var(--fg-1); }
+.rs-item .i.xs { color: var(--fg-2); }
+.rs-item .n { font-size: 12px; white-space: nowrap; }
+.rs-item .add { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--fg-2); }
+
+.notes { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; margin-top: 18px; }
+.notes ul { list-style: none; display: grid; gap: 7px; }
+.notes li { color: var(--fg-2); padding-left: 16px; position: relative; font-size: 12.5px; }
+.notes li::before { content: ""; position: absolute; left: 2px; top: .62em; width: 6px; height: 2px; border-radius: 1px; background: var(--fg-4); }
+.rec .notes li::before { background: var(--accent); }
+.risk { font-size: 12.5px; color: var(--fg-2); background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; align-self: start; }
+.risk b { color: var(--warn); font-weight: 600; }
+
+/* listening demos */
+.listen { display: flex; align-items: center; gap: 22px; margin-top: 14px; padding: 16px 18px; border-radius: 12px; background: var(--bg-0); border: 1px solid var(--line); color: var(--accent); }
+.listen .i { display: block; }
+.listen .sep { width: 1px; align-self: stretch; background: var(--line); }
+.listen .txt { color: var(--fg-3); font-size: 12px; max-width: 46ch; }
+
+/* sections after the directions */
+h2.sec { font: 650 20px/1.2 var(--font-display); margin: 52px 0 6px; }
+p.sec-sub { color: var(--fg-2); max-width: 80ch; margin-bottom: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--bg-1); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+th { text-align: left; font-size: 10.5px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--fg-3); font-weight: 700; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--bg-2); }
+td { padding: 8px 14px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--fg-2); }
+tr:last-child td { border-bottom: 0; }
+td.f { font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-3); white-space: nowrap; }
+td.n { color: var(--fg-1); }
+pre { background: var(--bg-1); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; font: 12px/1.55 var(--font-mono); color: var(--fg-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+code { font: 12px var(--font-mono); color: var(--fg-1); }
+p code { white-space: nowrap; }
+pre + pre { margin-top: 12px; }
+.foot { margin-top: 40px; color: var(--fg-4); font-size: 11.5px; }
+
+/* ── animations (page only; the app snippet is in the Implementación section) ── */
+/* Resonance: "listening" state. Add .listening to the icon's <svg class="i">.
+   The ring bars live inside the i-resonance symbol (opacity 0 when idle);
+   inherited custom properties switch their animation on per instance. */
+.rz-ring { animation: var(--rz-ring, none); transform-box: view-box; transform-origin: 8px 3.6px; }
+.rz-ring-2 { animation: var(--rz-ring-2, none); }
+.i.listening {
+  --rz-ring: rz-ring 1.8s var(--ease) infinite;
+  --rz-ring-2: rz-ring 1.8s var(--ease) .28s infinite;
+}
+@keyframes rz-ring {
+  0% { opacity: 0; transform: scaleX(.9); }
+  18% { opacity: .95; }
+  70%, 100% { opacity: 0; transform: scaleX(1.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .i.listening { --rz-ring: none; --rz-ring-2: none; }
+}
+/* hero lockup: the large two-tone mark rings continuously */
+.lockup .bm-r1 { animation: rz-ring 1.8s var(--ease) infinite; transform-box: view-box; transform-origin: 8px 3.6px; }
+.lockup .bm-r2 { animation: rz-ring-soft 1.8s var(--ease) .28s infinite; transform-box: view-box; transform-origin: 8px 3.6px; }
+@keyframes rz-ring-soft { 0% { opacity: 0; transform: scaleX(.9); } 18% { opacity: .55; } 70%, 100% { opacity: 0; transform: scaleX(1.1); } }
+/* alternative directions */
+.rz-pk { animation: var(--rz-pk, none); }
+.rz-hero { animation: var(--rz-hero, none); transform-box: fill-box; transform-origin: center; }
+.rz-side { animation: var(--rz-side, none); transform-box: fill-box; transform-origin: center; }
+.rz-far { animation: var(--rz-far, none); }
+.rz-trace { animation: var(--rz-trace, none); }
+.rz-core { animation: var(--rz-core, none); transform-box: fill-box; transform-origin: center; }
+.i.listening { --rz-pk: rz-pk 2s ease-in-out infinite; --rz-hero: rz-hero 1.6s ease-in-out infinite; --rz-side: rz-side 1.6s ease-in-out .14s infinite; --rz-far: rz-far 1.6s ease-in-out .26s infinite; --rz-trace: rz-trace 2s cubic-bezier(.5, 0, .6, 1) infinite; --rz-core: rz-core 2s ease-out infinite; }
+@keyframes rz-pk { 50% { d: path("M1.8 10.6h3.4c2.4 0 3-4.6 4.4-4.6 1.3 0 1.9 3.4 4.6 7.6"); } }
+@keyframes rz-hero { 0%, 100% { transform: scaleY(1); } 22% { transform: scaleY(.7); } }
+@keyframes rz-side { 0%, 100% { transform: scaleY(1); } 30% { transform: scaleY(1.45); } }
+@keyframes rz-far { 0%, 100% { opacity: .5; } 35% { opacity: 1; } }
+@keyframes rz-trace { 0% { opacity: 0; stroke-dashoffset: -90; } 12% { opacity: 1; } 78% { opacity: 1; stroke-dashoffset: 0; } 100% { opacity: 0; stroke-dashoffset: 0; } }
+@keyframes rz-core { 0%, 70% { transform: scale(1); } 84% { transform: scale(1.35); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+@media (max-width: 980px) { .hero, .grid2, .ramps, .mocks, .notes { grid-template-columns: 1fr; } .tiles { flex-wrap: wrap; } .construct { flex-wrap: wrap; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-resonance" viewBox="0 0 16 16"><path d="M5.7 1.6v6a2.3 2.3 0 0 0 4.6 0V1.6M8 9.9v4.5"/><path class="rz-ring" d="M3.6 2.2v2.8M12.4 2.2v2.8" stroke-width="1.3" opacity="0"/><path class="rz-ring rz-ring-2" d="M1.7 3v1.2M14.3 3v1.2" stroke-width="1.3" opacity="0"/></symbol>
+<symbol id="i-rz-peak" viewBox="0 0 16 16"><path class="rz-pk" d="M1.8 10.6h3.4c2.4 0 3-7.8 4.4-7.8 1.3 0 1.9 5.6 4.6 10.8"/></symbol>
+<symbol id="i-rz-bars" viewBox="0 0 16 16"><rect class="rz-hero" x="6.7" y="1.6" width="2.6" height="12.8" rx="1.3" fill="currentColor" stroke="none"/><path class="rz-side" d="M3.8 5.2v5.6M12.2 5.2v5.6"/><path class="rz-far" d="M1.2 7.4v1.2M14.8 7.4v1.2" opacity=".5"/></symbol>
+<symbol id="i-rz-coil" viewBox="0 0 16 16"><path d="M10.2 6.8a2.9 2.9 0 0 1-5.8 0 4.35 4.35 0 0 1 8.7 0 5.8 5.8 0 0 1-5.8 5.8H2.6"/><path class="rz-trace" d="M10.2 6.8a2.9 2.9 0 0 1-5.8 0 4.35 4.35 0 0 1 8.7 0 5.8 5.8 0 0 1-5.8 5.8H2.6" pathLength="100" stroke-dasharray="10 100" stroke-dashoffset="-90" opacity="0"/><circle class="rz-core" cx="8.3" cy="6.4" r="1.3" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.4"/><path d="M10.4 10.4l3.2 3.2"/></symbol>
+<symbol id="i-spark" viewBox="0 0 16 16"><path d="M7.5 2l1.4 3.6 3.6 1.4-3.6 1.4-1.4 3.6-1.4-3.6L2.5 7l3.6-1.4z"/><path d="M12.8 10.6v3.2M11.2 12.2h3.2"/></symbol>
+<symbol id="i-chev-d" viewBox="0 0 16 16"><path d="M3.8 6L8 10.2 12.2 6"/></symbol>
+<symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.3v9.4l7.3-4.7z" fill="currentColor" stroke="none"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.1"/><path d="M8 1.8v1.7M8 12.5v1.7M1.8 8h1.7M12.5 8h1.7M3.6 3.6l1.2 1.2M11.2 11.2l1.2 1.2M3.6 12.4l1.2-1.2M11.2 4.8l1.2-1.2"/></symbol>
+<symbol id="i-echo" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M4.7 4.7a4.7 4.7 0 0 0 0 6.6M11.3 4.7a4.7 4.7 0 0 1 0 6.6"/><path d="M2.6 2.6a7.6 7.6 0 0 0 0 10.8M13.4 2.6a7.6 7.6 0 0 1 0 10.8" opacity=".5"/></symbol>
+<symbol id="i-vault" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="11" rx="2.5"/><path d="M2 9h12"/><rect x="6.6" y="7.6" width="2.8" height="3.2" rx=".8" fill="currentColor"/></symbol>
+<symbol id="i-library" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="3" height="11" rx=".8"/><rect x="6.8" y="2.5" width="3" height="11" rx=".8"/><path d="M11.1 3.4l2.4-.6 1.9 10.3-2.4.5z"/></symbol>
+<symbol id="i-collection" viewBox="0 0 16 16"><path d="M4 2.5h8c.6 0 1 .4 1 1v10l-5-3-5 3v-10c0-.6.4-1 1-1z"/></symbol>
+<symbol id="i-folder" viewBox="0 0 16 16"><path d="M2 4.6c0-.6.4-1.1 1-1.1h3.1l1.6 1.6H13c.6 0 1 .5 1 1.1v5.9c0 .6-.4 1.1-1 1.1H3c-.6 0-1-.5-1-1.1z"/></symbol>
+<symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.8"/><path d="M8 7.2v3.6M8 5.2v.2"/></symbol>
+</defs></svg>
+<div class="page">
+
+<header class="hero">
+  <div>
+    <div class="overline">SoundVault · identidad de la IA</div>
+    <h1>Resonance, <em>sin estrellita</em></h1>
+    <p class="intro">Hoy la IA aparece como "AI" con el ícono spark, el cliché de cualquier producto. La propuesta: llamarla <b>Resonance</b> y darle una marca que salga del mundo del sonido, dibujada con las mismas reglas que el sprite (16 px, trazo 1.6, puntas redondas, currentColor) y con un solo acento lima, como la cerradura del cofre. Abajo hay cuatro direcciones, cada una en tamaños reales y en la interfaz. La 1 es la recomendada.</p>
+  </div>
+  <div class="lockup"><svg class="bigmark" width="96" height="96" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.7 1.6v6a2.3 2.3 0 0 0 4.6 0V1.6M8 9.9v4.5" fill="none" stroke="#ecebe6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.6 2.2v2.8M12.4 2.2v2.8" fill="none" stroke="#c8f76d" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r1"/><path d="M1.7 3v1.2M14.3 3v1.2" fill="none" stroke="#c8f76d" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r2" opacity=".55"/></svg><div class="word">Resonance<i></i><span class="sub">listens to your library</span></div></div>
+</header>
+
+<div class="grid2">
+  <div class="card"><h3>Cómo se llama cada cosa</h3>
+    <div class="naming">
+      <b><svg class="i" aria-hidden="true"><use href="#i-resonance"/></svg>Resonance</b><span>El motor que escucha la biblioteca: lo que hoy la interfaz llama "AI". Aparece en el estado, en Ajustes y en los errores.</span>
+      <b>Describe</b><span>La búsqueda por descripción (el chip del buscador, Ctrl+I). Dice qué hacés, no qué tecnología hay atrás.</span>
+      <b>Echo</b><span>Sin cambios: conserva su nombre y su ícono de ondas.</span>
+      <b>Panel Resonance</b><span>Las sugerencias de la colección siguen con ese nombre: es donde el motor habla con voz propia.</span>
+    </div>
+    <p class="cap">Texto de la interfaz en inglés, corto y sin palabras de marketing. Alternativa para el chip, si "Describe" queda frío: "By ear".</p>
+  </div>
+  <div class="card"><h3>Convive con el sprite actual</h3>
+    <div class="family"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><svg class="i" aria-hidden="true"><use href="#i-echo"/></svg><svg class="i" aria-hidden="true"><use href="#i-vault"/></svg><svg class="i" aria-hidden="true"><use href="#i-collection"/></svg><svg class="i" aria-hidden="true"><use href="#i-library"/></svg><svg class="i" aria-hidden="true"><use href="#i-gear"/></svg><svg class="i hl" aria-hidden="true"><use href="#i-resonance"/></svg></div>
+    <div class="family lg"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><svg class="i" aria-hidden="true"><use href="#i-echo"/></svg><svg class="i" aria-hidden="true"><use href="#i-vault"/></svg><svg class="i" aria-hidden="true"><use href="#i-collection"/></svg><svg class="i hl" aria-hidden="true"><use href="#i-resonance"/></svg></div>
+    <div class="swap"><span class="chip ai"><svg class="i xs" aria-hidden="true"><use href="#i-spark"/></svg>AI</span><span>pasa a</span><span class="chip ai"><svg class="i xs" aria-hidden="true"><use href="#i-resonance"/></svg>Describe</span><span>y, prendido,</span><span class="chip ai on"><svg class="i xs" aria-hidden="true"><use href="#i-resonance"/></svg>Describe</span></div>
+    <p class="cap">16 y 24 px, mismo gris que los íconos de la app. Descarté las ondas concéntricas desde una barra: Echo ya usa arcos concéntricos y se confundirían.</p>
+  </div>
+</div>
+
+<section class="dir rec" id="dir-fork">
+<header class="dir-head"><span class="num">1</span><h2>Diapasón <em>tuning fork</em></h2><span class="badge">Recomendada</span></header>
+<p class="lede">El diapasón es el objeto de la resonancia: lo golpeás y hace vibrar a lo que está afinado igual. Es lo que hace el motor con tu colección y con tus descripciones: encuentra lo que suena en sintonía.</p>
+<div class="ramps"><div class="ramp"><div class="rl">Sobre el fondo de la app</div><div class="tiles"><figure class="tile dark"><div class="sq"><svg class="i" style="width:12px;height:12px" aria-hidden="true"><use href="#i-resonance"/></svg></div><figcaption>12 px</figcaption></figure><figure class="tile dark"><div class="sq"><svg class="i" style="width:16px;height:16px" aria-hidden="true"><use href="#i-resonance"/></svg></div><figcaption>16 px</figcaption></figure><figure class="tile dark"><div class="sq"><svg class="i" style="width:24px;height:24px" aria-hidden="true"><use href="#i-resonance"/></svg></div><figcaption>24 px</figcaption></figure><figure class="tile dark big"><div class="sq"><svg class="bigmark" width="48" height="48" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.7 1.6v6a2.3 2.3 0 0 0 4.6 0V1.6M8 9.9v4.5" fill="none" stroke="#ecebe6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.6 2.2v2.8M12.4 2.2v2.8" fill="none" stroke="#c8f76d" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r1"/><path d="M1.7 3v1.2M14.3 3v1.2" fill="none" stroke="#c8f76d" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r2" opacity=".55"/></svg></div><figcaption>48 px</figcaption></figure><figure class="tile dark big xl"><div class="sq"><svg class="bigmark" width="96" height="96" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.7 1.6v6a2.3 2.3 0 0 0 4.6 0V1.6M8 9.9v4.5" fill="none" stroke="#ecebe6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.6 2.2v2.8M12.4 2.2v2.8" fill="none" stroke="#c8f76d" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r1"/><path d="M1.7 3v1.2M14.3 3v1.2" fill="none" stroke="#c8f76d" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r2" opacity=".55"/></svg></div><figcaption>96 px</figcaption></figure></div></div><div class="ramp"><div class="rl">Sobre el acento lima</div><div class="tiles"><figure class="tile lime"><div class="sq"><svg class="i" style="width:12px;height:12px" aria-hidden="true"><use href="#i-resonance"/></svg></div><figcaption>12 px</figcaption></figure><figure class="tile lime"><div class="sq"><svg class="i" style="width:16px;height:16px" aria-hidden="true"><use href="#i-resonance"/></svg></div><figcaption>16 px</figcaption></figure><figure class="tile lime"><div class="sq"><svg class="i" style="width:24px;height:24px" aria-hidden="true"><use href="#i-resonance"/></svg></div><figcaption>24 px</figcaption></figure><figure class="tile lime big"><div class="sq"><svg class="bigmark" width="48" height="48" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.7 1.6v6a2.3 2.3 0 0 0 4.6 0V1.6M8 9.9v4.5" fill="none" stroke="#11140b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.6 2.2v2.8M12.4 2.2v2.8" fill="none" stroke="#11140b" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r1" opacity=".5"/><path d="M1.7 3v1.2M14.3 3v1.2" fill="none" stroke="#11140b" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r2" opacity=".3"/></svg></div><figcaption>48 px</figcaption></figure><figure class="tile lime big xl"><div class="sq"><svg class="bigmark" width="96" height="96" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.7 1.6v6a2.3 2.3 0 0 0 4.6 0V1.6M8 9.9v4.5" fill="none" stroke="#11140b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.6 2.2v2.8M12.4 2.2v2.8" fill="none" stroke="#11140b" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r1" opacity=".5"/><path d="M1.7 3v1.2M14.3 3v1.2" fill="none" stroke="#11140b" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r2" opacity=".3"/></svg></div><figcaption>96 px</figcaption></figure></div></div></div>
+<div class="construct"><figure><svg width="72" height="72" viewBox="0 0 16 16"><rect x="1.6" y="5.5" width="1.7" height="5" rx="0.85" fill="#ecebe6"/><rect x="4.55" y="3.25" width="1.7" height="9.5" rx="0.85" fill="#ecebe6"/><rect x="7.15" y="1.75" width="1.7" height="12.5" rx="0.85" fill="#c8f76d"/><rect x="9.75" y="4.25" width="1.7" height="7.5" rx="0.85" fill="#ecebe6"/><rect x="12.7" y="6.25" width="1.7" height="3.5" rx="0.85" fill="#ecebe6"/></svg><figcaption>La barra lima del logo (modo Sound)</figcaption></figure><span class="arrow">&rarr;</span><figure><svg width="72" height="72" viewBox="0 0 16 16"><rect x="5.7" y="1.6" width="4.6" height="8.3" rx="2.3" fill="none" stroke="#ecebe6" stroke-width="1.6" opacity=".22"/><path d="M5.7 3.9v3.7a2.3 2.3 0 0 0 4.6 0V3.9" fill="none" stroke="#c8f76d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><figcaption>Su tapa redondeada es la U del diapasón</figcaption></figure><span class="arrow">&rarr;</span><figure><svg class="bigmark" width="72" height="72" viewBox="0 0 16 16" aria-hidden="true"><path d="M5.7 1.6v6a2.3 2.3 0 0 0 4.6 0V1.6M8 9.9v4.5" fill="none" stroke="#ecebe6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.6 2.2v2.8M12.4 2.2v2.8" fill="none" stroke="#c8f76d" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r1"/><path d="M1.7 3v1.2M14.3 3v1.2" fill="none" stroke="#c8f76d" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" class="bm-r2" opacity=".55"/></svg><figcaption>Se abre, gana un mango, y la vibración son barras</figcaption></figure></div>
+<div class="mocks"><div class="mock-card"><div class="mc-label">Buscador del título: chip de búsqueda por descripción</div>
+<div class="m-titlebar"><div class="m-brand"><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect x="3.2" y="11" width="3.4" height="10" rx="1.7" fill="#ecebe6"/><rect x="9.1" y="6.5" width="3.4" height="19" rx="1.7" fill="#ecebe6"/><rect x="14.3" y="3.5" width="3.4" height="25" rx="1.7" fill="#c8f76d"/><rect x="19.5" y="8.5" width="3.4" height="15" rx="1.7" fill="#ecebe6"/><rect x="25.4" y="12.5" width="3.4" height="7" rx="1.7" fill="#ecebe6"/></svg><span class="m-word">Sound</span></div>
+<div class="m-search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span class="m-q">metal door slam</span><span class="chip">Library <svg class="i xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="chip ai on"><svg class="i xs" aria-hidden="true"><use href="#i-resonance"/></svg>Describe</span></div></div>
+<div class="m-states"><span class="chip ai"><svg class="i xs" aria-hidden="true"><use href="#i-resonance"/></svg>Describe</span><span class="st">apagado</span><span class="chip ai on"><svg class="i xs" aria-hidden="true"><use href="#i-resonance"/></svg>Describe</span><span class="st">prendido</span><span class="chip ai disabled"><svg class="i xs" aria-hidden="true"><use href="#i-resonance"/></svg>Describe</span><span class="st">sin análisis</span></div>
+<div class="m-tipwrap"><span class="tip">Describe how it sounds<span class="kbd">Ctrl+I</span></span></div></div><div class="mock-card"><div class="mc-label">Píldora de estado (reemplaza al LED en los estados del motor)</div>
+<div class="m-pills">
+<div class="m-pillrow"><span class="status-pill ready"><svg class="i sm rz-led" aria-hidden="true"><use href="#i-resonance"/></svg><span>70,412 sounds · Resonance ready</span></span></div>
+<div class="m-pillrow"><span class="status-pill busy"><svg class="i sm rz-led listening" aria-hidden="true"><use href="#i-resonance"/></svg><span>Analysing 1,204 / 70,412</span><span class="meter"><i style="width:34%"></i></span></span><span class="st">escuchando (animado)</span></div>
+<div class="m-pillrow"><span class="status-pill warn"><svg class="i sm rz-led" aria-hidden="true"><use href="#i-resonance"/></svg><span>Resonance unavailable</span></span></div>
+</div></div><div class="mock-card"><div class="mc-label">Ajustes: sección y botón "Analyse now"</div>
+<div class="m-settings"><h4>Resonance</h4>
+<div class="set-row"><div class="lbl">68,120 sounds analysed · 2,292 to go<small>Resonance listens to every sound once, in the background. Describe, Echo and suggestions use each sound as soon as it is analysed.</small></div><span class="btn primary"><svg class="i" aria-hidden="true"><use href="#i-resonance"/></svg>Analyse now</span></div>
+<div class="set-row"><div class="lbl">Analyse new sounds automatically<small>Keeps Describe and Echo up to date as files are added or changed.</small></div><span class="switch on"></span></div>
+</div></div><div class="mock-card"><div class="mc-label">Panel de sugerencias de la colección</div>
+<div class="m-resonance"><div class="rs-head"><svg class="i" aria-hidden="true"><use href="#i-resonance"/></svg><span class="rs-t">Resonance</span><span class="rs-c">· 16 sounds that fit “Impacts”</span><svg class="i sm chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+<div class="rs-list"><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Metal Hit Heavy 03</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Anvil Strike Long</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Door Slam Warehouse</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span></div></div></div></div>
+<div class="notes"><ul><li>La U del diapasón es la tapa redondeada de una barra del logo (la misma píldora). Mismo trazo 1.6 y puntas redondas que el resto del sprite.</li><li>En chico es un diapasón limpio, sin adornos: se lee en 11 px dentro del chip y en 13 px en la píldora de estado.</li><li>En grande, la vibración son barritas lima, las mismas barras de SoundVault saliendo del diapasón. Un solo acento lima, como la cerradura del cofre.</li><li>Escuchando: las barritas aparecen y se alejan, como si el diapasón sonara. Calmo, sin parpadeos.</li></ul><p class="risk"><b>Riesgo.</b> En 11 px puede recordar a una ψ; el texto del chip lo resuelve. Las barritas no van en el ícono estático: en monocromo, diapasón con barras al costado se lee como un cactus.</p></div>
+</section>
+<section class="dir" id="dir-peak">
+<header class="dir-head"><span class="num">2</span><h2>Pico <em>resonance peak</em></h2></header>
+<p class="lede">La respuesta de un filtro resonante: plana, sube a un pico y cae. Es la palabra resonancia dibujada como la ve un diseñador de sonido en cualquier EQ o sinte.</p>
+<div class="ramps"><div class="ramp"><div class="rl">Sobre el fondo de la app</div><div class="tiles"><figure class="tile dark"><div class="sq"><svg class="i" style="width:12px;height:12px" aria-hidden="true"><use href="#i-rz-peak"/></svg></div><figcaption>12 px</figcaption></figure><figure class="tile dark"><div class="sq"><svg class="i" style="width:16px;height:16px" aria-hidden="true"><use href="#i-rz-peak"/></svg></div><figcaption>16 px</figcaption></figure><figure class="tile dark"><div class="sq"><svg class="i" style="width:24px;height:24px" aria-hidden="true"><use href="#i-rz-peak"/></svg></div><figcaption>24 px</figcaption></figure><figure class="tile dark big"><div class="sq"><svg class="bigmark" width="48" height="48" viewBox="0 0 16 16" aria-hidden="true"><defs><linearGradient id="pg1" gradientUnits="userSpaceOnUse" x1="1" y1="0" x2="15" y2="0"><stop offset=".3" stop-color="#ecebe6"/><stop offset=".3" stop-color="#c8f76d"/></linearGradient></defs><path d="M1.8 10.6h3.4c2.4 0 3-7.8 4.4-7.8 1.3 0 1.9 5.6 4.6 10.8" fill="none" stroke="url(#pg1)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div><figcaption>48 px</figcaption></figure><figure class="tile dark big xl"><div class="sq"><svg class="bigmark" width="96" height="96" viewBox="0 0 16 16" aria-hidden="true"><defs><linearGradient id="pg2" gradientUnits="userSpaceOnUse" x1="1" y1="0" x2="15" y2="0"><stop offset=".3" stop-color="#ecebe6"/><stop offset=".3" stop-color="#c8f76d"/></linearGradient></defs><path d="M1.8 10.6h3.4c2.4 0 3-7.8 4.4-7.8 1.3 0 1.9 5.6 4.6 10.8" fill="none" stroke="url(#pg2)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div><figcaption>96 px</figcaption></figure></div></div><div class="ramp"><div class="rl">Sobre el acento lima</div><div class="tiles"><figure class="tile lime"><div class="sq"><svg class="i" style="width:12px;height:12px" aria-hidden="true"><use href="#i-rz-peak"/></svg></div><figcaption>12 px</figcaption></figure><figure class="tile lime"><div class="sq"><svg class="i" style="width:16px;height:16px" aria-hidden="true"><use href="#i-rz-peak"/></svg></div><figcaption>16 px</figcaption></figure><figure class="tile lime"><div class="sq"><svg class="i" style="width:24px;height:24px" aria-hidden="true"><use href="#i-rz-peak"/></svg></div><figcaption>24 px</figcaption></figure><figure class="tile lime big"><div class="sq"><svg class="bigmark" width="48" height="48" viewBox="0 0 16 16" aria-hidden="true"><defs><linearGradient id="pg3" gradientUnits="userSpaceOnUse" x1="1" y1="0" x2="15" y2="0"><stop offset=".3" stop-color="#11140b"/><stop offset=".3" stop-color="#11140b"/></linearGradient></defs><path d="M1.8 10.6h3.4c2.4 0 3-7.8 4.4-7.8 1.3 0 1.9 5.6 4.6 10.8" fill="none" stroke="url(#pg3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div><figcaption>48 px</figcaption></figure><figure class="tile lime big xl"><div class="sq"><svg class="bigmark" width="96" height="96" viewBox="0 0 16 16" aria-hidden="true"><defs><linearGradient id="pg4" gradientUnits="userSpaceOnUse" x1="1" y1="0" x2="15" y2="0"><stop offset=".3" stop-color="#11140b"/><stop offset=".3" stop-color="#11140b"/></linearGradient></defs><path d="M1.8 10.6h3.4c2.4 0 3-7.8 4.4-7.8 1.3 0 1.9 5.6 4.6 10.8" fill="none" stroke="url(#pg4)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div><figcaption>96 px</figcaption></figure></div></div></div>
+
+<div class="mocks"><div class="mock-card"><div class="mc-label">Buscador del título: chip de búsqueda por descripción</div>
+<div class="m-titlebar"><div class="m-brand"><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect x="3.2" y="11" width="3.4" height="10" rx="1.7" fill="#ecebe6"/><rect x="9.1" y="6.5" width="3.4" height="19" rx="1.7" fill="#ecebe6"/><rect x="14.3" y="3.5" width="3.4" height="25" rx="1.7" fill="#c8f76d"/><rect x="19.5" y="8.5" width="3.4" height="15" rx="1.7" fill="#ecebe6"/><rect x="25.4" y="12.5" width="3.4" height="7" rx="1.7" fill="#ecebe6"/></svg><span class="m-word">Sound</span></div>
+<div class="m-search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span class="m-q">metal door slam</span><span class="chip">Library <svg class="i xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="chip ai on"><svg class="i xs" aria-hidden="true"><use href="#i-rz-peak"/></svg>Describe</span></div></div>
+<div class="m-states"><span class="chip ai"><svg class="i xs" aria-hidden="true"><use href="#i-rz-peak"/></svg>Describe</span><span class="st">apagado</span><span class="chip ai on"><svg class="i xs" aria-hidden="true"><use href="#i-rz-peak"/></svg>Describe</span><span class="st">prendido</span><span class="chip ai disabled"><svg class="i xs" aria-hidden="true"><use href="#i-rz-peak"/></svg>Describe</span><span class="st">sin análisis</span></div>
+<div class="m-tipwrap"><span class="tip">Describe how it sounds<span class="kbd">Ctrl+I</span></span></div></div><div class="mock-card"><div class="mc-label">Píldora de estado (reemplaza al LED en los estados del motor)</div>
+<div class="m-pills">
+<div class="m-pillrow"><span class="status-pill ready"><svg class="i sm rz-led" aria-hidden="true"><use href="#i-rz-peak"/></svg><span>70,412 sounds · Resonance ready</span></span></div>
+<div class="m-pillrow"><span class="status-pill busy"><svg class="i sm rz-led listening" aria-hidden="true"><use href="#i-rz-peak"/></svg><span>Analysing 1,204 / 70,412</span><span class="meter"><i style="width:34%"></i></span></span><span class="st">escuchando (animado)</span></div>
+<div class="m-pillrow"><span class="status-pill warn"><svg class="i sm rz-led" aria-hidden="true"><use href="#i-rz-peak"/></svg><span>Resonance unavailable</span></span></div>
+</div></div><div class="mock-card"><div class="mc-label">Ajustes: sección y botón "Analyse now"</div>
+<div class="m-settings"><h4>Resonance</h4>
+<div class="set-row"><div class="lbl">68,120 sounds analysed · 2,292 to go<small>Resonance listens to every sound once, in the background. Describe, Echo and suggestions use each sound as soon as it is analysed.</small></div><span class="btn primary"><svg class="i" aria-hidden="true"><use href="#i-rz-peak"/></svg>Analyse now</span></div>
+<div class="set-row"><div class="lbl">Analyse new sounds automatically<small>Keeps Describe and Echo up to date as files are added or changed.</small></div><span class="switch on"></span></div>
+</div></div><div class="mock-card"><div class="mc-label">Panel de sugerencias de la colección</div>
+<div class="m-resonance"><div class="rs-head"><svg class="i" aria-hidden="true"><use href="#i-rz-peak"/></svg><span class="rs-t">Resonance</span><span class="rs-c">· 16 sounds that fit “Impacts”</span><svg class="i sm chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+<div class="rs-list"><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Metal Hit Heavy 03</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Anvil Strike Long</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Door Slam Warehouse</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span></div></div></div></div>
+<div class="notes"><ul><li>Un solo trazo, muy nítido en 11 px, y no se parece a nada del sprite.</li><li>El tramo plano es la biblioteca; lo que resuena se enciende en lima.</li><li>Escuchando: el pico baja y sube, como un filtro que respira.</li></ul><p class="risk"><b>Riesgo.</b> En el buscador se puede leer como "filtro" o "EQ". Con un punto en la cima (probado) parece un muñequito, así que queda sin punto y el acento es un corte de color. Más técnico que simpático.</p></div>
+</section>
+<section class="dir" id="dir-bars">
+<header class="dir-head"><span class="num">3</span><h2>Simpatía <em>sympathetic bars</em></h2></header>
+<p class="lede">Resonancia simpática con las barras del logo: una barra golpeada (lima) y sus vecinas que vibran por simpatía.</p>
+<div class="ramps"><div class="ramp"><div class="rl">Sobre el fondo de la app</div><div class="tiles"><figure class="tile dark"><div class="sq"><svg class="i" style="width:12px;height:12px" aria-hidden="true"><use href="#i-rz-bars"/></svg></div><figcaption>12 px</figcaption></figure><figure class="tile dark"><div class="sq"><svg class="i" style="width:16px;height:16px" aria-hidden="true"><use href="#i-rz-bars"/></svg></div><figcaption>16 px</figcaption></figure><figure class="tile dark"><div class="sq"><svg class="i" style="width:24px;height:24px" aria-hidden="true"><use href="#i-rz-bars"/></svg></div><figcaption>24 px</figcaption></figure><figure class="tile dark big"><div class="sq"><svg class="bigmark" width="48" height="48" viewBox="0 0 16 16" aria-hidden="true"><rect x="6.7" y="1.6" width="2.6" height="12.8" rx="1.3" fill="#c8f76d"/><path d="M3.8 5.2v5.6M12.2 5.2v5.6" fill="none" stroke="#ecebe6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.2 7.4v1.2M14.8 7.4v1.2" fill="none" stroke="#ecebe6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity=".45"/></svg></div><figcaption>48 px</figcaption></figure><figure class="tile dark big xl"><div class="sq"><svg class="bigmark" width="96" height="96" viewBox="0 0 16 16" aria-hidden="true"><rect x="6.7" y="1.6" width="2.6" height="12.8" rx="1.3" fill="#c8f76d"/><path d="M3.8 5.2v5.6M12.2 5.2v5.6" fill="none" stroke="#ecebe6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.2 7.4v1.2M14.8 7.4v1.2" fill="none" stroke="#ecebe6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity=".45"/></svg></div><figcaption>96 px</figcaption></figure></div></div><div class="ramp"><div class="rl">Sobre el acento lima</div><div class="tiles"><figure class="tile lime"><div class="sq"><svg class="i" style="width:12px;height:12px" aria-hidden="true"><use href="#i-rz-bars"/></svg></div><figcaption>12 px</figcaption></figure><figure class="tile lime"><div class="sq"><svg class="i" style="width:16px;height:16px" aria-hidden="true"><use href="#i-rz-bars"/></svg></div><figcaption>16 px</figcaption></figure><figure class="tile lime"><div class="sq"><svg class="i" style="width:24px;height:24px" aria-hidden="true"><use href="#i-rz-bars"/></svg></div><figcaption>24 px</figcaption></figure><figure class="tile lime big"><div class="sq"><svg class="bigmark" width="48" height="48" viewBox="0 0 16 16" aria-hidden="true"><rect x="6.7" y="1.6" width="2.6" height="12.8" rx="1.3" fill="#11140b"/><path d="M3.8 5.2v5.6M12.2 5.2v5.6" fill="none" stroke="#11140b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.2 7.4v1.2M14.8 7.4v1.2" fill="none" stroke="#11140b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity=".45"/></svg></div><figcaption>48 px</figcaption></figure><figure class="tile lime big xl"><div class="sq"><svg class="bigmark" width="96" height="96" viewBox="0 0 16 16" aria-hidden="true"><rect x="6.7" y="1.6" width="2.6" height="12.8" rx="1.3" fill="#11140b"/><path d="M3.8 5.2v5.6M12.2 5.2v5.6" fill="none" stroke="#11140b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.2 7.4v1.2M14.8 7.4v1.2" fill="none" stroke="#11140b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity=".45"/></svg></div><figcaption>96 px</figcaption></figure></div></div></div>
+
+<div class="mocks"><div class="mock-card"><div class="mc-label">Buscador del título: chip de búsqueda por descripción</div>
+<div class="m-titlebar"><div class="m-brand"><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect x="3.2" y="11" width="3.4" height="10" rx="1.7" fill="#ecebe6"/><rect x="9.1" y="6.5" width="3.4" height="19" rx="1.7" fill="#ecebe6"/><rect x="14.3" y="3.5" width="3.4" height="25" rx="1.7" fill="#c8f76d"/><rect x="19.5" y="8.5" width="3.4" height="15" rx="1.7" fill="#ecebe6"/><rect x="25.4" y="12.5" width="3.4" height="7" rx="1.7" fill="#ecebe6"/></svg><span class="m-word">Sound</span></div>
+<div class="m-search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span class="m-q">metal door slam</span><span class="chip">Library <svg class="i xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="chip ai on"><svg class="i xs" aria-hidden="true"><use href="#i-rz-bars"/></svg>Describe</span></div></div>
+<div class="m-states"><span class="chip ai"><svg class="i xs" aria-hidden="true"><use href="#i-rz-bars"/></svg>Describe</span><span class="st">apagado</span><span class="chip ai on"><svg class="i xs" aria-hidden="true"><use href="#i-rz-bars"/></svg>Describe</span><span class="st">prendido</span><span class="chip ai disabled"><svg class="i xs" aria-hidden="true"><use href="#i-rz-bars"/></svg>Describe</span><span class="st">sin análisis</span></div>
+<div class="m-tipwrap"><span class="tip">Describe how it sounds<span class="kbd">Ctrl+I</span></span></div></div><div class="mock-card"><div class="mc-label">Píldora de estado (reemplaza al LED en los estados del motor)</div>
+<div class="m-pills">
+<div class="m-pillrow"><span class="status-pill ready"><svg class="i sm rz-led" aria-hidden="true"><use href="#i-rz-bars"/></svg><span>70,412 sounds · Resonance ready</span></span></div>
+<div class="m-pillrow"><span class="status-pill busy"><svg class="i sm rz-led listening" aria-hidden="true"><use href="#i-rz-bars"/></svg><span>Analysing 1,204 / 70,412</span><span class="meter"><i style="width:34%"></i></span></span><span class="st">escuchando (animado)</span></div>
+<div class="m-pillrow"><span class="status-pill warn"><svg class="i sm rz-led" aria-hidden="true"><use href="#i-rz-bars"/></svg><span>Resonance unavailable</span></span></div>
+</div></div><div class="mock-card"><div class="mc-label">Ajustes: sección y botón "Analyse now"</div>
+<div class="m-settings"><h4>Resonance</h4>
+<div class="set-row"><div class="lbl">68,120 sounds analysed · 2,292 to go<small>Resonance listens to every sound once, in the background. Describe, Echo and suggestions use each sound as soon as it is analysed.</small></div><span class="btn primary"><svg class="i" aria-hidden="true"><use href="#i-rz-bars"/></svg>Analyse now</span></div>
+<div class="set-row"><div class="lbl">Analyse new sounds automatically<small>Keeps Describe and Echo up to date as files are added or changed.</small></div><span class="switch on"></span></div>
+</div></div><div class="mock-card"><div class="mc-label">Panel de sugerencias de la colección</div>
+<div class="m-resonance"><div class="rs-head"><svg class="i" aria-hidden="true"><use href="#i-rz-bars"/></svg><span class="rs-t">Resonance</span><span class="rs-c">· 16 sounds that fit “Impacts”</span><svg class="i sm chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+<div class="rs-list"><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Metal Hit Heavy 03</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Anvil Strike Long</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Door Slam Warehouse</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span></div></div></div></div>
+<div class="notes"><ul><li>Es la más SoundVault de todas: barras de píldora con una sola en lima, como el modo Sound.</li><li>Escuchando: la barra central pega y las vecinas responden un instante después.</li></ul><p class="risk"><b>Riesgo.</b> Es casi el logo en modo Sound y se parece a cualquier ícono genérico de audio o de nivel. En el título queda al lado del logo y se confunde con el cambio de modo.</p></div>
+</section>
+<section class="dir" id="dir-coil">
+<header class="dir-head"><span class="num">4</span><h2>Cóclea <em>cochlea</em></h2></header>
+<p class="lede">La cóclea es el resonador del oído: separa las frecuencias por resonancia, que es justamente lo que hace el análisis. Una espiral con un punto lima en el centro.</p>
+<div class="ramps"><div class="ramp"><div class="rl">Sobre el fondo de la app</div><div class="tiles"><figure class="tile dark"><div class="sq"><svg class="i" style="width:12px;height:12px" aria-hidden="true"><use href="#i-rz-coil"/></svg></div><figcaption>12 px</figcaption></figure><figure class="tile dark"><div class="sq"><svg class="i" style="width:16px;height:16px" aria-hidden="true"><use href="#i-rz-coil"/></svg></div><figcaption>16 px</figcaption></figure><figure class="tile dark"><div class="sq"><svg class="i" style="width:24px;height:24px" aria-hidden="true"><use href="#i-rz-coil"/></svg></div><figcaption>24 px</figcaption></figure><figure class="tile dark big"><div class="sq"><svg class="bigmark" width="48" height="48" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.2 6.8a2.9 2.9 0 0 1-5.8 0 4.35 4.35 0 0 1 8.7 0 5.8 5.8 0 0 1-5.8 5.8H2.6" fill="none" stroke="#ecebe6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.3" cy="6.4" r="1.3" fill="#c8f76d"/></svg></div><figcaption>48 px</figcaption></figure><figure class="tile dark big xl"><div class="sq"><svg class="bigmark" width="96" height="96" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.2 6.8a2.9 2.9 0 0 1-5.8 0 4.35 4.35 0 0 1 8.7 0 5.8 5.8 0 0 1-5.8 5.8H2.6" fill="none" stroke="#ecebe6" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.3" cy="6.4" r="1.3" fill="#c8f76d"/></svg></div><figcaption>96 px</figcaption></figure></div></div><div class="ramp"><div class="rl">Sobre el acento lima</div><div class="tiles"><figure class="tile lime"><div class="sq"><svg class="i" style="width:12px;height:12px" aria-hidden="true"><use href="#i-rz-coil"/></svg></div><figcaption>12 px</figcaption></figure><figure class="tile lime"><div class="sq"><svg class="i" style="width:16px;height:16px" aria-hidden="true"><use href="#i-rz-coil"/></svg></div><figcaption>16 px</figcaption></figure><figure class="tile lime"><div class="sq"><svg class="i" style="width:24px;height:24px" aria-hidden="true"><use href="#i-rz-coil"/></svg></div><figcaption>24 px</figcaption></figure><figure class="tile lime big"><div class="sq"><svg class="bigmark" width="48" height="48" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.2 6.8a2.9 2.9 0 0 1-5.8 0 4.35 4.35 0 0 1 8.7 0 5.8 5.8 0 0 1-5.8 5.8H2.6" fill="none" stroke="#11140b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.3" cy="6.4" r="1.3" fill="#11140b"/></svg></div><figcaption>48 px</figcaption></figure><figure class="tile lime big xl"><div class="sq"><svg class="bigmark" width="96" height="96" viewBox="0 0 16 16" aria-hidden="true"><path d="M10.2 6.8a2.9 2.9 0 0 1-5.8 0 4.35 4.35 0 0 1 8.7 0 5.8 5.8 0 0 1-5.8 5.8H2.6" fill="none" stroke="#11140b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.3" cy="6.4" r="1.3" fill="#11140b"/></svg></div><figcaption>96 px</figcaption></figure></div></div></div>
+
+<div class="mocks"><div class="mock-card"><div class="mc-label">Buscador del título: chip de búsqueda por descripción</div>
+<div class="m-titlebar"><div class="m-brand"><svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect x="3.2" y="11" width="3.4" height="10" rx="1.7" fill="#ecebe6"/><rect x="9.1" y="6.5" width="3.4" height="19" rx="1.7" fill="#ecebe6"/><rect x="14.3" y="3.5" width="3.4" height="25" rx="1.7" fill="#c8f76d"/><rect x="19.5" y="8.5" width="3.4" height="15" rx="1.7" fill="#ecebe6"/><rect x="25.4" y="12.5" width="3.4" height="7" rx="1.7" fill="#ecebe6"/></svg><span class="m-word">Sound</span></div>
+<div class="m-search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span class="m-q">metal door slam</span><span class="chip">Library <svg class="i xs" aria-hidden="true"><use href="#i-chev-d"/></svg></span><span class="chip ai on"><svg class="i xs" aria-hidden="true"><use href="#i-rz-coil"/></svg>Describe</span></div></div>
+<div class="m-states"><span class="chip ai"><svg class="i xs" aria-hidden="true"><use href="#i-rz-coil"/></svg>Describe</span><span class="st">apagado</span><span class="chip ai on"><svg class="i xs" aria-hidden="true"><use href="#i-rz-coil"/></svg>Describe</span><span class="st">prendido</span><span class="chip ai disabled"><svg class="i xs" aria-hidden="true"><use href="#i-rz-coil"/></svg>Describe</span><span class="st">sin análisis</span></div>
+<div class="m-tipwrap"><span class="tip">Describe how it sounds<span class="kbd">Ctrl+I</span></span></div></div><div class="mock-card"><div class="mc-label">Píldora de estado (reemplaza al LED en los estados del motor)</div>
+<div class="m-pills">
+<div class="m-pillrow"><span class="status-pill ready"><svg class="i sm rz-led" aria-hidden="true"><use href="#i-rz-coil"/></svg><span>70,412 sounds · Resonance ready</span></span></div>
+<div class="m-pillrow"><span class="status-pill busy"><svg class="i sm rz-led listening" aria-hidden="true"><use href="#i-rz-coil"/></svg><span>Analysing 1,204 / 70,412</span><span class="meter"><i style="width:34%"></i></span></span><span class="st">escuchando (animado)</span></div>
+<div class="m-pillrow"><span class="status-pill warn"><svg class="i sm rz-led" aria-hidden="true"><use href="#i-rz-coil"/></svg><span>Resonance unavailable</span></span></div>
+</div></div><div class="mock-card"><div class="mc-label">Ajustes: sección y botón "Analyse now"</div>
+<div class="m-settings"><h4>Resonance</h4>
+<div class="set-row"><div class="lbl">68,120 sounds analysed · 2,292 to go<small>Resonance listens to every sound once, in the background. Describe, Echo and suggestions use each sound as soon as it is analysed.</small></div><span class="btn primary"><svg class="i" aria-hidden="true"><use href="#i-rz-coil"/></svg>Analyse now</span></div>
+<div class="set-row"><div class="lbl">Analyse new sounds automatically<small>Keeps Describe and Echo up to date as files are added or changed.</small></div><span class="switch on"></span></div>
+</div></div><div class="mock-card"><div class="mc-label">Panel de sugerencias de la colección</div>
+<div class="m-resonance"><div class="rs-head"><svg class="i" aria-hidden="true"><use href="#i-rz-coil"/></svg><span class="rs-t">Resonance</span><span class="rs-c">· 16 sounds that fit “Impacts”</span><svg class="i sm chev" aria-hidden="true"><use href="#i-chev-d"/></svg></div>
+<div class="rs-list"><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Metal Hit Heavy 03</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Anvil Strike Long</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span><span class="rs-item"><svg class="i xs" aria-hidden="true"><use href="#i-play"/></svg><span class="n">Door Slam Warehouse</span><span class="add"><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg></span></span></div></div></div></div>
+<div class="notes"><ul><li>Orgánica y simpática, muy distinta de todo lo demás.</li><li>Escuchando: un pulso recorre la espiral hacia adentro.</li></ul><p class="risk"><b>Riesgo.</b> Es la menos coherente con la geometría del cofre (todo recto y redondeado), y en chico se lee como caracol o como una arroba.</p></div>
+</section>
+
+<section id="listen"><h2 class="sec">Escuchando</h2>
+<p class="sec-sub">Estado animado para cuando el motor trabaja (analizando, arrancando, buscando). Es CSS puro: una clase <code>listening</code> en el <code>svg.i</code> y el símbolo del sprite hace el resto. Con <code>prefers-reduced-motion</code> no se anima: queda el diapasón quieto, en lima.</p>
+<div class="listen"><span class="num" style="flex-shrink:0">1</span><svg class="i listening" style="width:12px;height:12px" aria-hidden="true"><use href="#i-resonance"/></svg><svg class="i listening" style="width:16px;height:16px" aria-hidden="true"><use href="#i-resonance"/></svg><svg class="i listening" style="width:24px;height:24px" aria-hidden="true"><use href="#i-resonance"/></svg><svg class="i listening" style="width:48px;height:48px" aria-hidden="true"><use href="#i-resonance"/></svg><span class="sep"></span><span class="txt">Diapasón: las barritas nacen junto a las puntas y se alejan, en dos anillos. El diapasón no se mueve.</span></div>
+<div class="listen"><span class="num" style="flex-shrink:0">2</span><svg class="i listening" style="width:12px;height:12px" aria-hidden="true"><use href="#i-rz-peak"/></svg><svg class="i listening" style="width:16px;height:16px" aria-hidden="true"><use href="#i-rz-peak"/></svg><svg class="i listening" style="width:24px;height:24px" aria-hidden="true"><use href="#i-rz-peak"/></svg><svg class="i listening" style="width:48px;height:48px" aria-hidden="true"><use href="#i-rz-peak"/></svg><span class="sep"></span><span class="txt">Pico: el pico baja y vuelve a subir, como un filtro que respira.</span></div>
+<div class="listen"><span class="num" style="flex-shrink:0">3</span><svg class="i listening" style="width:12px;height:12px" aria-hidden="true"><use href="#i-rz-bars"/></svg><svg class="i listening" style="width:16px;height:16px" aria-hidden="true"><use href="#i-rz-bars"/></svg><svg class="i listening" style="width:24px;height:24px" aria-hidden="true"><use href="#i-rz-bars"/></svg><svg class="i listening" style="width:48px;height:48px" aria-hidden="true"><use href="#i-rz-bars"/></svg><span class="sep"></span><span class="txt">Simpatía: la barra central pega y las vecinas responden un instante después.</span></div>
+<div class="listen"><span class="num" style="flex-shrink:0">4</span><svg class="i listening" style="width:12px;height:12px" aria-hidden="true"><use href="#i-rz-coil"/></svg><svg class="i listening" style="width:16px;height:16px" aria-hidden="true"><use href="#i-rz-coil"/></svg><svg class="i listening" style="width:24px;height:24px" aria-hidden="true"><use href="#i-rz-coil"/></svg><svg class="i listening" style="width:48px;height:48px" aria-hidden="true"><use href="#i-rz-coil"/></svg><span class="sep"></span><span class="txt">Cóclea: un pulso recorre la espiral hacia el centro y el punto late.</span></div>
+
+</section>
+<section id="wording"><h2 class="sec">Texto de la interfaz</h2>
+<p class="sec-sub">Qué cambia en cada lugar donde hoy dice "AI". Números de línea del estado actual del repo.</p>
+<table><thead><tr><th>Archivo:línea</th><th>Hoy</th><th>Propuesta</th></tr></thead><tbody>
+<tr><td class="f">titlebar.js:22</td><td>AI (chip, con spark)</td><td class="n">Describe (chip, con i-resonance)</td></tr>
+<tr><td class="f">titlebar.js:22, 119</td><td>AI search: describe how it sounds</td><td class="n">Describe how it sounds</td></tr>
+<tr><td class="f">titlebar.js:119</td><td>AI search: loading models…</td><td class="n">Resonance is starting…</td></tr>
+<tr><td class="f">titlebar.js:119</td><td>AI search: available once sounds are analysed</td><td class="n">Available once sounds are analysed</td></tr>
+<tr><td class="f">titlebar.js:149</td><td>AI unavailable</td><td class="n">Resonance unavailable</td></tr>
+<tr><td class="f">titlebar.js:150</td><td>70,412 sounds · loading AI…</td><td class="n">70,412 sounds · starting Resonance…</td></tr>
+<tr><td class="f">titlebar.js:154</td><td>70,412 sounds · AI ready</td><td class="n">70,412 sounds · Resonance ready</td></tr>
+<tr><td class="f">app.js:151</td><td>AI search is still starting, showing file-name matches</td><td class="n">Resonance is still starting: showing file-name matches</td></tr>
+<tr><td class="f">app.js:151</td><td>AI search failed, showing file-name matches</td><td class="n">Resonance could not search: showing file-name matches</td></tr>
+<tr><td class="f">app.js:167</td><td>AI search (miga de pan)</td><td class="n">Describe</td></tr>
+<tr><td class="f">app.js:175</td><td>Nothing in the file names matches. Try AI search to find sounds by how they sound.</td><td class="n">Nothing in the file names matches. Describe finds sounds by how they sound.</td></tr>
+<tr><td class="f">app.js:176</td><td>Search with AI (botón, con spark)</td><td class="n">Try Describe (botón, con i-resonance)</td></tr>
+<tr><td class="f">app.js:180</td><td>AI models are still loading…</td><td class="n">Resonance is still starting…</td></tr>
+<tr><td class="f">app.js:181</td><td>AI search becomes available as your sounds are analysed</td><td class="n">Describe becomes available as your sounds are analysed</td></tr>
+<tr><td class="f">settings.js:12</td><td>Toggle AI search</td><td class="n">Describe on / off</td></tr>
+<tr><td class="f">settings.js:33</td><td>AI engine unavailable</td><td class="n">Resonance unavailable</td></tr>
+<tr><td class="f">settings.js:33</td><td>Loading AI models…</td><td class="n">Starting Resonance…</td></tr>
+<tr><td class="f">settings.js:37</td><td>Analyse now (con spark)</td><td class="n">Analyse now (con i-resonance)</td></tr>
+<tr><td class="f">settings.js:39</td><td>AI analysis (semantic search, Echo, Resonance)</td><td class="n">Resonance</td></tr>
+<tr><td class="f">settings.js:41</td><td>Every sound is listened to once, in the background. Search and Echo use each sound as soon as it is analysed.</td><td class="n">Resonance listens to every sound once, in the background. Describe, Echo and suggestions use each sound as soon as it is analysed.</td></tr>
+<tr><td class="f">settings.js:43</td><td>Keeps AI search and Echo up to date as files are added or changed.</td><td class="n">Keeps Describe and Echo up to date as files are added or changed.</td></tr>
+<tr><td class="f">panel.js:24</td><td>Resonance (con spark)</td><td class="n">Resonance (con i-resonance)</td></tr>
+<tr><td class="f">echo.js:121</td><td>The AI engine is still starting. Echo will be available in a moment.</td><td class="n">Resonance is still starting. Echo will be available in a moment.</td></tr>
+<tr><td class="f">engine-client.js:77</td><td>The AI engine stopped unexpectedly. It restarts on the next search.</td><td class="n">Resonance stopped unexpectedly. It restarts on the next search.</td></tr>
+<tr><td class="f">semantic-engine.js:140</td><td>The AI models could not be loaded (…)</td><td class="n">Resonance could not load its models (…)</td></tr>
+</tbody></table></section>
+
+<section id="impl"><h2 class="sec">Implementación</h2>
+<p class="sec-sub">El símbolo ya está en el sprite de <code>src/renderer/index.html</code> como <code>i-resonance</code>, al lado de <code>i-spark</code>. Se usa igual que cualquier otro: <code>icon('resonance', 'xs')</code> en el chip, <code>icon('resonance')</code> en el panel y en el botón. Las barritas del anillo viven dentro del símbolo con opacidad 0: sin el CSS de abajo, el ícono es el diapasón quieto. Para animarlo, <code>svg.classList.toggle('listening', ocupado)</code>. El CSS va en <code>tokens.css</code>, junto a las reglas de <code>.i</code>.</p>
+<pre>&lt;symbol id="i-resonance" viewBox="0 0 16 16"&gt;&lt;path d="M5.7 1.6v6a2.3 2.3 0 0 0 4.6 0V1.6M8 9.9v4.5"/&gt;&lt;path class="rz-ring" d="M3.6 2.2v2.8M12.4 2.2v2.8" stroke-width="1.3" opacity="0"/&gt;&lt;path class="rz-ring rz-ring-2" d="M1.7 3v1.2M14.3 3v1.2" stroke-width="1.3" opacity="0"/&gt;&lt;/symbol&gt;</pre>
+<pre>/* Resonance: "listening" state. Add .listening to the icon's &lt;svg class="i"&gt;.
+   The ring bars live inside the i-resonance symbol (opacity 0 when idle);
+   inherited custom properties switch their animation on per instance. */
+.rz-ring { animation: var(--rz-ring, none); transform-box: view-box; transform-origin: 8px 3.6px; }
+.rz-ring-2 { animation: var(--rz-ring-2, none); }
+.i.listening {
+  --rz-ring: rz-ring 1.8s var(--ease) infinite;
+  --rz-ring-2: rz-ring 1.8s var(--ease) .28s infinite;
+}
+@keyframes rz-ring {
+  0% { opacity: 0; transform: scaleX(.9); }
+  18% { opacity: .95; }
+  70%, 100% { opacity: 0; transform: scaleX(1.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .i.listening { --rz-ring: none; --rz-ring-2: none; }
+}</pre></section>
+<p class="foot">Página estática: SVG y CSS en línea, sin scripts, sin fuentes externas, sin red.</p>
+</div>
+</body>
+</html>

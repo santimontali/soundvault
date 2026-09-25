@@ -221,7 +221,7 @@
     const sel = selection && selection.id === s.id;
     return `<div class="sound-item${playing ? ' playing' : ''}${sel ? ' selected' : ''}" data-id="${s.id}">
       <button class="play-btn" data-play="${s.id}" aria-label="Reproducir ${s.name}">${playing ? PAUSE_ICON : PLAY_ICON}</button>
-      <div class="sound-info"><div class="sound-name"><span class="sn-text">${s.name}</span></div><div class="sound-meta">—</div></div>
+      <div class="sound-info"><div class="sound-name"><span class="sn-text">${s.name}</span></div><div class="sound-meta">-</div></div>
       <div class="waveform-container" data-wf="${s.id}"><canvas></canvas><div class="sel-overlay"></div></div>
       ${GRIP}</div>`;
   }
@@ -249,7 +249,7 @@
     const m = soundList.querySelector(`.sound-item[data-id="${s.id}"] .sound-meta`); if (!m) return;
     if (err) { m.textContent = 'could not load'; return; }
     const d = AudioEngine.getDuration(s.id);
-    m.textContent = (d ? fmt(d) : '—') + ' · 48kHz · ogg';
+    m.textContent = (d ? fmt(d) : '-') + ' · 48kHz · ogg';
   }
 
   function renderSoundList() {
@@ -258,7 +258,7 @@
       soundList.innerHTML = '';
       const empty = document.createElement('div'); empty.className = 'empty-state';
       const l1 = document.createElement('div'); l1.textContent = `No results for "${query}".`;
-      const l2 = document.createElement('span'); l2.className = 'mono'; l2.textContent = 'try another word — or toggle semantic search';
+      const l2 = document.createElement('span'); l2.className = 'mono'; l2.textContent = 'try another word, or toggle semantic search';
       empty.appendChild(l1); empty.appendChild(l2); soundList.appendChild(empty);
     } else {
       soundList.innerHTML = list.map(({ s }) => rowHTML(s)).join('');
@@ -659,7 +659,7 @@
       echoTimers.push(setTimeout(() => {
         if (gen !== echoGen) return;
         const ms = (Math.random() * 4 + 3).toFixed(1).replace('.', ',');
-        echoStatus.textContent = `✓ 4 ecos encontrados en ${ms} ms — similitud coseno sobre embeddings CLAP`;
+        echoStatus.textContent = `✓ 4 ecos encontrados en ${ms} ms, similitud coseno sobre embeddings CLAP`;
         echoStatus.className = 'echo-status done'; $('#echoMs').textContent = ms + ' ms'; renderEchoResults();
       }, 620));
     }, 520));

@@ -1,4 +1,4 @@
-# SoundVault — Echo Precision Plan
+# SoundVault: Echo Precision Plan
 
 ## Context
 
@@ -10,7 +10,7 @@ This plan has two phases. Phase A is urgent (pre-presentation, runtime-only, no 
 
 ---
 
-## PHASE A — Adaptive Spectral Gate (implement now)
+## PHASE A: Adaptive Spectral Gate (implement now)
 
 **File**: `src/semantic-engine.js`  
 **Impact**: Runtime only. No re-indexing needed. Works immediately with existing DB.
@@ -108,19 +108,19 @@ After implementing, restart SoundVault and trigger an Echo search. Console shoul
 
 ---
 
-## PHASE B — Mean-Pool CLAP Aggregation (implement post-presentation)
+## PHASE B: Mean-Pool CLAP Aggregation (implement post-presentation)
 
 **File**: `src/indexing-worker.js`  
 **Impact**: Changes how CLAP embeddings are computed for files >10s. Requires re-indexing.
 
 ### Edit 5: Replace max-pool with mean-pool in `processClapBatch`
 
-In `processClapBatch`, replace the `else` block (lines 144-169) — the entire block from `// Long file — strategic sampling + max-pooling` through the closing of the `if (offsets.length > 1)` log.
+In `processClapBatch`, replace the `else` block (lines 144-169), the entire block from `// Long file, strategic sampling + max-pooling` through the closing of the `if (offsets.length > 1)` log.
 
 Replace:
 ```javascript
             } else {
-                // Long file — strategic sampling + max-pooling
+                // Long file: strategic sampling + max-pooling
                 const offsets = selectClapOffsets(totalSamples, CLAP_WINDOW);
                 const maxPool = new Float32Array(DIM).fill(-Infinity);
 
@@ -150,7 +150,7 @@ Replace:
 With:
 ```javascript
             } else {
-                // Long file — strategic sampling + mean-pooling
+                // Long file: strategic sampling + mean-pooling
                 const offsets = selectClapOffsets(totalSamples, CLAP_WINDOW);
                 const meanPool = new Float32Array(DIM);
 
@@ -199,7 +199,7 @@ After implementing Edit 5 and Edit 6:
 2. Delete `soundvault-semantic.db` (and `.db-wal`, `.db-shm` if present) from the app userData directory.
 3. Relaunch SoundVault and run "Catalog Library" to re-index from scratch with mean-pooled embeddings.
 
-The spectral pass will also re-run since the DB was deleted. This is the cleanest path — the full re-index with the 3-tier system (Quick → Deep → Spectral) ensures all data is consistent.
+The spectral pass will also re-run since the DB was deleted. This is the cleanest path, the full re-index with the 3-tier system (Quick → Deep → Spectral) ensures all data is consistent.
 
 ---
 

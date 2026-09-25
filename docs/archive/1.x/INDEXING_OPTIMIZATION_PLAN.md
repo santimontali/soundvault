@@ -1,4 +1,4 @@
-# SoundVault — Plan de Optimización de Indexación
+# SoundVault: Plan de Optimización de Indexación
 ## Para implementar con Antigravity
 
 ---
@@ -39,7 +39,7 @@ No se crean archivos nuevos excepto en Fase 3 (indexing-worker.js).
 
 ---
 
-### FASE 1 — Fixes Críticos + SQLite Overhaul
+### FASE 1: Fixes Críticos + SQLite Overhaul
 **Impacto: ~700 → ~900-1100 files/min | Esfuerzo: Bajo | Riesgo: Bajo**
 
 #### 1A. Fix cuantización (semantic-engine.js)
@@ -47,16 +47,16 @@ No se crean archivos nuevos excepto en Fase 3 (indexing-worker.js).
 En `init()`, cambiar las líneas de carga de modelos:
 
 ```javascript
-// ANTES (FP32 por defecto — ~400MB por modelo):
+// ANTES (FP32 por defecto: ~400MB por modelo):
 this.textModel = await ClapTextModelWithProjection.from_pretrained('Xenova/clap-htsat-unfused');
 this.audioModel = await ClapAudioModelWithProjection.from_pretrained('Xenova/clap-htsat-unfused');
 
-// DESPUÉS (INT8 cuantizado — ~100MB por modelo):
+// DESPUÉS (INT8 cuantizado: ~100MB por modelo):
 this.textModel = await ClapTextModelWithProjection.from_pretrained('Xenova/clap-htsat-unfused', { quantized: true });
 this.audioModel = await ClapAudioModelWithProjection.from_pretrained('Xenova/clap-htsat-unfused', { quantized: true });
 ```
 
-**Nota clave**: `{ quantized: true }` es la API correcta de `@xenova/transformers` v2. NO usar `{ dtype: 'q8' }` — esa es API de v3 y se ignora silenciosamente.
+**Nota clave**: `{ quantized: true }` es la API correcta de `@xenova/transformers` v2. NO usar `{ dtype: 'q8' }`: esa es API de v3 y se ignora silenciosamente.
 
 **Verificación**: Al correr `npm run dev`, la consola debe mostrar descarga de `audio_model_quantized.onnx` (~100MB). Si descarga `audio_model.onnx` (~400MB), el fix no funcionó. Borrar la cache en `~/.cache/huggingface/` para forzar re-descarga.
 
@@ -74,7 +74,7 @@ npm install better-sqlite3
 npx @electron/rebuild
 ```
 
-**semantic-engine.js** — Reescribir toda la capa DB:
+**semantic-engine.js**, Reescribir toda la capa DB:
 
 ```javascript
 // ANTES:
@@ -128,7 +128,7 @@ async startIndexing(libraryPath) {
         const scanDir = (dir) => { /* igual que ahora, sin cambios */ };
         scanDir(libraryPath);
 
-        // 2. Batch mtime check — 1 query en vez de 70k
+        // 2. Batch mtime check: 1 query en vez de 70k
         const mtimeMap = new Map();
         for (const row of this._stmts.selectAllMtimes.iterate()) {
             mtimeMap.set(row.file_path, row.mtime);
@@ -144,7 +144,7 @@ async startIndexing(libraryPath) {
             }
         }
 
-        // 4. Delta cleanup — eliminar entradas de archivos borrados
+        // 4. Delta cleanup: eliminar entradas de archivos borrados
         const stalePaths = [...mtimeMap.keys()].filter(p => !onDiskPaths.has(p));
         if (stalePaths.length > 0) {
             const deleteBatch = this.db.transaction((paths) => {
@@ -219,7 +219,7 @@ _loadCacheFromDB() {
 }
 ```
 
-**Nota**: `_loadCacheFromDB` ya no es async — better-sqlite3 es sincrónico. Actualizar las llamadas que le hacen `await`.
+**Nota**: `_loadCacheFromDB` ya no es async, better-sqlite3 es sincrónico. Actualizar las llamadas que le hacen `await`.
 
 #### Verificación Fase 1
 ```
@@ -232,10 +232,10 @@ _loadCacheFromDB() {
 
 ---
 
-### FASE 2 — Worker Thread para Indexación
+### FASE 2: Worker Thread para Indexación
 **Impacto: ~1100 → ~1100 files/min (misma velocidad, pero UI no se congela) | Esfuerzo: Medio | Riesgo: Medio**
 
-La ganancia aquí NO es throughput — es responsividad de UI. La inferencia CLAP sigue siendo el cuello de botella, pero ahora no bloquea el event loop del main thread.
+La ganancia aquí NO es throughput, es responsividad de UI. La inferencia CLAP sigue siendo el cuello de botella, pero ahora no bloquea el event loop del main thread.
 
 #### 2A. Crear indexing-worker.js (archivo nuevo)
 
@@ -267,7 +267,7 @@ async function init() {
         ),
     };
 
-    // Cargar SOLO el audio model (cuantizado) — text model vive en main
+    // Cargar SOLO el audio model (cuantizado), text model vive en main
     processor = await AutoProcessor.from_pretrained('Xenova/clap-htsat-unfused');
     audioModel = await ClapAudioModelWithProjection.from_pretrained(
         'Xenova/clap-htsat-unfused', { quantized: true }
@@ -339,7 +339,7 @@ init().catch(e => {
 });
 ```
 
-#### 2B. Modificar semantic-engine.js — Delegación al worker
+#### 2B. Modificar semantic-engine.js: Delegación al worker
 
 En `startIndexing`, después de construir `toIndex` y hacer delta cleanup (Fase 1), en lugar de iterar directamente:
 
@@ -414,7 +414,7 @@ this.processor = await AutoProcessor.from_pretrained('Xenova/clap-htsat-unfused'
 
 ---
 
-### FASE 3 — onnxruntime-node (Inferencia Nativa)
+### FASE 3: onnxruntime-node (Inferencia Nativa)
 **Impacto: ~1100 → ~1500-2000 files/min | Esfuerzo: Alto | Riesgo: Medio-Alto**
 
 Esta es la fase que rompe el techo de WASM. Reemplaza la inferencia de audio por ONNX Runtime nativo.
@@ -428,7 +428,7 @@ npx @electron/rebuild
 
 `onnxruntime-node` viene con binarios precompilados para Windows/macOS/Linux. `electron-rebuild` los recompila contra los headers de Electron.
 
-#### 3B. Modificar indexing-worker.js — Usar ONNX nativo para audio
+#### 3B. Modificar indexing-worker.js: Usar ONNX nativo para audio
 
 El cambio clave: reemplazar `@xenova/transformers` audioModel con `onnxruntime-node` InferenceSession, pero MANTENER `@xenova/transformers` para el preprocessor (que computa mel spectrograms).
 
@@ -510,7 +510,7 @@ const modelCachePath = path.join(env.cacheDir, 'Xenova', 'clap-htsat-unfused');
 
 ---
 
-### FASE 4 — Indexación Incremental (File Watcher)
+### FASE 4: Indexación Incremental (File Watcher)
 **Impacto: Elimina la necesidad de re-index manual | Esfuerzo: Bajo | Riesgo: Bajo**
 
 `chokidar@^5.0.0` ya está en package.json. Solo hay que usarlo.
@@ -648,12 +648,12 @@ this.audioModel = await ClapAudioModelWithProjection.from_pretrained(
 
 ### Warnings para Antigravity
 
-- **NO usar `dtype: 'q8'`** — es API de Transformers.js v3, se ignora silenciosamente en v2. Usar `{ quantized: true }`.
-- **NO usar `@huggingface/transformers`** — el proyecto usa `@xenova/transformers` v2. Son paquetes diferentes con APIs incompatibles.
-- **`better-sqlite3` requiere `electron-rebuild`** — sin esto, el módulo nativo crashea al cargar.
-- **`_loadCacheFromDB` deja de ser async** — actualizar todas las llamadas con `await` para que sean sincrónicas.
-- **WAL mode permite lecturas concurrentes** — main thread puede hacer búsquedas mientras el worker indexa, pero NO puede escribir simultáneamente.
-- **El worker thread carga su propia instancia del modelo** — esto es ~100MB de RAM adicional pero es inevitable; ONNX sessions no son thread-safe.
+- **NO usar `dtype: 'q8'`**: es API de Transformers.js v3, se ignora silenciosamente en v2. Usar `{ quantized: true }`.
+- **NO usar `@huggingface/transformers`**: el proyecto usa `@xenova/transformers` v2. Son paquetes diferentes con APIs incompatibles.
+- **`better-sqlite3` requiere `electron-rebuild`**: sin esto, el módulo nativo crashea al cargar.
+- **`_loadCacheFromDB` deja de ser async**, actualizar todas las llamadas con `await` para que sean sincrónicas.
+- **WAL mode permite lecturas concurrentes**, main thread puede hacer búsquedas mientras el worker indexa, pero NO puede escribir simultáneamente.
+- **El worker thread carga su propia instancia del modelo**, esto es ~100MB de RAM adicional pero es inevitable; ONNX sessions no son thread-safe.
 - **Los archivos existentes que ya fueron descargados como FP32 deben borrarse del cache** de Hugging Face para forzar la descarga de la versión cuantizada. La ruta del cache varía por OS:
   - Windows: `%USERPROFILE%\.cache\huggingface\`
   - macOS: `~/.cache/huggingface/`

@@ -4,14 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#111114">
-<meta name="description" content="SoundVault — encuentra sonidos por cómo suenan y guárdalos en colecciones. Búsqueda semántica offline sobre tu propia biblioteca. Pruébalo en el navegador.">
-<meta property="og:title" content="SoundVault — encuentra y colecciona sonido">
+<meta name="description" content="SoundVault, encuentra sonidos por cómo suenan y guárdalos en colecciones. Búsqueda semántica offline sobre tu propia biblioteca. Pruébalo en el navegador.">
+<meta property="og:title" content="SoundVault, encuentra y colecciona sonido">
 <meta property="og:description" content="Encuentra cualquier sonido por cómo suena y colecciona lo que te sirve. 100% offline, en tu máquina.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="og.png">
-<title>SoundVault — Búsqueda semántica para tu biblioteca de sonido</title>
+<title>SoundVault, Búsqueda semántica para tu biblioteca de sonido</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
@@ -56,7 +56,7 @@
     <div class="hero-text reveal">
       <span class="eyebrow"><i></i>tu biblioteca de sonido · búsqueda semántica</span>
       <h1 class="hero-title">SOUND<span class="hl">VAULT</span></h1>
-      <p class="hero-tagline">Encuentra sonidos por cómo suenan y guarda los que te sirven en colecciones. Todo corre en tu máquina — sin nube, sin suscripción.</p>
+      <p class="hero-tagline">Encuentra sonidos por cómo suenan y guarda los que te sirven en colecciones. Todo corre en tu máquina, sin nube, sin suscripción.</p>
     </div>
   </div>
 
@@ -134,7 +134,7 @@
                   <path d="M14 8a6 6 0 0 1-10.3 4.2M2 14v-4h4"/>
                 </svg>
               </button>
-              <button class="btn-small btn-icon watching" id="watcher-btn" title="Folder watcher: ON — replica la app real" aria-label="Folder watcher">
+              <button class="btn-small btn-icon watching" id="watcher-btn" title="Folder watcher: ON: replica la app real" aria-label="Folder watcher">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/>
                   <circle cx="8" cy="8" r="2"/>
@@ -178,7 +178,7 @@
       <circle cx="4" cy="3" r="1.2" fill="currentColor"/><circle cx="4" cy="7" r="1.2" fill="currentColor"/><circle cx="4" cy="11" r="1.2" fill="currentColor"/>
       <circle cx="9" cy="3" r="1.2" fill="currentColor"/><circle cx="9" cy="7" r="1.2" fill="currentColor"/><circle cx="9" cy="11" r="1.2" fill="currentColor"/>
     </svg></div>
-  <button class="sel-btn" id="gtb-echo" title="Echo — Find similar sounds"><svg viewBox="0 0 16 16" fill="none">
+  <button class="sel-btn" id="gtb-echo" title="Echo, Find similar sounds"><svg viewBox="0 0 16 16" fill="none">
       <circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.3"/>
       <path d="M4.5 4.5C3.2 5.8 2.5 7.5 2.5 8s.7 2.2 2 3.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity=".6"/>
       <path d="M11.5 4.5c1.3 1.3 2 3 2 3.5s-.7 2.2-2 3.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity=".6"/>
@@ -259,7 +259,7 @@
     <div class="reveal">
       <span class="sec-tag">Echo Vault</span>
       <h2 class="sec-title">Selecciona un fragmento.<br><em>Encuentra su eco.</em></h2>
-      <p class="sec-lede">CLAP convierte 0,3 segundos de audio en un vector de 512 dimensiones. Echo Vault lo compara contra cada región indexada y devuelve los fragmentos que <strong>suenan igual</strong> — timbre, textura y envolvente, no etiquetas. Arrastra sobre la onda.</p>
+      <p class="sec-lede">CLAP convierte 0,3 segundos de audio en un vector de 512 dimensiones. Echo Vault lo compara contra cada región indexada y devuelve los fragmentos que <strong>suenan igual</strong>, timbre, textura y envolvente, no etiquetas. Arrastra sobre la onda.</p>
     </div>
     <div class="echo-panel reveal" style="--d:.12s">
       <div class="echo-topbar">
@@ -286,7 +286,7 @@
       <div class="spec-row"><dt>Motor semántico</dt><dd>LAION CLAP · <code>htsat-unfused</code> · ONNX Runtime (local)</dd></div>
       <div class="spec-row"><dt>Embeddings</dt><dd>512-D · normalizados L2 · <code>2.048 B</code> por sonido, cacheados</dd></div>
       <div class="spec-row"><dt>Índice vectorial</dt><dd>HNSW (hnswlib) en background · brute-force como fallback inmediato</dd></div>
-      <div class="spec-row"><dt>Latencia</dt><dd><code>5–8 ms</code> sobre 70.000 vectores + <code>2 ms</code> de ordenación</dd></div>
+      <div class="spec-row"><dt>Latencia</dt><dd><code>5-8 ms</code> sobre 70.000 vectores + <code>2 ms</code> de ordenación</dd></div>
       <div class="spec-row"><dt>Base de datos</dt><dd>SQLite embebido (<code>better-sqlite3</code>) · metadata + embeddings</dd></div>
       <div class="spec-row"><dt>Decodificación</dt><dd>ffmpeg → mono <code>48 kHz</code> float32 · WAV, AIFF, OGG, FLAC, MP3…</dd></div>
       <div class="spec-row"><dt>Editor de audio</dt><dd>Fades y crop con handles · preview en tiempo real</dd></div>

@@ -1,4 +1,4 @@
-# SoundVault — Diagnóstico de Regresión 700→250 files/min
+# SoundVault: Diagnóstico de Regresión 700→250 files/min
 ## Benchmark Plan para Antigravity
 
 ---
@@ -218,7 +218,7 @@ async function testClapInferenceOnly(processor, audioModel) {
 // TEST 3: Full pipeline in main thread (simulates State 0)
 // ════════════════════════════════════════════════════════
 async function testMainThreadFull(processor, audioModel) {
-    console.log('\n── TEST 3: Full pipeline — MAIN THREAD (State 0 simulation) ──');
+    console.log('\n── TEST 3: Full pipeline: MAIN THREAD (State 0 simulation) ──');
 
     const { db, dbPath } = createTempDB('main');
     const stmt = db.prepare('INSERT OR REPLACE INTO embeddings (file_path, mtime, vector) VALUES (?, ?, ?)');
@@ -265,7 +265,7 @@ async function testMainThreadFull(processor, audioModel) {
 // TEST 4: Full pipeline in main thread WITH batch transactions
 // ════════════════════════════════════════════════════════
 async function testMainThreadBatched(processor, audioModel) {
-    console.log('\n── TEST 4: Full pipeline — MAIN THREAD + batch transactions ──');
+    console.log('\n── TEST 4: Full pipeline: MAIN THREAD + batch transactions ──');
 
     const { db, dbPath } = createTempDB('main_batch');
     const stmt = db.prepare('INSERT OR REPLACE INTO embeddings (file_path, mtime, vector) VALUES (?, ?, ?)');
@@ -312,7 +312,7 @@ async function testMainThreadBatched(processor, audioModel) {
 // TEST 5: Full pipeline in WORKER THREAD (simulates State 2)
 // ════════════════════════════════════════════════════════
 async function testWorkerThread() {
-    console.log('\n── TEST 5: Full pipeline — WORKER THREAD (State 2 simulation) ──');
+    console.log('\n── TEST 5: Full pipeline: WORKER THREAD (State 2 simulation) ──');
 
     const { db, dbPath } = createTempDB('worker');
     db.close(); // Worker opens its own connection
@@ -408,7 +408,7 @@ async function main() {
     await testMainThreadBatched(processor, audioModel);
 
     // Test 5: Worker thread full pipeline
-    // IMPORTANT: This loads its OWN model instance — tests the real-world scenario
+    // IMPORTANT: This loads its OWN model instance, tests the real-world scenario
     await testWorkerThread();
 
     // ════════════════════════════════════════════════════════
@@ -498,20 +498,20 @@ node benchmark-regression.js "C:\Users\santi\Documents\SoundVault_Tests\benchmar
 
 ### 4. Qué buscar en los resultados
 
-**Escenario A — Worker penalty > 1.5x:**
+**Escenario A: Worker penalty > 1.5x:**
 ```
 Main/Worker ratio: 2.5x  ⚠️ SIGNIFICANT WORKER PENALTY
 ```
 → El problema es el worker. Causa más probable: dos instancias de modelo compitiendo por cache L3 (9MB en i5-9400). Solución: no cargar el audioModel en el main thread (ya no se necesita para indexación).
 
-**Escenario B — Worker penalty ~1.0-1.2x, pero Test 3 muestra ~350ms/file:**
+**Escenario B: Worker penalty ~1.0-1.2x, pero Test 3 muestra ~350ms/file:**
 ```
 Main/Worker ratio: 1.1x  ✅ Worker comparable
 Pipeline per file: 350ms
 ```
 → El worker no es el problema. El pipeline completo es lento en ambos contextos. Investigar overhead de ffmpeg (spawn vs fluent), preprocessing CLAP, o materialización de embeddings.
 
-**Escenario C — Main rate es ~350 files/min (no 700):**
+**Escenario C: Main rate es ~350 files/min (no 700):**
 ```
 Main thread rate: 350 files/min
 ```
@@ -539,7 +539,7 @@ Según los resultados, hay 3 caminos:
 → Eliminar la carga del audioModel en el main thread (línea 263 de semantic-engine.js). El main solo necesita tokenizer + textModel para búsquedas. El audioModel solo vive en el worker. Esto reduce la RAM total y elimina la competencia por cache L3.
 
 **Si el pipeline es lento en ambos contextos (Escenario B):**
-→ Profiling más fino: medir `processor(clapAudio)` y `audioModel(inputs)` por separado. Verificar que `Array.from(audio_embeds.data)` no es el cuello de botella (puede serlo para tensores grandes — reemplazar con `Buffer.from(audio_embeds.data.buffer)`).
+→ Profiling más fino: medir `processor(clapAudio)` y `audioModel(inputs)` por separado. Verificar que `Array.from(audio_embeds.data)` no es el cuello de botella (puede serlo para tensores grandes, reemplazar con `Buffer.from(audio_embeds.data.buffer)`).
 
 **Si la baseline cambió (Escenario C):**
 → Los 700/min del State 0 probablemente tenían una configuración de ONNX diferente (quizás numThreads distinto o no configurado explícitamente). El Test 6 revela la config actual. Experimentar con `env.backends.onnx.wasm.numThreads = 1` vs `N-1` para ver si el multithreading de ONNX en realidad perjudica para modelos pequeños como CLAP.

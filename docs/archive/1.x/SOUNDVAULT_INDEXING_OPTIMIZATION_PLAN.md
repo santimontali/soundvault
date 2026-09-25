@@ -1,25 +1,25 @@
-# SoundVault — Plan de Optimización del Pipeline de Indexación
+# SoundVault: Plan de Optimización del Pipeline de Indexación
 
 ## Contexto del Problema
 
 El sistema de indexación tiene tres cuellos de botella cuantificados:
 
 1. **CLAP Chunking excesivo**: Archivos >10s generan sliding window (10s ventana, 5s hop, hasta 120s decode). Un archivo de 2min = 23 inferencias ONNX secuenciales (~87ms c/u). El 15% de archivos largos consume el 60%+ del tiempo CLAP.
-2. **CMVN Re-scan completo**: Al final de `processSpectralBatch` (indexing-worker.js L249-286), se descarta la estadística acumulada en streaming y se re-lee TODA la tabla `spectral_index`, descomprimiendo cada `feature_matrix` para recomputar stats globales. Es O(N × W × 44) — 15+ minutos para librerías grandes.
+2. **CMVN Re-scan completo**: Al final de `processSpectralBatch` (indexing-worker.js L249-286), se descarta la estadística acumulada en streaming y se re-lee TODA la tabla `spectral_index`, descomprimiendo cada `feature_matrix` para recomputar stats globales. Es O(N × W × 44)-15+ minutos para librerías grandes.
 3. **Indexación monolítica**: El usuario debe esperar a que termine todo el pipeline (CLAP chunking + spectral) antes de tener búsqueda funcional. Para 15k archivos esto son ~2.5 horas.
 
 Se implementan 3 optimizaciones complementarias que atacan cuellos de botella diferentes sin interferirse.
 
 ---
 
-## FASE 1 — CMVN Incremental (eliminar re-scan)
+## FASE 1: CMVN Incremental (eliminar re-scan)
 
 ### Objetivo
 Eliminar el re-scan O(N) de la tabla spectral_index al final de cada indexación. Persistir running sums incrementales en la DB.
 
 ### Archivo: `indexing-worker.js`
 
-#### Paso 1.1 — Modificar la tabla `spectral_stats`
+#### Paso 1.1: Modificar la tabla `spectral_stats`
 
 En `processSpectralBatch`, reemplazar el bloque `CREATE TABLE IF NOT EXISTS spectral_stats` (L180-188) con:
 
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS spectral_stats (
 
 Los campos `running_sum` y `running_sum_sq` son Float64Array(44) serializado como BLOB (352 bytes cada uno). Esto permite recalcular mean/std sin re-escanear.
 
-#### Paso 1.2 — Cargar running sums existentes al inicio de `processSpectralBatch`
+#### Paso 1.2: Cargar running sums existentes al inicio de `processSpectralBatch`
 
 Al principio de `processSpectralBatch` (después de crear la tabla), cargar los running sums previos de la DB:
 
@@ -55,7 +55,7 @@ if (prevStats && prevStats.running_sum && prevStats.running_sum_sq) {
 }
 ```
 
-#### Paso 1.3 — Reemplazar el bloque de re-scan (L245-286)
+#### Paso 1.3: Reemplazar el bloque de re-scan (L245-286)
 
 Eliminar completamente el bloque que va desde `// ── Compute and persist global CMVN stats ──` (L245) hasta el `console.log` final (L286). Reemplazar con:
 
@@ -76,7 +76,7 @@ if (totalWindows > 0) {
 }
 ```
 
-#### Paso 1.4 — Invalidar stats cuando se eliminan archivos
+#### Paso 1.4: Invalidar stats cuando se eliminan archivos
 
 En `semantic-engine.js`, en el método `_removeFromCaches` (L1105-1145), después de eliminar de `spectral_index`, agregar la invalidación marcando los stats como dirty para que el próximo indexado los recalcule:
 
@@ -91,7 +91,7 @@ Esto es conservador: ante eliminaciones (evento raro) se fuerza un recálculo co
 
 ### Archivo: `semantic-engine.js`
 
-#### Paso 1.5 — Migrar schema en `init()`
+#### Paso 1.5: Migrar schema en `init()`
 
 En el método `init()`, después del `CREATE TABLE IF NOT EXISTS spectral_stats` existente (L257-265), agregar migración para columnas nuevas:
 
@@ -102,20 +102,20 @@ try {
     this.db.exec('ALTER TABLE spectral_stats ADD COLUMN running_sum_sq BLOB');
     console.log('[SemanticEngine] Migrated spectral_stats table with running sums');
 } catch(e) {
-    // Columns already exist — ignore
+    // Columns already exist: ignore
 }
 ```
 
 ---
 
-## FASE 2 — Cap Inteligente de Chunks CLAP
+## FASE 2: Cap Inteligente de Chunks CLAP
 
 ### Objetivo
 Reducir las inferencias CLAP para archivos largos de 23 (para 120s) a máximo 5, mediante muestreo estratégico de segmentos representativos en lugar de sliding window exhaustivo.
 
 ### Archivo: `indexing-worker.js`
 
-#### Paso 2.1 — Crear función `selectClapOffsets`
+#### Paso 2.1: Crear función `selectClapOffsets`
 
 Agregar esta función antes de `processClapBatch` (antes de L86):
 
@@ -151,13 +151,13 @@ function selectClapOffsets(totalSamples, windowSize) {
 }
 ```
 
-#### Paso 2.2 — Reemplazar el sliding window en `processClapBatch`
+#### Paso 2.2: Reemplazar el sliding window en `processClapBatch`
 
-En `processClapBatch`, reemplazar el bloque del `else` (L117-144) — el bloque completo de "Long file — sliding window + max-pooling":
+En `processClapBatch`, reemplazar el bloque del `else` (L117-144), el bloque completo de "Long file, sliding window + max-pooling":
 
 ```javascript
 } else {
-    // Long file — strategic sampling + max-pooling
+    // Long file: strategic sampling + max-pooling
     const offsets = selectClapOffsets(totalSamples, CLAP_WINDOW);
     const maxPool = new Float32Array(DIM).fill(-Infinity);
 
@@ -185,17 +185,17 @@ En `processClapBatch`, reemplazar el bloque del `else` (L117-144) — el bloque 
 }
 ```
 
-#### Paso 2.3 — Eliminar constante CLAP_HOP (ya no se usa)
+#### Paso 2.3: Eliminar constante CLAP_HOP (ya no se usa)
 
-Eliminar la línea `const CLAP_HOP = 48000 * 5;` (L91) — ya no se utiliza. Mantener `CLAP_WINDOW` y `MAX_DECODE_S`.
+Eliminar la línea `const CLAP_HOP = 48000 * 5;` (L91), ya no se utiliza. Mantener `CLAP_WINDOW` y `MAX_DECODE_S`.
 
-#### Paso 2.4 — Actualizar el header comment del archivo
+#### Paso 2.4: Actualizar el header comment del archivo
 
 Reemplazar el comment header (L1-13) para reflejar la nueva arquitectura:
 
 ```javascript
 /**
- * indexing-worker.js — Dedicated Worker Thread for SoundVault audio indexing
+ * indexing-worker.js, Dedicated Worker Thread for SoundVault audio indexing
  *
  * Two-pass architecture:
  *   Pass 1 (index-clap):     CLAP inference with strategic sampling for long files
@@ -213,14 +213,14 @@ Los embeddings existentes (generados con sliding window exhaustivo) siguen siend
 
 ---
 
-## FASE 3 — Indexación Progresiva con Tiers de Prioridad
+## FASE 3: Indexación Progresiva con Tiers de Prioridad
 
 ### Objetivo
 Dividir la indexación en 3 tiers de prioridad para que la búsqueda semántica esté disponible lo antes posible, mientras Echo se enriquece en background.
 
-### Archivo: `semantic-engine.js` — Refactorizar `startIndexing`
+### Archivo: `semantic-engine.js`: Refactorizar `startIndexing`
 
-#### Paso 3.1 — Modificar el objeto `progress` para soportar tiers
+#### Paso 3.1: Modificar el objeto `progress` para soportar tiers
 
 Reemplazar la línea de inicialización del progress (L412):
 
@@ -234,7 +234,7 @@ this.progress = {
 };
 ```
 
-#### Paso 3.2 — Dividir el work queue en tiers
+#### Paso 3.2: Dividir el work queue en tiers
 
 Reemplazar el bloque "Build work queue" y "Delegate to Worker Thread" (L467-585) con la nueva lógica de tres tiers.
 
@@ -259,7 +259,7 @@ if (filesToIndex.length === 0) {
         this._loadCacheFromDB();
         this._loadSpectralSummaries();
     } else {
-        console.log('[SemanticEngine] No changes — skipping cache reload');
+        console.log('[SemanticEngine] No changes, skipping cache reload');
     }
     return;
 }
@@ -351,16 +351,16 @@ await new Promise((resolve, reject) => {
             console.log(`[SemanticEngine] Tier ${currentTier} complete (${msg.rate} files/min).`);
 
             if (currentTier === 0) {
-                // Tier 0 done — reload CLAP cache, search is now functional
-                console.log('[SemanticEngine] Quick CLAP done — reloading cache for immediate search...');
+                // Tier 0 done: reload CLAP cache, search is now functional
+                console.log('[SemanticEngine] Quick CLAP done, reloading cache for immediate search...');
                 this._loadCacheFromDB();
             } else if (currentTier === 1) {
-                // Tier 1 done — reload to get improved embeddings
-                console.log('[SemanticEngine] Deep CLAP done — reloading improved embeddings...');
+                // Tier 1 done: reload to get improved embeddings
+                console.log('[SemanticEngine] Deep CLAP done, reloading improved embeddings...');
                 this._loadCacheFromDB();
             } else if (currentTier === 2) {
-                // Tier 2 done — reload spectral data
-                console.log('[SemanticEngine] Spectral done — reloading summaries + stats...');
+                // Tier 2 done: reload spectral data
+                console.log('[SemanticEngine] Spectral done, reloading summaries + stats...');
                 this._loadSpectralSummaries();
                 this._loadGlobalStats();
                 this._spectralCache.clear();
@@ -393,15 +393,15 @@ await new Promise((resolve, reject) => {
 });
 ```
 
-### Archivo: `indexing-worker.js` — Agregar handler `index-clap-quick`
+### Archivo: `indexing-worker.js`: Agregar handler `index-clap-quick`
 
-#### Paso 3.3 — Agregar función `processClapQuickBatch`
+#### Paso 3.3: Agregar función `processClapQuickBatch`
 
 Agregar esta función después de `processClapBatch`:
 
 ```javascript
 // ═══ Tier 0: Quick CLAP (single inference, first 10s only) ═══
-// No chunking — always uses first 10s regardless of file duration.
+// No chunking: always uses first 10s regardless of file duration.
 // Purpose: get functional semantic search ASAP.
 async function processClapQuickBatch(files) {
     const BATCH_SIZE = 50;
@@ -419,7 +419,7 @@ async function processClapQuickBatch(files) {
 
     for (const file of files) {
         try {
-            // Always decode only first 10s — fast path
+            // Always decode only first 10s, fast path
             const audioData = await getAudioData(file.path, 10);
             const clapAudio = audioData.subarray(0, Math.min(audioData.length, CLAP_WINDOW));
 
@@ -445,7 +445,7 @@ async function processClapQuickBatch(files) {
 }
 ```
 
-#### Paso 3.4 — Agregar message handler para `index-clap-quick`
+#### Paso 3.4: Agregar message handler para `index-clap-quick`
 
 En el bloque `parentPort.on('message')` (L290-329), agregar antes del handler `index-spectral`:
 
@@ -463,9 +463,9 @@ if (msg.type === 'index-clap-quick') {
 }
 ```
 
-### Archivo: `index.html` — Actualizar UI de progreso
+### Archivo: `index.html`: Actualizar UI de progreso
 
-#### Paso 3.5 — Actualizar el panel de progreso
+#### Paso 3.5: Actualizar el panel de progreso
 
 Reemplazar las dos `idx-phase` divs (L2416-2429) con tres fases:
 
@@ -480,20 +480,20 @@ Reemplazar las dos `idx-phase` divs (L2416-2429) con tres fases:
 <div class="idx-phase" id="idx-deep-phase">
   <div class="idx-phase-header">
     <span class="idx-phase-label" id="idx-deep-label">Deep Semantic</span>
-    <span class="idx-phase-count" id="idx-deep-count">–</span>
+    <span class="idx-phase-count" id="idx-deep-count">-</span>
   </div>
   <div class="idx-bar-track"><div class="idx-bar-fill semantic" id="idx-deep-bar"></div></div>
 </div>
 <div class="idx-phase" id="idx-spectral-phase">
   <div class="idx-phase-header">
     <span class="idx-phase-label" id="idx-spectral-label">Echo Spectral</span>
-    <span class="idx-phase-count" id="idx-spectral-count">–</span>
+    <span class="idx-phase-count" id="idx-spectral-count">-</span>
   </div>
   <div class="idx-bar-track"><div class="idx-bar-fill spectral" id="idx-spectral-bar"></div></div>
 </div>
 ```
 
-#### Paso 3.6 — Actualizar el JS de polling de progreso
+#### Paso 3.6: Actualizar el JS de polling de progreso
 
 Reemplazar el bloque del `setInterval` que lee el progreso (L3525-3582) con:
 
@@ -510,7 +510,7 @@ const progIv = setInterval(async () => {
             document.getElementById('idx-clap-bar').style.width = pct + '%';
             document.getElementById('idx-clap-count').textContent = `${p.phaseCurrent} / ${p.phaseTotal}`;
         }
-        document.getElementById('idx-status-text').textContent = 'Quick semantic scan — search available soon...';
+        document.getElementById('idx-status-text').textContent = 'Quick semantic scan, search available soon...';
     }
 
     // ── Tier 1: Deep CLAP ──
@@ -563,8 +563,8 @@ const progIv = setInterval(async () => {
         document.getElementById('idx-clap-bar').style.width = '100%';
         document.getElementById('idx-deep-bar').style.width = '100%';
         document.getElementById('idx-spectral-bar').style.width = '100%';
-        document.getElementById('idx-clap-count').textContent = p.clapTotal > 0 ? `${p.clapTotal} ✓` : '–';
-        document.getElementById('idx-spectral-count').textContent = p.spectralTotal > 0 ? `${p.spectralTotal} ✓` : '–';
+        document.getElementById('idx-clap-count').textContent = p.clapTotal > 0 ? `${p.clapTotal} ✓` : '-';
+        document.getElementById('idx-spectral-count').textContent = p.spectralTotal > 0 ? `${p.spectralTotal} ✓` : '-';
         document.getElementById('idx-status-text').textContent = 'Library cataloged ✓';
         document.getElementById('idx-status-text').style.color = '#5a5';
 
@@ -580,7 +580,7 @@ const progIv = setInterval(async () => {
 }, 800);
 ```
 
-#### Paso 3.7 — Reset de la UI al iniciar
+#### Paso 3.7: Reset de la UI al iniciar
 
 En el bloque que resetea la UI al inicio del indexado (L3514-3521), agregar el reset del nuevo tier:
 
@@ -588,16 +588,16 @@ En el bloque que resetea la UI al inicio del indexado (L3514-3521), agregar el r
 document.getElementById('idx-deep-bar').style.width = '0%';
 document.getElementById('idx-deep-bar').className = 'idx-bar-fill semantic';
 document.getElementById('idx-deep-label').className = 'idx-phase-label';
-document.getElementById('idx-deep-count').textContent = '–';
+document.getElementById('idx-deep-count').textContent = '-';
 ```
 
 ---
 
 ## Orden de Ejecución
 
-1. **Fase 1 primero** — Es la más simple y no tiene dependencias. Cambios aislados en el bloque de CMVN.
-2. **Fase 2 segundo** — Cambio quirúrgico en `processClapBatch`. No interfiere con Fase 1.
-3. **Fase 3 último** — Es la más compleja. Toca el scheduler en `startIndexing`, agrega un nuevo message type al worker, y modifica la UI.
+1. **Fase 1 primero**: Es la más simple y no tiene dependencias. Cambios aislados en el bloque de CMVN.
+2. **Fase 2 segundo**: Cambio quirúrgico en `processClapBatch`. No interfiere con Fase 1.
+3. **Fase 3 último**: Es la más compleja. Toca el scheduler en `startIndexing`, agrega un nuevo message type al worker, y modifica la UI.
 
 ## Archivos Modificados (resumen)
 
@@ -609,8 +609,8 @@ document.getElementById('idx-deep-count').textContent = '–';
 
 ## Verificación Post-Implementación
 
-1. Eliminar `soundvault-semantic.db` y re-indexar desde cero — verificar que las 3 barras de progreso avanzan correctamente.
+1. Eliminar `soundvault-semantic.db` y re-indexar desde cero, verificar que las 3 barras de progreso avanzan correctamente.
 2. Verificar que la búsqueda semántica funciona después del Tier 0 (antes de que Tier 1 y 2 terminen).
 3. Agregar un archivo largo (>30s) a la librería y verificar que el watcher incremental usa CMVN incremental (no re-scan).
 4. Eliminar un archivo y verificar que `spectral_stats` se invalida (DELETE).
-5. Re-indexar después de eliminación — verificar que el re-scan completo se ejecuta una sola vez y luego vuelve a modo incremental.
+5. Re-indexar después de eliminación: verificar que el re-scan completo se ejecuta una sola vez y luego vuelve a modo incremental.

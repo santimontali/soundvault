@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════
-   SoundVault — sitio demo
+   SoundVault: sitio demo
    Hero con voz propia + réplica fiel de la app embebida
    Tokens de la app copiados de src/index.html
    ══════════════════════════════════════════════ */
@@ -128,7 +128,7 @@ canvas { display: block; }
 }
 .hero-tagline em { font-style: normal; color: var(--text-primary); font-weight: 600; }
 
-/* App frame — ventana flotante, no full-screen */
+/* App frame: ventana flotante, no full-screen */
 .app-frame {
   display: flex; flex-direction: column;
   width: min(1180px, calc(100% - 48px)); margin-left: auto; margin-right: auto;

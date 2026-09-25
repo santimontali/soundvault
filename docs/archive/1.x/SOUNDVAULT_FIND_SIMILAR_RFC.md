@@ -1,4 +1,4 @@
-# SoundVault — "ECHO VAULT" Feature RFC
+# SoundVault: "ECHO VAULT" Feature RFC
 ## Fragment-Level Audio Similarity Search System
 
 ### Technical Investigation, Architecture Design & Implementation Plan
@@ -7,17 +7,17 @@
 
 ## 1. Naming Exploration
 
-Before diving into the technical analysis, a brief semantic exploration of naming candidates — blending the morphological roots of **VAULT** (chamber, resonance, space, protection) and **SOUND** (wave, echo, tone, vibration):
+Before diving into the technical analysis, a brief semantic exploration of naming candidates, blending the morphological roots of **VAULT** (chamber, resonance, space, protection) and **SOUND** (wave, echo, tone, vibration):
 
 | Candidate | Concept | Why It Works |
 |---|---|---|
-| **Echo Vault** | Echo = acoustic reflection + Vault = chamber of sounds | The strongest candidate. Implies acoustic memory — finding the "echo" of a selection across the vault. Natural verb form: "Echo this." |
+| **Echo Vault** | Echo = acoustic reflection + Vault = chamber of sounds | The strongest candidate. Implies acoustic memory: finding the "echo" of a selection across the vault. Natural verb form: "Echo this." |
 | **Resonance** | Already used in SoundVault for AI suggestions | Extends naturally. A fragment "resonates" with other fragments. |
-| **Sound Mirror** | Reflection, finding the acoustic mirror image | Evocative but passive — implies identity, not similarity. |
+| **Sound Mirror** | Reflection, finding the acoustic mirror image | Evocative but passive: implies identity, not similarity. |
 | **Sonic Kin** | Family of sounds, timbral relatives | Creative but possibly too informal for a pro tool. |
-| **Harmonic Vault** | Harmony between fragments | Slightly misleading — implies pitch relationship specifically. |
+| **Harmonic Vault** | Harmony between fragments | Slightly misleading: implies pitch relationship specifically. |
 
-**Recommendation:** **"Echo Vault"** — with the verb action **"Echo"** (e.g., right-click → "Echo this selection"). It semantically implies: *find where this sound reverberates across the vault*. The UI button/action can simply read **ECHO**.
+**Recommendation:** **"Echo Vault"**, with the verb action **"Echo"** (e.g., right-click → "Echo this selection"). It semantically implies: *find where this sound reverberates across the vault*. The UI button/action can simply read **ECHO**.
 
 ---
 
@@ -40,9 +40,9 @@ SoundVault uses `Xenova/clap-htsat-unfused` via `@xenova/transformers` (ONNX Run
 - Supports multi-word vector shifting for interactive weight adjustment
 
 **Search Infrastructure:**
-- Flat contiguous `Float32Array` matrix — all embeddings in a single buffer
+- Flat contiguous `Float32Array` matrix: all embeddings in a single buffer
 - Brute-force dot product with 8-way loop unrolling (dot product = cosine similarity because vectors are L2-normalized)
-- Performance: ~5–8ms for 70k vectors (matrix scan) + ~2ms sort
+- Performance: ~5-8ms for 70k vectors (matrix scan) + ~2ms sort
 - `suggestForCollection()` already computes centroid-based audio-to-audio similarity
 
 ### 2.2 What CLAP Can and Cannot Do for Fragment Similarity
@@ -55,9 +55,9 @@ SoundVault uses `Xenova/clap-htsat-unfused` via `@xenova/transformers` (ONNX Run
 
 **What CLAP embeddings fail to capture (critical limitations):**
 - **Temporal microstructure:** Two sounds with identical CLAP embeddings can have completely different transient shapes, attack envelopes, and rhythmic phrasing. CLAP was trained on whole-clip semantic labels, not sub-second temporal patterns.
-- **Fine-grained timbre:** CLAP distinguishes "guitar" from "piano" but struggles to distinguish *which* guitar — a nylon classical vs. a distorted electric playing the same note. The 512-D space conflates many timbral nuances that a sound designer considers distinct.
-- **Pitch and harmonic content:** CLAP embeddings are largely pitch-invariant by design (it's a classification model). Two sounds at different pitches but identical timbre will be very close in CLAP space — sometimes desirable, sometimes not.
-- **Sub-clip granularity:** The current system processes only the first 10 seconds of each file as a single embedding. There's no temporal axis within the embedding — a file that starts with silence and ends with a crash gets the same embedding as one that starts with a crash.
+- **Fine-grained timbre:** CLAP distinguishes "guitar" from "piano" but struggles to distinguish *which* guitar, a nylon classical vs. a distorted electric playing the same note. The 512-D space conflates many timbral nuances that a sound designer considers distinct.
+- **Pitch and harmonic content:** CLAP embeddings are largely pitch-invariant by design (it's a classification model). Two sounds at different pitches but identical timbre will be very close in CLAP space, sometimes desirable, sometimes not.
+- **Sub-clip granularity:** The current system processes only the first 10 seconds of each file as a single embedding. There's no temporal axis within the embedding, a file that starts with silence and ends with a crash gets the same embedding as one that starts with a crash.
 - **Rhythmic / "phrasing" similarity:** CLAP has no concept of onset pattern, rhythmic structure, or temporal articulation. Two drum fills with the same kit but different patterns will have near-identical CLAP embeddings.
 
 ### 2.3 The Fundamental Problem
@@ -74,7 +74,7 @@ The user selects a *fragment* of audio (e.g., 0.3 seconds of a metallic transien
 
 ---
 
-## 3. Alternative Approaches — Research Survey
+## 3. Alternative Approaches: Research Survey
 
 ### 3.1 Approach A: CLAP Sliding Window (Semantic Coarse Filter)
 
@@ -93,7 +93,7 @@ The user selects a *fragment* of audio (e.g., 0.3 seconds of a metallic transien
 
 **Cons:**
 - Storage explosion: N windows per file × 2048 bytes. For 70k files × 5 windows = 350k embeddings (700MB RAM)
-- CLAP inference per window is ~50–100ms. Pre-indexing 350k windows = ~5–10 hours
+- CLAP inference per window is ~50-100ms. Pre-indexing 350k windows = ~5-10 hours
 - Still doesn't capture fine-grained timbre or temporal shape
 - 2-second minimum window (CLAP performs poorly on very short clips due to mel spectrogram padding/repetition design)
 
@@ -104,12 +104,12 @@ The user selects a *fragment* of audio (e.g., 0.3 seconds of a metallic transien
 **Concept:** Extract classical audio features from the query fragment and compare against pre-computed features of library segments. This is the traditional MIR (Music Information Retrieval) approach.
 
 **Feature Set for Sound Design Similarity:**
-- **MFCCs (13 coefficients + deltas):** Capture spectral envelope ≈ timbral "color." Coefficients 2–12 encode texture and timbre details.
+- **MFCCs (13 coefficients + deltas):** Capture spectral envelope ≈ timbral "color." Coefficients 2-12 encode texture and timbre details.
 - **Spectral Centroid:** Brightness measure (Hz). Critical for distinguishing bright vs. dark sounds.
 - **Spectral Flatness:** Noisiness measure (0=tonal, 1=noise). Essential for SFX work.
 - **Zero-Crossing Rate:** Proxy for noisiness and pitch.
-- **RMS Envelope (windowed):** Energy contour — captures attack/decay shape.
-- **Onset Strength:** Transient detection — captures "punchiness" and rhythmic articulation.
+- **RMS Envelope (windowed):** Energy contour, captures attack/decay shape.
+- **Onset Strength:** Transient detection, captures "punchiness" and rhythmic articulation.
 - **Spectral Bandwidth:** Width of spectral energy distribution.
 
 **How it works:**
@@ -122,12 +122,12 @@ The user selects a *fragment* of audio (e.g., 0.3 seconds of a metallic transien
 - Sub-millisecond feature extraction in pure JS (FFT + mel filter bank = trivial computation)
 - Compact storage: ~100 bytes per 50ms window (13 MFCCs + 5 spectral features × 4 bytes ≈ 72 bytes)
 - Works beautifully on very short fragments (even 50ms)
-- Can be computed entirely in the Electron main process using raw math — no ML models needed
+- Can be computed entirely in the Electron main process using raw math, no ML models needed
 
 **Cons:**
-- DTW is O(N×M) per comparison — scanning every window of every file is prohibitive for 70k files
+- DTW is O(N×M) per comparison, scanning every window of every file is prohibitive for 70k files
 - Requires pre-computed feature matrices for the entire library (significant initial indexing)
-- No "semantic" understanding — won't find a "similar but different" explosion; only timbral matches
+- No "semantic" understanding: won't find a "similar but different" explosion; only timbral matches
 - Sensitive to pitch differences (two identical timbres at different pitches score poorly unless pitch-normalized)
 
 **Verdict:** Excellent as the **fine-grained ranking engine** (Stage 2), but needs a pre-filter to avoid scanning the entire library.
@@ -136,20 +136,20 @@ The user selects a *fragment* of audio (e.g., 0.3 seconds of a metallic transien
 
 **This is the approach I recommend for SoundVault.** It combines the strengths of both:
 
-**Stage 1 — CLAP Coarse Filter:**
-- Use the existing CLAP embedding to narrow down candidates from 70k files to ~200–500 files
+**Stage 1: CLAP Coarse Filter:**
+- Use the existing CLAP embedding to narrow down candidates from 70k files to ~200-500 files
 - The user's selected fragment is embedded via CLAP audio encoder
-- Dot product against the full file embeddings (already cached) → top 200–500 candidates
+- Dot product against the full file embeddings (already cached) → top 200-500 candidates
 - Time: ~50ms inference + ~5ms vector search = ~55ms
 
-**Stage 2 — Spectral Fingerprint Fine Search:**
+**Stage 2: Spectral Fingerprint Fine Search:**
 - For each candidate file, compute or retrieve the pre-computed spectral feature matrix
 - Use a fast similarity measure (windowed cosine distance, not full DTW) to find the best-matching sub-segment within each file
 - Return results ranked by fine-grained spectral similarity, with exact time offsets
 
-**Stage 3 — (Optional) Temporal Envelope Matching:**
+**Stage 3-(Optional) Temporal Envelope Matching:**
 - For the top ~50 results from Stage 2, apply an envelope-shape correlation
-- This captures "phrasing" — the rhythmic/dynamic contour of the sound
+- This captures "phrasing": the rhythmic/dynamic contour of the sound
 - Implemented as normalized cross-correlation of the RMS envelope curves
 
 ### 3.4 Approach D: Audio Fingerprinting (Chromaprint / Panako)
@@ -171,10 +171,10 @@ The user selects a *fragment* of audio (e.g., 0.3 seconds of a metallic transien
 **Pros:** Could produce the most accurate similarity space possible.
 
 **Cons:**
-- Requires training a custom model — weeks of work, needs curated dataset
+- Requires training a custom model, weeks of work, needs curated dataset
 - Adds another ML model to ship (increased binary size, memory)
 - Not feasible for a desktop app without GPU
-- The CLAP + spectral hybrid achieves 80–90% of the quality with zero training
+- The CLAP + spectral hybrid achieves 80-90% of the quality with zero training
 
 **Verdict:** Interesting for a future version, but the hybrid approach is the pragmatic choice.
 
@@ -338,7 +338,7 @@ class SpectralFingerprinter {
 
 ### 4.4 Segment Matching Algorithm
 
-The core matching uses a **sliding window cosine distance** — not full DTW (which is too slow). This works by comparing the query's feature sequence against every possible alignment within a candidate file.
+The core matching uses a **sliding window cosine distance**, not full DTW (which is too slow). This works by comparing the query's feature sequence against every possible alignment within a candidate file.
 
 ```javascript
 // Find best matching segment within a candidate file
@@ -405,7 +405,7 @@ These can be exposed as small draggable controls in the UI (consistent with Soun
 
 ### 5.1 Triggering an Echo Search
 
-**Primary trigger — Context menu on selection:**
+**Primary trigger: Context menu on selection:**
 When a user has an active selection on a waveform, the context menu (right-click) includes:
 
 ```
@@ -420,9 +420,9 @@ When a user has an active selection on a waveform, the context menu (right-click
   └──────────────────────────┘
 ```
 
-**Secondary trigger — Keyboard shortcut:** `Cmd+E` / `Ctrl+E` (E for Echo) while a selection is active.
+**Secondary trigger: Keyboard shortcut:** `Cmd+E` / `Ctrl+E` (E for Echo) while a selection is active.
 
-**Tertiary trigger — Selection toolbar button:** A small `◉` icon added to the existing global selection toolbar (next to Play, Drag, Edit, Clear).
+**Tertiary trigger: Selection toolbar button:** A small `◉` icon added to the existing global selection toolbar (next to Play, Drag, Edit, Clear).
 
 ### 5.2 Results Panel
 
@@ -431,7 +431,7 @@ Results appear in a **dedicated panel** that slides in from the right side of th
 ```
 ┌─ Echo Results ──────────────────────────────────┐
 │                                                  │
-│  Query: "explosion_debris_01.wav" [0.3s–0.8s]   │
+│  Query: "explosion_debris_01.wav" [0.3s-0.8s]   │
 │  ┌─ Similarity Axes ──────────┐                 │
 │  │  Timbre  ████████░░  80%   │  ← Draggable    │
 │  │  Texture ██████████ 100%   │                  │
@@ -472,7 +472,7 @@ Clicking the `[▶]` button on a result plays **only the matched region** of tha
 - Clicking `[▶]` on a result plays the matched segment
 - Keyboard shortcut `Space` toggles between the two most recently played
 
-### 5.5 "Echo Again" — Chained Exploration
+### 5.5 "Echo Again": Chained Exploration
 
 Each result has an "Echo Again" button that uses the *matched region of that result* as a new query. This enables exploratory chains:
 
@@ -480,7 +480,7 @@ Each result has an "Echo Again" button that uses the *matched region of that res
 Original Selection → Echo → Result 3 → Echo Again → Result 7 → Echo Again → ...
 ```
 
-This creates a powerful **serendipitous discovery** workflow that sound designers will love — the ability to "walk" through the library along timbral similarity paths.
+This creates a powerful **serendipitous discovery** workflow that sound designers will love, the ability to "walk" through the library along timbral similarity paths.
 
 ### 5.6 Drag-to-Collection / Drag-to-DAW
 
@@ -488,9 +488,9 @@ Results are directly draggable to collections (existing workflow) and to the DAW
 
 ---
 
-## 6. Implementation Plan — Phased Approach
+## 6. Implementation Plan: Phased Approach
 
-### Phase 1: Foundation — Spectral Feature Engine (Est. 3–5 days)
+### Phase 1: Foundation: Spectral Feature Engine (Est. 3-5 days)
 
 **Goal:** Build and test the DSP pipeline independent of UI.
 
@@ -509,7 +509,7 @@ Results are directly draggable to collections (existing workflow) and to the DAW
 1.2 **Add spectral indexing to SQLite:**
    - New `spectral_index` table
    - Feature matrix stored as compressed (zlib) BLOB
-   - Integrate with existing `startIndexing()` flow — compute spectral features alongside CLAP embeddings
+   - Integrate with existing `startIndexing()` flow, compute spectral features alongside CLAP embeddings
    - Estimated index size: ~20 bytes/window × 40 windows/sec × 5 sec avg × 70k files = ~280 MB on disk (compressed: ~70 MB)
 
 1.3 **Implement `LRUFeatureCache`:**
@@ -517,9 +517,9 @@ Results are directly draggable to collections (existing workflow) and to the DAW
    - Capacity: ~2000 files (~28 MB)
    - Cache misses load from SQLite on demand (~2ms per file)
 
-1.4 **IPC channel:** `echo-extract-features` — takes raw PCM Float32Array, returns feature matrix
+1.4 **IPC channel:** `echo-extract-features`, takes raw PCM Float32Array, returns feature matrix
 
-### Phase 2: Search Pipeline (Est. 3–4 days)
+### Phase 2: Search Pipeline (Est. 3-4 days)
 
 **Goal:** End-to-end search from audio selection to ranked results.
 
@@ -543,11 +543,11 @@ Results are directly draggable to collections (existing workflow) and to the DAW
    - Applied only to top 50 results from Stage 2
    - Final score = weighted combination of CLAP score, spectral score, and envelope score
 
-2.4 **IPC channel:** `echo-search` — takes `{ pcmData, sampleRate, selectionDuration, weights }`, returns ranked results
+2.4 **IPC channel:** `echo-search`, takes `{ pcmData, sampleRate, selectionDuration, weights }`, returns ranked results
 
-2.5 **IPC channel:** `echo-search-progress` — for long searches, provides progress updates
+2.5 **IPC channel:** `echo-search-progress`, for long searches, provides progress updates
 
-### Phase 3: UI Integration (Est. 4–6 days)
+### Phase 3: UI Integration (Est. 4-6 days)
 
 **Goal:** Complete interactive Echo Vault UI.
 
@@ -557,7 +557,7 @@ Results are directly draggable to collections (existing workflow) and to the DAW
 
 3.1 **Echo trigger integration:**
    - Add `◉` button to global selection toolbar
-   - Context menu entry "Echo — Find Similar"
+   - Context menu entry "Echo: Find Similar"
    - Keyboard shortcut binding (`Cmd+E`)
    - Capture current selection's PCM data from `AudioBuffer`
 
@@ -585,7 +585,7 @@ Results are directly draggable to collections (existing workflow) and to the DAW
    - Drag matched segment to DAW (via temp WAV render)
    - Click result name to load in main editor
 
-### Phase 4: Performance Optimization (Est. 2–3 days)
+### Phase 4: Performance Optimization (Est. 2-3 days)
 
 **Goal:** Meet the <350ms latency target for all library sizes.
 
@@ -609,15 +609,15 @@ Results are directly draggable to collections (existing workflow) and to the DAW
    - Changed/new files only
    - Background re-indexing doesn't block search
 
-### Phase 5: Polish & Edge Cases (Est. 2–3 days)
+### Phase 5: Polish & Edge Cases (Est. 2-3 days)
 
 **Tasks:**
 
 5.1 **Handle edge cases:**
-   - Very short selections (<100ms) — pad or warn
-   - Very long selections (>5s) — truncate or subsample
-   - Files with silence — skip segments below noise floor
-   - Missing spectral index — fall back to CLAP-only results
+   - Very short selections (<100ms), pad or warn
+   - Very long selections (>5s), truncate or subsample
+   - Files with silence: skip segments below noise floor
+   - Missing spectral index: fall back to CLAP-only results
 
 5.2 **Empty state UX:**
    - "No similar sounds found" state
@@ -630,7 +630,7 @@ Results are directly draggable to collections (existing workflow) and to the DAW
 
 ---
 
-## 7. Technical Details — DSP Implementation Notes
+## 7. Technical Details: DSP Implementation Notes
 
 ### 7.1 FFT in Pure JavaScript
 
@@ -678,7 +678,7 @@ Store normalization parameters in SQLite metadata table to ensure consistency.
 
 Feature matrices are compressed before SQLite storage using Node.js `zlib.deflateSync()`:
 - Raw: 200 windows × 18 features × 4 bytes = 14,400 bytes
-- Compressed: ~3,000–5,000 bytes (audio features are highly correlated across adjacent windows)
+- Compressed: ~3,000-5,000 bytes (audio features are highly correlated across adjacent windows)
 - Decompression time: ~0.5ms per file
 
 ---
@@ -690,12 +690,12 @@ Feature matrices are compressed before SQLite storage using Node.js `zlib.deflat
 | CLAP embeddings (existing) | 2,048 B | 137 MB RAM | Contiguous Float32Array |
 | Spectral index (SQLite) | ~4,000 B | ~270 MB disk | Compressed BLOBs |
 | Spectral LRU cache | ~14,400 B | 28 MB RAM | 2000 files cached |
-| **Total new RAM** | — | **~28 MB** | Minimal additional footprint |
-| **Total new disk** | — | **~270 MB** | SQLite file |
+| **Total new RAM** |: | **~28 MB** | Minimal additional footprint |
+| **Total new disk** |: | **~270 MB** | SQLite file |
 
 ---
 
-## 9. API Contract — IPC Channels
+## 9. API Contract: IPC Channels
 
 ### New Channels (preload.js additions):
 
@@ -774,7 +774,7 @@ Select multiple files/fragments → compute centroid features → find sounds th
 A 2D t-SNE/UMAP projection of the spectral feature space, rendered as an interactive Canvas map where users can browse the library spatially.
 
 ### 11.5 Live Echo
-As the user drags a selection, continuously update results in real-time. Requires sub-100ms search latency — achievable with pre-warmed caches.
+As the user drags a selection, continuously update results in real-time. Requires sub-100ms search latency: achievable with pre-warmed caches.
 
 ---
 
@@ -782,17 +782,17 @@ As the user drags a selection, continuously update results in real-time. Require
 
 | Term | Definition |
 |---|---|
-| **CLAP** | Contrastive Language-Audio Pretraining — neural model that embeds audio and text into a shared 512-D vector space |
-| **MFCC** | Mel-Frequency Cepstral Coefficients — compact representation of spectral envelope, captures timbre |
-| **DTW** | Dynamic Time Warping — alignment algorithm for time-series comparison (too slow for our use) |
+| **CLAP** | Contrastive Language-Audio Pretraining: neural model that embeds audio and text into a shared 512-D vector space |
+| **MFCC** | Mel-Frequency Cepstral Coefficients: compact representation of spectral envelope, captures timbre |
+| **DTW** | Dynamic Time Warping: alignment algorithm for time-series comparison (too slow for our use) |
 | **Mel Scale** | Perceptual frequency scale that approximates human pitch perception |
 | **Spectral Centroid** | The "center of mass" of the frequency spectrum, correlates with perceived brightness |
-| **Spectral Flatness** | Ratio of geometric to arithmetic mean of spectrum — measures noisiness vs. tonality |
-| **L2 Normalization** | Scaling a vector to unit length — enables dot product to equal cosine similarity |
+| **Spectral Flatness** | Ratio of geometric to arithmetic mean of spectrum, measures noisiness vs. tonality |
+| **L2 Normalization** | Scaling a vector to unit length, enables dot product to equal cosine similarity |
 | **LRU Cache** | Least Recently Used eviction strategy for bounded in-memory caches |
 
 ---
 
-*Document version: 1.0 — March 2026*
+*Document version: 1.0: March 2026*
 *Author: SoundVault Architecture Team*
-*Status: RFC — Ready for Implementation Review*
+*Status: RFC: Ready for Implementation Review*

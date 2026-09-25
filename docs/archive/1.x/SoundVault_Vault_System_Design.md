@@ -1,4 +1,4 @@
-# SoundVault — Vault System Design Document
+# SoundVault: Vault System Design Document
 
 ## Overview
 
@@ -6,7 +6,7 @@ This document defines the complete architecture for SoundVault's Vault system: a
 
 ---
 
-## Phase 1 — Vault Core + Switcher
+## Phase 1: Vault Core + Switcher
 
 ### 1.1 Config Evolution
 
@@ -417,7 +417,7 @@ onVaultSwitched: (cb) => ipcRenderer.on('vault-switched', (_, data) => cb(data))
 
 ---
 
-## Phase 2 — Collection-Scoped Search & Suggestions
+## Phase 2: Collection-Scoped Search & Suggestions
 
 ### 2.1 Scoped Search
 
@@ -492,7 +492,7 @@ ipcMain.handle('semantic-suggest', async (_, filePath) => {
 semanticSuggest: (path) => ipcRenderer.invoke('semantic-suggest', path),
 ```
 
-#### Renderer UI — "Related" button in panel header:
+#### Renderer UI: "Related" button in panel header:
 
 ```javascript
 // In panel-actions area, add:
@@ -516,7 +516,7 @@ function showRelatedDropdown(items) {
 
 ---
 
-## Phase 3 — Incremental Indexing & Performance
+## Phase 3: Incremental Indexing & Performance
 
 ### 3.1 Filesystem Watcher
 
@@ -652,7 +652,7 @@ async function persistCurrentVaultState() {
 
 ---
 
-## Phase 4 (Future) — Cross-Vault Search
+## Phase 4 (Future): Cross-Vault Search
 
 ### Architecture:
 
@@ -660,9 +660,9 @@ async function persistCurrentVaultState() {
 - Main process opens all registered Vault DBs in read-only mode
 - Loads each `_matrix` into a `Map<vaultId, Float32Array>`
 - Executes `_searchFlat` against each matrix in parallel
-- Merges results sorted by score (scores are directly comparable — same CLAP space, L2-normalized)
+- Merges results sorted by score (scores are directly comparable, same CLAP space, L2-normalized)
 - Results include `vaultId` + `vaultColor` for badge rendering in UI
-- Memory: 70k files × 2KB = 140MB per vault — acceptable for 2-3 concurrent vault matrices
+- Memory: 70k files × 2KB = 140MB per vault, acceptable for 2-3 concurrent vault matrices
 
 ### IPC:
 
