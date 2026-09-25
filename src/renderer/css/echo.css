@@ -1,0 +1,69 @@
+/* ═══ Echo, similar sounds drawer ═══════════════════════════════════ */
+.echo {
+  position: fixed; top: var(--titlebar-h); right: 0; bottom: var(--player-h); width: min(440px, 46vw); z-index: 40;
+  display: flex; flex-direction: column; background: var(--bg-2); border-left: 1px solid var(--line-2); box-shadow: -18px 0 40px rgba(0, 0, 0, .35);
+  transform: translateX(104%); transition: transform var(--t-slow) var(--ease); visibility: hidden;
+}
+.echo.open { transform: none; visibility: visible; }
+.echo .ec-head { display: flex; align-items: center; gap: 8px; padding: 12px 10px 8px 16px; }
+.echo .ec-head .ttl { font: 600 var(--fs-lg) var(--font-display); display: flex; align-items: center; gap: 8px; }
+.echo .ec-head .ttl .i { color: var(--accent); }
+.echo .ec-head .stats { margin-left: auto; font-size: var(--fs-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.echo .ec-query { margin: 0 12px 8px; padding: 8px 10px; border-radius: var(--r-md); background: var(--bg-1); border: 1px solid var(--line); display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; }
+.echo .ec-query .qn { font-weight: 600; font-size: var(--fs-sm); min-width: 0; }
+.echo .ec-query .qm { font-size: var(--fs-xs); color: var(--fg-3); }
+.echo .ec-query canvas { grid-column: 1 / -1; width: 100%; height: 30px; display: block; }
+.echo .ec-chain { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 12px 8px; }
+.echo .ec-chain .crumb { font-size: var(--fs-xs); color: var(--fg-3); background: var(--bg-3); border-radius: var(--r-sm); padding: 2px 7px; cursor: pointer; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.echo .ec-chain .crumb:hover { color: var(--fg-1); }
+.echo .ec-chain .crumb.cur { color: var(--accent); background: var(--accent-soft); cursor: default; }
+.echo .ec-axes { padding: 2px 16px 10px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); }
+.echo .ec-axes .ax-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; color: var(--fg-3); font-weight: 600; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 2px; }
+.echo .ec-axes .ax-head .presets { margin-left: auto; display: flex; gap: 4px; }
+.echo .ec-axes .ax-head .presets .chip { cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.echo .ec-axes .ax-head .presets .chip.on { color: var(--accent); background: var(--accent-soft); }
+.echo .ec-axes .slider { width: 100%; }
+.echo .ec-axes .val { width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--fg-3); }
+.echo .ec-axes.collapsed > :not(.ax-head) { display: none; }
+.echo .ec-list { flex: 1; overflow-y: auto; padding: 6px 8px 10px; min-height: 0; outline: none; }
+.echo .er {
+  display: grid; grid-template-columns: 30px 1fr auto; grid-template-rows: auto auto; gap: 2px 8px; align-items: center;
+  padding: 7px 8px; border-radius: var(--r-md); cursor: pointer; position: relative;
+}
+.echo .er:hover { background: rgba(255, 255, 255, .025); }
+.echo .er.cursor { background: rgba(255, 255, 255, .045); box-shadow: inset 2px 0 0 var(--fg-3); }
+.echo .er.playing { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.echo .er .pb { grid-row: 1 / span 2; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line-2); color: var(--fg-2); }
+.echo .er.playing .pb { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.echo .er .pb .i { width: 11px; height: 11px; }
+.echo .er .nm { font-size: var(--fs-sm); font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.echo .er .dir { font-size: 10.5px; color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.echo .er .sim { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.echo .er .sim .bar { width: 44px; height: 4px; border-radius: 2px; background: var(--bg-4); overflow: hidden; }
+.echo .er .sim .bar i { display: block; height: 100%; background: var(--accent); }
+.echo .er .wfc { grid-column: 2 / -1; position: relative; height: 26px; margin-top: 2px; }
+.echo .er .wfc canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.echo .er .wfc .match { position: absolute; top: 0; bottom: 0; background: var(--accent-soft-2); border-left: 1px solid var(--accent-line); border-right: 1px solid var(--accent-line); border-radius: 2px; pointer-events: none; }
+.echo .er .acts { position: absolute; right: 6px; top: 5px; display: none; gap: 1px; background: var(--bg-3); border: 1px solid var(--line-2); border-radius: var(--r); padding: 1px; }
+.echo .er:hover .acts, .echo .er.cursor .acts { display: flex; }
+.echo .er .acts .icon-btn { width: 24px; height: 24px; }
+.echo .er:hover .sim, .echo .er.cursor .sim { visibility: hidden; }
+.echo .ec-empty { padding: 40px 24px; text-align: center; color: var(--fg-3); font-size: var(--fs-sm); line-height: 1.5; }
+.echo .ec-empty h3 { font: 600 var(--fs-md) var(--font-display); color: var(--fg-1); margin-bottom: 6px; }
+.echo .ec-loading { display: grid; gap: 10px; padding: 12px 12px; }
+.echo .ec-loading i { display: block; height: 44px; border-radius: var(--r-md); background: linear-gradient(90deg, var(--bg-3), var(--bg-4), var(--bg-3)); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.echo .ec-foot { border-top: 1px solid var(--line); padding: 8px 12px; display: flex; align-items: center; gap: 8px; font-size: var(--fs-xs); color: var(--fg-3); }
+.echo .ec-foot .grow { flex: 1; }
+.app.echo-open .main { margin-right: min(440px, 46vw); transition: margin-right var(--t-slow) var(--ease); }
+.echo .ec-chain button.crumb { border: 0; font: inherit; font-size: var(--fs-xs); }
+.echo .ec-axes .ax-toggle { display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; padding: 0; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.echo .ec-axes .ax-toggle:hover { color: var(--fg-1); }
+.echo .ec-axes .ax-head .presets button.chip { border: 0; font: inherit; font-size: var(--fs-xs); }
+.echo .ec-note { margin: 0 12px 6px; padding: 6px 10px; border-radius: var(--r-md); background: var(--bg-1); border: 1px solid var(--line); color: var(--fg-2); font-size: var(--fs-xs); line-height: 1.45; }
+.echo .er .nm .copies { margin-left: 6px; font-size: 10px; font-weight: 600; color: var(--fg-3); background: var(--bg-4); border-radius: 8px; padding: 0 5px; vertical-align: 1px; }
+.echo .er .sim.identical { color: var(--accent); font-weight: 600; }
+.echo .er .sim.weak, .echo .er .sim.soft { color: var(--fg-3); }
+.echo .er .sim.weak .bar i, .echo .er .sim.soft .bar i { background: var(--fg-4); }
+.echo .er.weak .nm { color: var(--fg-2); }
+.echo .ec-sep { padding: 12px 8px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--fg-3); }

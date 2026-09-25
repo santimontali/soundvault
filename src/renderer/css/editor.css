@@ -1,0 +1,133 @@
+/* ═══ Audio editor, bottom drawer inside #main ══════════════════════
+   The list stays visible above; the drawer is resizable from its top edge.
+   Stage layers: wave (neutral) + played (accent, clip-path progress) +
+   overlay (crop shade, fades, handles, cursor), no per-frame redraws.   */
+.ed {
+  container-type: inline-size; container-name: ed;
+  --ed-wave: #5b5a64; --ed-rms: #8d8b96; --ed-dim: #26262c; --ed-dim-rms: #34343b;
+  position: relative; flex: 0 0 auto; height: 330px; min-height: 230px;
+  display: flex; flex-direction: column;
+  background: var(--bg-2); border-top: 1px solid var(--line-2);
+  box-shadow: 0 -12px 32px rgba(0, 0, 0, .38);
+  outline: none; z-index: 4;
+  animation: ed-in var(--t) var(--ease);
+}
+.ed:focus-visible { box-shadow: 0 -12px 32px rgba(0, 0, 0, .38), inset 0 1px 0 var(--accent-line); }
+@keyframes ed-in { from { opacity: 0; transform: translateY(14px); } }
+
+/* resize grip (top edge) */
+.ed-resize { position: absolute; left: 0; right: 0; top: -5px; height: 9px; cursor: ns-resize; z-index: 6; }
+.ed-resize::after {
+  content: ""; position: absolute; left: 50%; top: 3px; width: 40px; height: 3px; margin-left: -20px;
+  border-radius: 2px; background: var(--line-3); opacity: 0; transition: opacity var(--t-fast), background var(--t-fast);
+}
+.ed:hover .ed-resize::after { opacity: 1; }
+.ed-resize:hover::after, .ed-resize.dragging::after { opacity: 1; background: var(--accent); }
+
+/* header */
+.ed-head { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--line); flex-shrink: 0; min-width: 0; }
+.ed-head > .i { color: var(--accent); }
+.ed-name { font-weight: 600; font-size: var(--fs-md); color: var(--fg-1); max-width: 28%; }
+.ed-range { color: var(--fg-3); font-size: var(--fs-xs); white-space: nowrap; }
+.ed-fmt { color: var(--fg-2); }
+.ed-detached { color: var(--warn); background: rgba(245, 197, 107, .1); }
+.ed-grow { flex: 1; min-width: 0; }
+.ed-tools { display: flex; align-items: center; gap: 1px; flex-shrink: 0; }
+.ed-tools .btn.sm { height: 24px; color: var(--fg-2); }
+.ed-tools .icon-btn.on { color: var(--accent); background: var(--accent-soft); }
+.ed-sep { width: 1px; height: 16px; background: var(--line-2); margin: 0 5px; }
+
+/* ruler */
+.ed-ruler { position: relative; height: 22px; flex-shrink: 0; background: var(--bg-1); border-bottom: 1px solid var(--line); cursor: text; }
+.ed-ruler canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* stage */
+.ed-stage { position: relative; flex: 1; min-height: 90px; background: var(--bg-0); overflow: hidden; cursor: default; }
+.ed-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ed-played { clip-path: inset(0 100% 0 0); pointer-events: none; }
+.ed-over { pointer-events: none; }
+.ed-wave { pointer-events: none; }
+.ed-ph { position: absolute; top: 0; bottom: 0; left: 0; width: 1.5px; margin-left: -.75px; background: var(--fg-1); opacity: 0; pointer-events: none; will-change: transform; box-shadow: 0 0 6px rgba(255, 255, 255, .25); }
+.ed.playing .ed-ph { opacity: .95; }
+.ed-clip {
+  position: absolute; top: 26px; right: 10px; z-index: 2; pointer-events: none;
+  font: 700 10.5px/1 var(--font); letter-spacing: .5px; padding: 4px 7px; border-radius: var(--r-sm);
+  color: var(--danger); background: rgba(40, 12, 12, .85); border: 1px solid rgba(255, 107, 107, .45);
+}
+.ed-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--fg-3); font-size: var(--fs-sm); background: rgba(14, 14, 17, .55); z-index: 3; }
+.ed.loading .ed-foot, .ed.loading .ed-tools { opacity: .5; pointer-events: none; }
+
+/* overview strip */
+.ed-mini { position: relative; height: 20px; flex-shrink: 0; background: var(--bg-1); border-top: 1px solid var(--line); cursor: pointer; }
+.ed-mini canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* footer: transport, readouts, gain/pitch, export */
+.ed-foot { display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 10px 0 12px; border-top: 1px solid var(--line); flex-shrink: 0; min-width: 0; }
+.ed-play {
+  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+  background: var(--accent); color: var(--accent-ink); transition: transform var(--t-fast) var(--ease), filter var(--t-fast);
+}
+.ed-play:hover { filter: brightness(1.07); }
+.ed-play:active { transform: scale(.94); }
+.ed-play .i { width: 14px; height: 14px; }
+.ed-clock { min-width: 72px; font-size: var(--fs-md); color: var(--fg-1); white-space: nowrap; flex-shrink: 0; }
+.ed-readouts {
+  flex: 1; min-width: 0; display: grid; grid-auto-flow: column; grid-template-rows: 1fr 1fr; grid-auto-columns: max-content;
+  column-gap: 16px; row-gap: 1px; font-size: var(--fs-xs); color: var(--fg-3); overflow: hidden; white-space: nowrap; align-content: center;
+}
+.ed-readouts span { display: flex; gap: 5px; align-items: baseline; }
+.ed-readouts i { font-style: normal; }
+.ed-readouts b { color: var(--fg-1); font-weight: 500; }
+.ed-readouts .fade-kv { align-items: center; cursor: pointer; border-radius: var(--r); padding: 1px 4px; margin: 0 -4px; }
+.ed-readouts .fade-kv:hover { background: var(--bg-3); }
+.ed-readouts .fade-kv:hover .fade-glyph { color: var(--accent); }
+.ed-readouts .fade-kv:focus-visible { outline: 1px solid var(--accent-line); }
+.ed-readouts .dim b { color: var(--fg-3); }
+.ed-readouts .clip, .ed-readouts .clip b { color: var(--danger); font-weight: 600; }
+.ed-ctl { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--fg-3); flex-shrink: 0; }
+.ed-ctl .slider { width: 84px; }
+.ed-num {
+  width: 64px; height: 22px; padding: 0 6px; border-radius: var(--r-sm); background: var(--bg-1);
+  border: 1px solid var(--line-2); color: var(--fg-1); font-size: var(--fs-xs); text-align: right; font-variant-numeric: tabular-nums;
+}
+.ed-num:focus { border-color: var(--accent-line); box-shadow: 0 0 0 2px var(--accent-soft); }
+.ed-num::selection { background: var(--accent-soft-2); }
+.ed-drag { cursor: grab; flex-shrink: 0; min-width: 92px; justify-content: center; }
+.ed-drag:active { cursor: grabbing; }
+.ed-drag.preparing { background: var(--bg-4); border-color: var(--line-3); color: var(--fg-2); cursor: progress; font-weight: 500; }
+.ed-drag.preparing .i { opacity: .4; }
+.ed-drag.manual { background: var(--bg-4); border-color: var(--accent-line); color: var(--fg-1); cursor: pointer; font-weight: 500; }
+.ed-drag.failed { background: var(--danger-soft); border-color: rgba(255, 107, 107, .35); color: var(--danger); cursor: not-allowed; }
+
+/* contextual legend */
+.ed-legend {
+  display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 14px; flex-shrink: 0;
+  font-size: var(--fs-xs); color: var(--fg-3); border-top: 1px solid var(--line); background: var(--bg-1);
+  white-space: nowrap; overflow: hidden;
+}
+.ed-legend b { color: var(--accent); font-weight: 600; }
+.ed-legend .kbd { height: 16px; font-size: 10px; margin-left: 8px; }
+
+/* help sheet */
+.ed-help {
+  position: absolute; right: 12px; top: 44px; bottom: 76px; z-index: 8; width: min(560px, calc(100% - 24px));
+  display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; overflow: auto;
+  background: var(--bg-3); border: 1px solid var(--line-2); border-radius: var(--r-md); box-shadow: var(--shadow-3);
+  animation: pop-in var(--t) var(--ease-spring);
+}
+.ed-help-head { display: flex; align-items: center; }
+.ed-help-head h4 { flex: 1; font: 600 var(--fs-md) var(--font-display); color: var(--fg-1); }
+.ed-help .kbd-grid { grid-template-columns: minmax(96px, auto) 1fr; font-size: var(--fs-xs); color: var(--fg-2); }
+.ed-help .kbd-grid b { color: var(--fg-1); font-weight: 600; white-space: nowrap; }
+.ed-help p { font-size: var(--fs-xs); }
+
+/* narrow windows: keep every control, drop the least useful labels */
+@container ed (max-width: 900px) {
+  .ed-save-t, .ed-tools .btn.sm span { display: none; }
+  .ed-ctl .slider { width: 60px; }
+  .ed-range { display: none; }
+}
+@container ed (max-width: 720px) {
+  .ed-ctl > span { display: none; }
+  .ed-fmt { display: none; }
+}

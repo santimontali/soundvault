@@ -1,0 +1,171 @@
+/* ═══ SoundVault design tokens ═══════════════════════════════════════
+   Dark, compact, waveform-first. One accent (user-selectable, per-vault in
+   Vault mode) on a near-black neutral ramp. 4 px spacing grid.          */
+:root {
+  /* neutrals, deepest (chrome) to raised (hover/pressed) */
+  --bg-0: #0e0e11;
+  --bg-1: #141417;
+  --bg-2: #19191d;
+  --bg-3: #212126;
+  --bg-4: #2a2a31;
+  --bg-5: #34343c;
+  --line: #25252b;
+  --line-2: #303038;
+  --line-3: #4d4d58;
+  --fg-1: #ecebe6;
+  --fg-2: #a4a2ab;
+  --fg-3: #8a8893;   /* ≥4.5:1 on every surface (AA) */
+  --fg-4: #5c5b64;
+
+  /* accent: the user's app accent (interactive states). --mode-color: identity
+     color of the current mode (vault color in Vault mode, accent in Sound mode). */
+  --mode-color: #c8f76d;
+  --accent: #c8f76d;
+  --accent-rgb: 200, 247, 109;
+  --accent-ink: #11140b;
+  --accent-soft: rgba(var(--accent-rgb), .12);
+  --accent-soft-2: rgba(var(--accent-rgb), .2);
+  --accent-line: rgba(var(--accent-rgb), .42);
+
+  --danger: #ff6b6b;
+  --danger-soft: rgba(255, 107, 107, .12);
+  --warn: #f5c56b;
+  --ok: #7ee0a1;
+
+  /* waveform */
+  --wave: #55545e;
+  --wave-rms: #7a7984;
+  --wave-dim: #34333a;
+
+  /* type */
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+  --fs-xl: 20px;
+
+  /* space / radius / elevation / motion */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px;
+  --r-xs: 3px; --r-sm: 4px; --r: 6px; --r-md: 8px; --r-lg: 12px; --r-full: 999px;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, .45), 0 1px 0 rgba(255, 255, 255, .03) inset;
+  --shadow-3: 0 18px 48px rgba(0, 0, 0, .55), 0 1px 0 rgba(255, 255, 255, .04) inset;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+  --t-fast: .12s;
+  --t: .2s;
+  --t-slow: .35s;
+
+  /* layout */
+  --titlebar-h: 44px;
+  --player-h: 64px;
+  --sidebar-w: 248px;
+  --row-h: 56px;
+  /* width of the native caption buttons (Window Controls Overlay) */
+  --wco-w: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 138px)));
+
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font: var(--fs-md)/1.35 var(--font);
+  color: var(--fg-1);
+  background: var(--bg-1);
+  overflow: hidden;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum" 0;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; cursor: pointer; }
+button:disabled { cursor: default; opacity: .45; }
+input, textarea { user-select: text; }
+a { color: var(--accent); text-decoration: none; }
+
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 1px; border-radius: var(--r-sm); }
+
+.i { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.i.sm { width: 13px; height: 13px; }
+.i.xs { width: 11px; height: 11px; }
+.i.lg { width: 18px; height: 18px; }
+/* Resonance mark: the tuning fork's vibration bars appear and drift out while it listens */
+.rz-ring { animation: var(--rz-ring, none); transform-box: view-box; transform-origin: 8px 3.6px; }
+.rz-ring-2 { animation: var(--rz-ring-2, none); }
+.i.listening { --rz-ring: rz-ring 1.8s var(--ease) infinite; --rz-ring-2: rz-ring 1.8s var(--ease) .28s infinite; }
+@keyframes rz-ring { 0% { opacity: 0; transform: scaleX(.9); } 18% { opacity: .95; } 70%, 100% { opacity: 0; transform: scaleX(1.1); } }
+h4 .i.h4i { width: 14px; height: 14px; margin-right: 7px; vertical-align: -2px; color: var(--accent); }
+
+.tnum { font-variant-numeric: tabular-nums; }
+.muted { color: var(--fg-3); }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.hidden { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* scrollbars: quiet by default, visible on hover */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 8px; border: 3px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--bg-5); background-clip: padding-box; border: 3px solid transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* ── primitives ─────────────────────────────────────────────────────── */
+.btn {
+  height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px;
+  border-radius: var(--r); border: 1px solid var(--line-2); color: var(--fg-2);
+  font-size: var(--fs-sm); white-space: nowrap;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.btn:hover:not(:disabled) { background: var(--bg-3); color: var(--fg-1); border-color: var(--line-3); }
+.btn:active:not(:disabled) { background: var(--bg-4); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.06); background: var(--accent); color: var(--accent-ink); }
+.btn.danger { color: var(--danger); border-color: rgba(255, 107, 107, .35); }
+.btn.danger:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }
+.btn.ghost { border-color: transparent; }
+.btn.sm { height: 24px; padding: 0 8px; font-size: var(--fs-xs); }
+
+.icon-btn {
+  width: 30px; height: 30px; display: inline-grid; place-items: center; border-radius: var(--r);
+  color: var(--fg-2); transition: background var(--t-fast), color var(--t-fast);
+}
+.icon-btn:hover:not(:disabled) { background: var(--bg-3); color: var(--fg-1); }
+.icon-btn:active:not(:disabled) { background: var(--bg-4); }
+.icon-btn.on { color: var(--accent); }
+.icon-btn.sm { width: 24px; height: 24px; }
+
+.input {
+  height: 30px; width: 100%; padding: 0 10px; border-radius: var(--r);
+  background: var(--bg-1); border: 1px solid var(--line-3); color: var(--fg-1);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.input:focus { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+textarea.input { height: auto; min-height: 64px; padding: 8px 10px; resize: vertical; line-height: 1.4; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px;
+  border-radius: var(--r-sm); background: var(--bg-3); color: var(--fg-2); font-size: var(--fs-xs); white-space: nowrap;
+}
+.kbd {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border-radius: 4px;
+  border: 1px solid var(--line-2); border-bottom-width: 2px; color: var(--fg-3); font: 600 10.5px var(--font); letter-spacing: .2px;
+}
+.dot { width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0; }
+.badge { font-size: 10.5px; font-weight: 600; letter-spacing: .3px; padding: 1px 6px; border-radius: var(--r-full); background: var(--accent-soft); color: var(--accent); }
+
+.slider { -webkit-appearance: none; appearance: none; height: 18px; background: transparent; cursor: pointer; }
+.slider::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--fg-2) var(--pct, 50%), var(--bg-4) var(--pct, 50%)); }
+.slider::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4px; border-radius: 50%; background: var(--fg-1); box-shadow: 0 0 0 3px var(--bg-0); transition: transform var(--t-fast); }
+.slider:hover::-webkit-slider-thumb { transform: scale(1.15); }
+.slider.accent::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--accent) var(--pct, 50%), var(--bg-4) var(--pct, 50%)); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* one iteration: looping animations (LEDs, listening marks) stop instead of flickering */
+  *, *::before, *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .001s !important; }
+  .i.listening { --rz-ring: none; --rz-ring-2: none; }
+}
