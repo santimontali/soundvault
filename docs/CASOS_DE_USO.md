@@ -6,9 +6,10 @@ Qué hace la app en cada situación de uso tradicional y cómo quedó verificado
 **Datos reales:** las mediciones "sobre la librería real" se hicieron en solo lectura sobre `D:\Librerias Sonido` (70.331 WAV) y sobre **copias** de la base de datos. La carpeta `%APPDATA%\soundvault` nunca se tocó.
 
 Referencias a tests:
-- `npm test`: 88 tests unitarios.
-- `npm run test:engine`: motor completo en Electron (29 verificaciones) y espectrograma CLAP.
-- `npm run test:e2e`: app completa con carpeta de usuario aislada, pruebas smoke y engine (14 verificaciones) más 7 pruebas del editor (134 verificaciones).
+- `npm test`: 92 tests unitarios.
+- `npm run test:engine`: motor completo en Electron (33 verificaciones) y espectrograma CLAP.
+- `npm run test:e2e`: app completa con carpeta de usuario aislada, pruebas smoke y engine (14 verificaciones), el Brief (38 verificaciones) y 7 pruebas del editor (134 verificaciones).
+- `node tests/e2e/packaged-smoke.js`: la app ya compilada (8 verificaciones, incluidos el Brief y el modelo de imágenes).
 
 ---
 
