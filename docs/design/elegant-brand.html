@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marca elegante</title>
+<style>
+/* ── app tokens (src/renderer/css/tokens.css) ─────────────────────────── */
+:root {
+  --bg-0: #0e0e11; --bg-1: #141417; --bg-2: #19191d; --bg-3: #212126; --bg-4: #2a2a31; --bg-5: #34343c;
+  --line: #25252b; --line-2: #303038; --line-3: #4d4d58;
+  --fg-1: #ecebe6; --fg-2: #a4a2ab; --fg-3: #8a8893; --fg-4: #5c5b64;
+  --mode-color: #c8f76d; --accent: #c8f76d; --accent-rgb: 200, 247, 109; --accent-ink: #11140b;
+  --accent-soft: rgba(200, 247, 109, .12); --accent-soft-2: rgba(200, 247, 109, .2); --accent-line: rgba(200, 247, 109, .42);
+  --ok: #7ee0a1; --wave: #55545e; --wave-rms: #7a7984;
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px;
+  --ease: cubic-bezier(.2, .8, .2, 1); --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+  /* page */
+  --page: #0f0f12; --panel: #151519; --panel-2: #1a1a1f; --rule: #25252b; --rule-soft: #1d1d22;
+  --text: #e9e7e1; --dim: #9a988f; --faint: #6a6861;
+  --wall: repeating-linear-gradient(115deg, rgba(255,255,255,.16) 0 2px, transparent 2px 22px),
+    radial-gradient(40% 70% at 14% 30%, rgba(250,250,245,.55), transparent 70%),
+    radial-gradient(35% 60% at 56% 72%, rgba(20,24,40,.7), transparent 70%),
+    radial-gradient(30% 60% at 82% 18%, rgba(255,214,120,.62), transparent 70%),
+    radial-gradient(28% 50% at 36% 88%, rgba(120,200,160,.55), transparent 70%),
+    linear-gradient(135deg, #1d3b6e, #3f7fb8 35%, #e9a36b 62%, #2c5a3c);
+  color-scheme: dark;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--page); color: var(--text); font: 14.5px/1.65 var(--font); -webkit-font-smoothing: antialiased; }
+.page { max-width: 1080px; margin: 0 auto; padding: 72px 24px 112px; }
+code, .mono { font-family: var(--font-mono); font-size: 12px; }
+p code, li code, dd code { color: #d6d4cc; background: rgba(255,255,255,.04); border-radius: 4px; padding: 1px 5px; white-space: nowrap; }
+canvas.px, img.px { display: block; image-rendering: pixelated; }
+
+/* ── header ── */
+.over { font: 500 11px/1 var(--font-mono); letter-spacing: .24em; text-transform: uppercase; color: var(--faint); }
+h1 { font: 600 clamp(36px, 5.2vw, 56px)/1.02 var(--font-display); letter-spacing: -.028em; margin-top: 22px; }
+h1 em { font-style: normal; color: var(--accent); }
+.lead { color: #bdbbb3; max-width: 64ch; margin-top: 22px; font-size: 16px; line-height: 1.62; }
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 40px; border-top: 1px solid var(--rule); }
+.facts > div { padding: 16px 20px 0 0; }
+.facts > div + div { padding-left: 20px; border-left: 1px solid var(--rule-soft); }
+.facts dt { font: 500 10.5px/1.4 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.facts dd { margin-top: 8px; font: 500 19px/1.2 var(--font-display); color: var(--dim); font-variant-numeric: tabular-nums; }
+.facts dd b { color: var(--text); font-weight: 600; }
+
+/* ── sections ── */
+.sec { margin-top: 112px; }
+.sec-head { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 0 8px; align-items: baseline; }
+.num { font: 500 12px/1 var(--font-mono); color: var(--faint); letter-spacing: .1em; }
+h2 { font: 600 28px/1.15 var(--font-display); letter-spacing: -.015em; }
+.sec-head p { grid-column: 2; color: var(--dim); max-width: 70ch; margin-top: 12px; }
+h3 { font: 600 16px/1.3 var(--font-display); letter-spacing: -.005em; }
+.sub { margin: 56px 0 0 64px; }
+.sub > p { color: var(--dim); max-width: 72ch; margin-top: 6px; font-size: 13.5px; }
+.block { margin-top: 20px; }
+
+/* segmented control */
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 9px; background: var(--panel); border: 1px solid var(--rule); }
+.seg button { font: 500 12px/1 var(--font); color: var(--dim); background: transparent; border: 0; border-radius: 6px; padding: 7px 12px; cursor: pointer; transition: background .15s, color .15s; }
+.seg button:hover { color: var(--text); }
+.seg button.on { background: var(--panel-2); color: var(--text); box-shadow: 0 0 0 1px #34343c inset; }
+.bar-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.hint { font-size: 12.5px; color: var(--faint); }
+
+/* stage backgrounds */
+[data-bg="neutral"] { background: radial-gradient(120% 90% at 50% 30%, #1e1e24, #16161a); }
+[data-bg="dark"] { background: #202020; }
+[data-bg="light"] { background: #f3f3f3; }
+[data-bg="wall"] { background: var(--wall); }
+
+/* ── 01 hero ── */
+.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 40px 0 0 64px; }
+.hero-card { border-radius: 14px; overflow: hidden; border: 1px solid var(--rule); background: var(--panel); }
+.hero-card.now { border-color: rgba(200, 247, 109, .38); }
+.hero-stage { display: grid; place-items: center; padding: 40px 24px; transition: background .25s; }
+.i256 { position: relative; width: 256px; height: 256px; }
+.i256 img { display: block; width: 256px; height: 256px; }
+.measure { position: absolute; left: var(--x); top: 120px; width: var(--w); height: 9px; border-left: 1px solid #111114; border-right: 1px solid #111114; }
+.measure::before { content: ""; position: absolute; left: 0; right: 0; top: 4px; height: 1px; background: #111114; }
+.measure b { position: absolute; left: calc(100% + 10px); top: -4px; font: 600 11px/1 var(--font-mono); color: var(--accent); white-space: nowrap; background: rgba(14,14,17,.72); padding: 3px 5px; border-radius: 3px; }
+.hero-card figcaption { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 18px; border-top: 1px solid var(--rule-soft); }
+.hero-card figcaption b { font: 600 14px var(--font-display); }
+.hero-card figcaption span { font: 12px/1.5 var(--font-mono); color: var(--dim); }
+.hero-bar { margin: 14px 0 0 64px; }
+
+/* context table */
+.ctx { margin: 20px 0 0 64px; border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; background: var(--panel); }
+.ctx-head, .crow { display: grid; grid-template-columns: 150px repeat(3, minmax(0, 1fr)); }
+.ctx-head > div { padding: 12px 14px; font: 500 10.5px/1.3 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--rule-soft); }
+.crow + .crow { border-top: 1px solid var(--rule-soft); }
+.clabel { padding: 14px 14px; align-self: center; }
+.clabel b { font: 600 22px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.clabel span { font: 11px var(--font-mono); color: var(--faint); margin-left: 3px; }
+.clabel em { display: block; font-style: normal; color: var(--dim); font-size: 12px; line-height: 1.35; margin-top: 5px; }
+.strip { display: flex; align-items: flex-start; justify-content: center; gap: 14px; padding: 16px 10px 10px; }
+.slot { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 22px; }
+.slot .run { display: block; width: 6px; height: 3px; border-radius: 2px; background: #8a8a8a; }
+.slot .cap { font: 10px/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: #a9a7a0; }
+.strip[data-bg="light"] .cap { color: #5c5c5c; }
+.strip[data-bg="wall"] .cap { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
+.strip[data-bg="wall"] .run { background: #fff; }
+.big-row { border-top: 1px solid var(--rule-soft); }
+.big-row .bar-row { padding: 14px; }
+.big-strip { display: flex; align-items: flex-start; justify-content: center; gap: 28px; padding: 24px 16px 18px; transition: background .25s; flex-wrap: wrap; }
+
+/* frames */
+.frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); gap: 14px; margin: 20px 0 0 64px; }
+.frame { border: 1px solid var(--rule); border-radius: 12px; background: var(--panel); overflow: hidden; display: flex; flex-direction: column; }
+.frame .fz { display: grid; place-items: center; height: 272px; padding: 8px; transition: background .25s; }
+.frame.wide { grid-column: span 2; }
+.frame.wide .fz { height: 272px; display: flex; gap: 40px; justify-content: center; align-items: center; flex-wrap: wrap; }
+.frame figcaption { padding: 12px 14px 14px; border-top: 1px solid var(--rule-soft); display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; }
+.frame figcaption b { font: 600 15px var(--font-display); }
+.frame figcaption b small { font: 500 11px var(--font-mono); color: var(--accent); margin-left: 8px; letter-spacing: .02em; }
+.frame figcaption p { grid-column: 1 / -1; color: var(--dim); font-size: 12.5px; line-height: 1.5; }
+.f11 { display: grid; place-items: center; min-width: 64px; min-height: 64px; border-radius: 6px; padding: 4px; transition: background .25s; }
+
+/* ── 02 directions ── */
+.dirs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 40px 0 0 64px; }
+.dir { border: 1px solid var(--rule); border-radius: 14px; background: var(--panel); overflow: hidden; display: flex; flex-direction: column; }
+.dir .hero-stage { padding: 28px 12px; }
+.dir .i256, .dir .i256 img { width: 232px; height: 232px; }
+.dir-body { padding: 16px 18px 18px; border-top: 1px solid var(--rule-soft); display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.dir-body .kicker { font: 500 10.5px/1 var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+.dir-body h3 { font-size: 19px; }
+.dir-body .one { color: var(--text); font-size: 13.5px; }
+.dir-body p { color: var(--dim); font-size: 13px; line-height: 1.55; }
+.dir-body .pair { margin-top: auto; padding-top: 10px; font-size: 12px; color: var(--dim); display: flex; gap: 6px; align-items: baseline; }
+.dir-body .pair b { color: var(--text); font-weight: 600; }
+.risk { color: #cfc6a6 !important; }
+.matrix { margin: 20px 0 0 64px; border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; background: var(--panel); }
+.mrow { display: grid; grid-template-columns: 150px repeat(3, minmax(0, 1fr)); }
+.mrow + .mrow { border-top: 1px solid var(--rule-soft); }
+.mhead > div { padding: 12px 14px; font: 500 10.5px/1.3 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.mname { padding: 14px; align-self: center; }
+.mname b { font: 600 14px var(--font-display); display: block; }
+.mname span { font-size: 11.5px; color: var(--faint); }
+.mcell { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px 10px; }
+
+/* ── 03 splash stage ── */
+.rules { margin: 28px 0 0 64px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--rule); }
+.rules > div { padding: 14px 20px 0 0; font-size: 13px; color: var(--dim); }
+.rules > div + div { padding-left: 20px; border-left: 1px solid var(--rule-soft); }
+.rules b { display: block; color: var(--text); font: 600 13.5px var(--font-display); margin-bottom: 4px; }
+.props { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 12px; margin: 40px 0 0 64px; }
+.prop { text-align: left; font: inherit; color: inherit; cursor: pointer; border: 1px solid var(--rule); background: var(--panel); border-radius: 12px; padding: 14px 16px; display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; align-items: baseline; transition: border-color .15s, background .15s; }
+.prop:hover { border-color: #3a3a42; }
+.prop.on { border-color: #4a4a54; background: var(--panel-2); }
+.prop.rec.on { border-color: rgba(200, 247, 109, .5); }
+.prop .pn { font: 500 12px var(--font-mono); color: var(--faint); grid-row: span 2; }
+.prop b { font: 600 15px var(--font-display); display: flex; align-items: center; gap: 8px; }
+.prop em { font-style: normal; font-size: 12px; color: var(--dim); }
+.tag { font: 600 9.5px/1 var(--font-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); border: 1px solid rgba(200, 247, 109, .45); border-radius: 999px; padding: 4px 7px; }
+.prop.ghost { grid-template-columns: 1fr; padding: 14px 18px; }
+.stage { margin: 16px 0 0 64px; }
+.win-wrap { position: relative; width: 100%; max-width: 900px; height: calc(560px * var(--k, 1)); }
+.controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 14px; max-width: 900px; }
+.check { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--dim); cursor: pointer; }
+.check input { accent-color: var(--accent); }
+.btn { font: 500 12px/1 var(--font); color: var(--text); background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 9px 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.btn:hover { border-color: #3a3a42; }
+.btn svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.clock { margin-left: auto; font: 12px/1.3 var(--font-mono); color: var(--faint); text-align: right; font-variant-numeric: tabular-nums; }
+.clock b { color: var(--text); font-weight: 500; }
+.tl { position: relative; height: 3px; border-radius: 2px; background: var(--rule-soft); margin-top: 30px; max-width: 900px; }
+.tl .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 2px; background: #4a4a53; }
+.tl .mk { position: absolute; top: -4px; width: 1px; height: 11px; background: var(--accent); opacity: 0; }
+.tl .mk::after { content: attr(data-l); position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font: 10.5px var(--font-mono); color: var(--dim); white-space: nowrap; }
+.tl .mk.done { background: var(--text); }
+.tl .mk.ready::after { top: auto; bottom: 15px; }
+.tl-scale { display: flex; justify-content: space-between; max-width: 900px; margin-top: 26px; font: 10.5px var(--font-mono); color: #4d4c47; }
+.detail { margin: 28px 0 0 64px; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 32px; max-width: 900px; }
+.detail p { color: var(--dim); font-size: 13.5px; }
+.detail p + p { margin-top: 10px; }
+.detail dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 16px; font-size: 12.5px; align-content: start; }
+.detail dt { color: var(--faint); font: 500 10.5px/1.7 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; }
+.detail dd { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* ── 04 implementation ── */
+.impl { margin: 36px 0 0 64px; display: grid; gap: 28px; }
+.file { border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; background: #111114; }
+.file-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--rule-soft); background: var(--panel); flex-wrap: wrap; }
+.file-head b { font: 600 13px var(--font-mono); }
+.file-head span { font-size: 12px; color: var(--dim); }
+.file pre { margin: 0; padding: 16px 18px; overflow-x: auto; font: 12px/1.6 var(--font-mono); color: #cfcdc5; tab-size: 4; }
+.file pre .c { color: #6f6d66; }
+.file.nochange pre { color: var(--dim); }
+.notes { list-style: none; display: grid; gap: 8px; max-width: 80ch; }
+.notes li { position: relative; padding-left: 18px; color: var(--dim); font-size: 13.5px; }
+.notes li::before { content: ""; position: absolute; left: 2px; top: .7em; width: 7px; height: 1px; background: var(--accent); }
+.page > footer { margin-top: 96px; padding-top: 18px; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; color: var(--faint); font-size: 12px; }
+
+@media (max-width: 960px) {
+  .hero, .dirs { grid-template-columns: 1fr; }
+  .facts, .rules { grid-template-columns: 1fr 1fr; }
+  .props { grid-template-columns: 1fr 1fr; }
+  .detail { grid-template-columns: 1fr; }
+  .ctx-head, .crow, .mrow { grid-template-columns: 110px repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .sub, .hero, .hero-bar, .ctx, .frames, .dirs, .matrix, .rules, .props, .stage, .detail, .impl { margin-left: 0; }
+  .sec-head { grid-template-columns: 1fr; } .sec-head p { grid-column: 1; }
+  .frame.wide { grid-column: 1 / -1; } .frame.wide .fz { height: auto; }
+  .ctx, .matrix { overflow-x: auto; }
+  .ctx-head, .crow, .mrow { min-width: 760px; }
+}
+
+/* ── mock of the app window (layout.css / list.css, trimmed) ────────── */
+.win { position: absolute; left: 0; top: 0; width: 900px; height: 560px; transform-origin: 0 0; transform: scale(var(--k, 1)); overflow: hidden; border-radius: 8px; background: var(--bg-0); box-shadow: 0 0 0 1px #2a2a31, 0 40px 80px -40px rgba(0,0,0,.9); color: var(--fg-1); font: var(--fs-md)/1.35 var(--font); user-select: none; cursor: default; }
+.win .i { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.win .i.xs { width: 11px; height: 11px; } .win .i.sm { width: 13px; height: 13px; }
+.win .app { position: absolute; inset: 0; display: grid; grid-template-rows: 44px minmax(0, 1fr) 64px; }
+.win .app[aria-hidden="true"] { visibility: hidden; }
+.win .titlebar { display: flex; align-items: center; gap: 12px; padding-left: 12px; background: var(--bg-0); border-bottom: 1px solid var(--line); position: relative; z-index: 2; }
+.win .brand { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 8px 0 6px; width: 230px; flex-shrink: 0; }
+.win .brand .mark { flex-shrink: 0; overflow: visible; }
+.win .brand .word-wrap { display: flex; flex-direction: column; gap: 3px; height: 20px; justify-content: center; }
+.win .brand .word { font: 700 12.5px/15px var(--font); letter-spacing: 3px; color: var(--mode-color); text-transform: uppercase; }
+.win .brand .underline { height: 2px; border-radius: 1px; background: var(--mode-color); opacity: .85; }
+.win .search { flex: 0 1 330px; min-width: 200px; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 4px 0 10px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line-2); color: var(--fg-3); }
+.win .search .q { flex: 1; }
+.win .chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 4px; background: var(--bg-3); color: var(--fg-2); font-size: var(--fs-xs); white-space: nowrap; }
+.win .tb-right { margin-left: auto; display: flex; align-items: center; gap: 8px; padding-right: 146px; }
+.win .status-pill { display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--bg-2); border: 1px solid var(--line); color: var(--fg-2); font-size: var(--fs-xs); white-space: nowrap; }
+.win .status-pill .led { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(126, 224, 161, .14); }
+.win .icon-btn { width: 30px; height: 30px; display: inline-grid; place-items: center; border-radius: 6px; color: var(--fg-2); }
+.win .wco { position: absolute; right: 0; top: 0; height: 44px; display: flex; z-index: 3; color: #a4a2ab; }
+.win .wco span { width: 46px; height: 44px; display: grid; place-items: center; }
+.win .wco svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; }
+.win .app-body { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 0; }
+.win .sidebar { display: flex; flex-direction: column; min-height: 0; background: var(--bg-2); border-right: 1px solid var(--line); overflow: hidden; }
+.win .vault-switch { display: flex; align-items: center; gap: 8px; margin: 8px 8px 4px; padding: 8px 10px; border-radius: 8px; background: var(--bg-1); border: 1px solid var(--line); }
+.win .vault-switch .dot { width: 10px; height: 10px; border-radius: 4px; background: var(--accent); }
+.win .vs-name { font-weight: 600; flex: 1; } .win .vs-sub { font-size: var(--fs-xs); color: var(--fg-3); }
+.win .sb-head { display: flex; align-items: center; padding: 12px 10px 6px 14px; min-height: 40px; }
+.win .sb-title { font-size: var(--fs-xs); font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--fg-3); }
+.win .sb-scroll { flex: 1; padding: 2px 6px 10px; overflow: hidden; }
+.win .node { display: flex; align-items: center; gap: 6px; height: 28px; padding-right: 8px; border-radius: 6px; color: var(--fg-2); white-space: nowrap; }
+.win .node.active { background: var(--accent-soft); color: var(--fg-1); }
+.win .node.active .ico { color: var(--accent); }
+.win .node .tw { width: 16px; height: 16px; display: grid; place-items: center; color: var(--fg-3); }
+.win .node .tw.leaf { visibility: hidden; }
+.win .node .ico { color: var(--fg-3); }
+.win .node .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.win .node .cnt { font-size: var(--fs-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.win .sb-foot { border-top: 1px solid var(--line); padding: 8px 8px 8px 12px; display: flex; align-items: center; gap: 6px; color: var(--fg-3); font-size: var(--fs-xs); min-height: 44px; }
+.win .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--bg-1); }
+.win .panel-head { display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 16px 0 20px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.win .crumbs { display: flex; align-items: baseline; gap: 6px; flex: 1; min-width: 0; }
+.win .crumbs .crumb { color: var(--fg-3); } .win .crumbs .sep { color: var(--fg-4); }
+.win .crumbs h1 { font: 600 var(--fs-lg)/1.2 var(--font-display); color: var(--fg-1); letter-spacing: 0; margin: 0; }
+.win .crumbs .count { color: var(--fg-3); font-size: var(--fs-sm); margin-left: 4px; }
+.win .list { flex: 1; overflow: hidden; }
+.win .row { height: 56px; display: grid; grid-template-columns: 44px minmax(170px, 34%) minmax(80px, 1fr) 76px 30px; align-items: center; padding: 0 6px 0 12px; border-bottom: 1px solid var(--line); }
+.win .row.cursor { background: rgba(255, 255, 255, .035); box-shadow: inset 2px 0 0 var(--fg-3); }
+.win .pbtn { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line-2); color: var(--fg-2); }
+.win .pbtn .i { width: 12px; height: 12px; }
+.win .meta { min-width: 0; padding-right: 12px; }
+.win .nm { font-size: var(--fs-md); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.win .rsub { font-size: var(--fs-xs); color: var(--fg-3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.win .wf { height: 40px; } .win .wf svg { width: 100%; height: 100%; display: block; }
+.win .dur { text-align: right; padding-right: 8px; color: var(--fg-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.win .grip { color: var(--fg-4); display: grid; place-items: center; }
+.win .player { display: grid; grid-template-columns: auto minmax(140px, 210px) minmax(0, 1fr) auto; align-items: center; gap: 16px; padding: 0 16px; background: var(--bg-0); border-top: 1px solid var(--line); }
+.win .transport { display: flex; align-items: center; gap: 2px; color: var(--fg-2); }
+.win .big-play { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); margin: 0 4px; }
+.win .now .t { font-weight: 600; font-size: 12.5px; } .win .now .p { font-size: var(--fs-xs); color: var(--fg-3); margin-top: 1px; }
+.win .scrub { display: grid; grid-template-columns: 40px minmax(0, 1fr) 40px; align-items: center; gap: 10px; font-size: var(--fs-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+.win .scrub .t0 { text-align: right; }
+.win .scrub .track { height: 34px; } .win .scrub svg { width: 100%; height: 100%; display: block; }
+
+/* logo mark (layout.css) */
+.mark .shell { fill: none; stroke: var(--fg-1); stroke-width: 2.3; stroke-linejoin: round; transform-box: view-box; transform-origin: 16px 16px; transition: opacity .28s var(--ease), transform .42s var(--ease); }
+.mark .bar { fill: var(--fg-1); transition: x .46s var(--ease-spring), y .46s var(--ease-spring), width .46s var(--ease-spring), height .46s var(--ease-spring), rx .46s var(--ease-spring), fill .35s; }
+.mark .bar.b2 { transition-delay: .03s; } .mark .bar.b3 { transition-delay: .06s; } .mark .bar.b4 { transition-delay: .02s; } .mark .bar.b5 { transition-delay: .05s; }
+.mark .lock { transform-box: view-box; transform-origin: 16px 19.8px; transition: opacity .2s, transform .3s var(--ease); }
+.mark .lock rect.plate { fill: var(--mode-color); stroke: var(--bg-0); stroke-width: 1.6; paint-order: stroke; transition: fill .35s; }
+.mark .lock .hole { fill: var(--bg-0); }
+.mark.sound .shell { opacity: 0; transform: scale(1.22); }
+.mark.sound .lock { opacity: 0; transform: scale(.4); }
+.mark.sound .bar.b3 { fill: var(--mode-color); }
+
+/* ── splash "Hoy" (the current src/renderer/css/splash.css, scoped) ── */
+.win .splash.hoy { position: absolute; inset: 0; z-index: 1000; display: grid; place-content: center; justify-items: center; gap: 22px; background: radial-gradient(900px 600px at 50% 42%, #1b1b21 0%, var(--bg-1) 55%, var(--bg-0) 100%); transition: opacity .5s var(--ease), visibility .5s; }
+.win .splash.hoy.gone { opacity: 0; visibility: hidden; }
+.win .splash.hoy .mark { width: 96px; height: 96px; overflow: visible; filter: drop-shadow(0 10px 30px rgba(0, 0, 0, .5)); }
+.win .splash.hoy .mark .shell { stroke-width: 2; }
+.win .splash.hoy .mark.thump { animation: hoy-thump 3.2s cubic-bezier(.45, 0, .55, 1) infinite; transform-origin: 50% 100%; }
+@keyframes hoy-thump { 0%, 3% { transform: scaleY(1); } 3.5% { transform: scaleY(.982); } 6.5% { transform: scaleY(1.022); } 10% { transform: scaleY(.993); } 14% { transform: scaleY(1.006); } 18% { transform: scaleY(.998); } 22%, 100% { transform: scaleY(1); } }
+.win .splash.hoy .mark.thump .bar { animation: hoy-knock 3.2s cubic-bezier(.45, 0, .55, 1) infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+.win .splash.hoy .mark.thump .bar.b3 { animation-delay: .04s; }
+@keyframes hoy-knock { 0%, 3% { transform: scaleY(1); } 6.5% { transform: scaleY(1.35); } 12% { transform: scaleY(.88); } 18% { transform: scaleY(1.04); } 24%, 100% { transform: scaleY(1); } }
+.win .splash.hoy .name { font: 700 15px var(--font); letter-spacing: 8px; text-indent: 8px; color: var(--fg-1); }
+.win .splash.hoy .status { font-size: var(--fs-xs); letter-spacing: 2.5px; text-transform: uppercase; color: var(--fg-3); min-height: 14px; }
+
+/* ── splash 2 "Trazo" (page only) ── */
+.win .splash.trazo, .win .splash.brillo { position: absolute; inset: 0; z-index: 1000; display: grid; place-content: center; justify-items: center; transition: opacity .45s var(--ease); }
+.win .splash.trazo::before, .win .splash.brillo::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(720px 480px at 50% 46%, #18181d 0%, var(--bg-1) 58%, var(--bg-0) 100%); }
+.win .splash.gone { opacity: 0; }
+.win .splash .name { margin-top: 28px; font: 400 12px/1 var(--font-display); letter-spacing: .48em; text-indent: .48em; color: var(--fg-2); animation: sp-in .6s var(--ease) .08s backwards; }
+.win .splash .status { margin-top: 12px; min-height: 14px; font-size: var(--fs-xs); letter-spacing: .02em; color: var(--fg-3); animation: sp-in .6s var(--ease) .16s backwards; }
+.win .splash.hoy .name, .win .splash.hoy .status { margin-top: 0; animation: none; }
+@keyframes sp-in { from { opacity: 0; transform: translateY(4px); } }
+.tz { width: 72px; height: 72px; overflow: visible; }
+.tz .tz-frame { transform-box: view-box; transform-origin: 16px 16px; transition: opacity .28s var(--ease), transform .42s var(--ease); }
+.tz .ln { fill: none; stroke: var(--fg-1); stroke-width: 1; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+.tz .o { animation: tz-draw .68s cubic-bezier(.55, 0, .25, 1) forwards; }
+.tz .s { animation: tz-draw .34s cubic-bezier(.3, 0, .2, 1) .5s forwards; }
+@keyframes tz-draw { to { stroke-dashoffset: 0; } }
+.tz .glint { fill: none; stroke: #fff; stroke-linecap: round; stroke-dasharray: .035 .965; opacity: 0; transition: opacity .6s; }
+.tz .glint.core { stroke-width: 1.7; } .tz .glint.halo { stroke-width: 3.6; }
+.tz.waiting .glint { animation: tz-glint 3.2s linear infinite; }
+.tz.waiting .glint.core { opacity: .95; } .tz.waiting .glint.halo { opacity: .14; }
+@keyframes tz-glint { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -1; } }
+.tz .bar { fill: var(--fg-1); transform-box: fill-box; transform-origin: 50% 50%; transition: transform .28s var(--ease) var(--d), x .46s var(--ease-spring), y .46s var(--ease-spring), width .46s var(--ease-spring), height .46s var(--ease-spring), rx .46s var(--ease-spring), fill .35s; }
+.tz.pre .bar { transform: scaleY(0); }
+.tz .lock { transform-box: fill-box; transform-origin: 50% 50%; transition: opacity .24s var(--ease) .38s, transform .3s var(--ease) .38s; }
+.tz.pre .lock { opacity: 0; transform: scale(.85); }
+.tz .plate { fill: var(--mode-color); stroke: #18181d; stroke-width: 1.2; paint-order: stroke; }
+.tz .hole { fill: var(--bg-0); }
+.tz.sound .tz-frame { opacity: 0; transform: scale(1.22); }
+.tz.sound .lock { opacity: 0; transform: scale(.4); transition-delay: 0s; }
+.tz.sound .bar.b3 { fill: var(--mode-color); }
+
+/* ── splash 3 "Brillo" (page only) ── */
+.win .splash.brillo::before { background: radial-gradient(720px 480px at 50% 44%, #1c1c22 0%, var(--bg-1) 58%, var(--bg-0) 100%); }
+.win .splash.brillo.gone { transition-delay: .12s; }
+.br { position: relative; width: 88px; height: 88px; animation: br-in .6s var(--ease) backwards; transition: transform .55s var(--ease); will-change: transform; }
+.br::before { content: ""; position: absolute; left: 2.75px; top: 4.33px; width: 82.5px; height: 79.34px; border-radius: 20.15px; box-shadow: 0 12px 24px rgba(0, 0, 0, .5); }
+.br-icon { position: relative; display: block; width: 88px; height: 88px; }
+.br-sheen { position: absolute; left: 2.75px; top: 4.33px; width: 82.5px; height: 79.34px; border-radius: 20.15px; overflow: hidden; pointer-events: none; }
+.br-sheen::before { content: ""; position: absolute; top: -30%; bottom: -30%; left: -50%; width: 36%; background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.13) 50%, rgba(255,255,255,0)); transform: skewX(-20deg); will-change: transform; animation: br-sweep 2.8s cubic-bezier(.45, 0, .25, 1) 1.2s infinite; }
+@keyframes br-sweep { 0% { transform: translateX(0) skewX(-20deg); } 42%, 100% { transform: translateX(470%) skewX(-20deg); } }
+.br-glow { position: absolute; left: 33.85px; top: 44.95px; width: 20.31px; height: 22.85px; border-radius: 5.71px; background: rgba(236, 255, 190, .38); box-shadow: 0 0 16px 3px rgba(200, 247, 109, .55); opacity: 0; transition: opacity .22s; }
+.splash.brillo.unlock .br-glow { opacity: 1; }
+.splash.brillo.gone .br { transform: scale(1.05); }
+@keyframes br-in { from { opacity: 0; transform: scale(.96); } }
+</style>
+<!-- Splash 1 "Asentar": this block is the proposed src/renderer/css/splash.css, verbatim.
+     The preview below runs on it and section 04 prints it from here. -->
+<style id="css-asentar">
+/* ═══ Splash, "the mark settles in" ═══════════════════════════════════
+   Shown only until the library index is ready. The vault mark fades in;
+   only a long wait gets motion (the lid's waveform breathes). When the app
+   is ready the mark flies to its place in the titlebar (main.js) while the
+   backdrop dissolves.                                                   */
+#splash {
+  position: fixed; inset: 0; z-index: 1000; display: grid; place-content: center; justify-items: center;
+  -webkit-app-region: drag;
+}
+#splash::before {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background: radial-gradient(720px 480px at 50% 46%, #18181d 0%, var(--bg-1) 58%, var(--bg-0) 100%);
+  transition: opacity .45s ease .06s;
+}
+#splash .mark { width: 64px; height: 64px; overflow: visible; animation: splash-in .5s var(--ease) backwards; }
+#splash .mark .shell {
+  stroke-width: 1.5;
+  transition: stroke-width .6s cubic-bezier(.2, 0, 0, 1), opacity .28s var(--ease), transform .42s var(--ease);
+}
+#splash .name {
+  margin-top: 28px; font: 400 12px/1 var(--font-display); letter-spacing: .48em; text-indent: .48em;
+  color: var(--fg-2); animation: splash-in .6s var(--ease) .08s backwards; transition: opacity .18s;
+}
+#splash .status {
+  margin-top: 12px; min-height: 14px; font-size: var(--fs-xs); letter-spacing: .02em; color: var(--fg-3);
+  animation: splash-in .6s var(--ease) .16s backwards; transition: opacity .18s;
+}
+@keyframes splash-in { from { opacity: 0; transform: translateY(4px); } }
+/* a long wait: the lid's waveform breathes, one bar after another */
+#splash .mark.breathe .bar { animation: lid-breathe 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 50%; }
+#splash .mark.breathe .bar.b2 { animation-delay: .12s; }
+#splash .mark.breathe .bar.b3 { animation-delay: .24s; }
+#splash .mark.breathe .bar.b4 { animation-delay: .36s; }
+#splash .mark.breathe .bar.b5 { animation-delay: .48s; }
+@keyframes lid-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.55); } }
+/* leaving: the words and the backdrop go; the mark flies (main.js) */
+#splash.leaving { pointer-events: none; -webkit-app-region: no-drag; }
+#splash.leaving::before, #splash.leaving .name, #splash.leaving .status { opacity: 0; }
+#app[aria-hidden="true"] { visibility: hidden; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-play" viewBox="0 0 16 16"><path d="M5 3.3v9.4l7.3-4.7z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 16 16"><path d="M4 3.5v9"/><path d="M12.5 3.8v8.4L6 8z" fill="currentColor"/></symbol>
+  <symbol id="i-next" viewBox="0 0 16 16"><path d="M12 3.5v9"/><path d="M3.5 3.8v8.4L10 8z" fill="currentColor"/></symbol>
+  <symbol id="i-volume" viewBox="0 0 16 16"><path d="M2.5 6h2.4L8.3 3.2v9.6L4.9 10H2.5z"/><path d="M10.8 5.6c.8.7 1.2 1.5 1.2 2.4s-.4 1.7-1.2 2.4M12.6 3.9c1.3 1.1 2 2.5 2 4.1s-.7 3-2 4.1"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.4"/><path d="M10.4 10.4l3.2 3.2"/></symbol>
+  <symbol id="i-resonance" viewBox="0 0 16 16"><path d="M5.7 1.6v6a2.3 2.3 0 0 0 4.6 0V1.6M8 9.9v4.5"/></symbol>
+  <symbol id="i-chev-r" viewBox="0 0 16 16"><path d="M6 3.8L10.2 8 6 12.2"/></symbol>
+  <symbol id="i-chev-d" viewBox="0 0 16 16"><path d="M3.8 6L8 10.2 12.2 6"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 16 16"><path d="M2 4.6c0-.6.4-1.1 1-1.1h3.1l1.6 1.6H13c.6 0 1 .5 1 1.1v5.9c0 .6-.4 1.1-1 1.1H3c-.6 0-1-.5-1-1.1z"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 16 16"><g fill="currentColor" stroke="none"><circle cx="6" cy="3.8" r="1.1"/><circle cx="10" cy="3.8" r="1.1"/><circle cx="6" cy="8" r="1.1"/><circle cx="10" cy="8" r="1.1"/><circle cx="6" cy="12.2" r="1.1"/><circle cx="10" cy="12.2" r="1.1"/></g></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.1"/><path d="M8 1.8v1.7M8 12.5v1.7M1.8 8h1.7M12.5 8h1.7M3.6 3.6l1.2 1.2M11.2 11.2l1.2 1.2M3.6 12.4l1.2-1.2M11.2 4.8l1.2-1.2"/></symbol>
+  <symbol id="i-sort" viewBox="0 0 16 16"><path d="M4.5 3v10M2.5 11l2 2 2-2M8.5 4h5M8.5 8h4M8.5 12h3"/></symbol>
+</defs></svg>
+
+<div class="page">
+
+  <header>
+    <div class="over">SoundVault · marca · elegancia</div>
+    <h1>Borde fino, <em>más aire</em> adentro.</h1>
+    <p class="lead">Pediste el borde del ícono un poco más fino, para que se sienta más elegante. Ya está hecho: la silueta sigue a sangre, el borde claro baja al 60% de su grosor y el cuerpo oscuro ocupa ese lugar. Abajo lo ves al lado del anterior, en barras de tareas y fondos reales, y frame por frame. Después, con la misma premisa, tres direcciones alternativas para el ícono y tres pantallas de carga que corren tal cual lo harían en la app.</p>
+    <dl class="facts">
+      <div><dt>Borde a 256 px</dt><dd>21,2 → <b>12,9 px</b></dd></div>
+      <div><dt>Borde a 24 px</dt><dd>2 → <b>1 px</b></dd></div>
+      <div><dt>Cuerpo oscuro a 256 px</dt><dd><b>+18%</b> de superficie</dd></div>
+      <div><dt>Pantalla de carga</dt><dd>recomiendo <b>Asentar</b></dd></div>
+    </dl>
+  </header>
+
+  <!-- ═══ 01 ═══ -->
+  <section class="sec" id="icono">
+    <div class="sec-head">
+      <span class="num">01</span>
+      <h2>El ícono, implementado</h2>
+      <p>Mismo cofre, misma silueta, mismas barras y mismo candado. Cambian el borde y la costura de la tapa, que son el mismo trazo: 1,4 unidades del logo en vez de 2,3 (sobre 26 de ancho). De 16 a 64 px cada frame sigue dibujado a mano sobre la grilla: 1 px de borde hasta 24 px, 2 px de 32 a 48 y 3 px a 64. La línea de contraste exterior baja al 12% donde el borde mide 1 o 2 px, así el borde sigue siendo claro sobre la barra oscura.</p>
+    </div>
+
+    <div class="hero">
+      <figure class="hero-card">
+        <div class="hero-stage" data-bg="neutral" data-group="hero1">
+          <div class="i256"><img data-svg="prev@256" alt="Ícono anterior a 256 px"><span class="measure" style="--x:8px;--w:21.23px"><b>21,2 px</b></span></div>
+        </div>
+        <figcaption><b>Antes</b><span>borde 2,3 de 26 · cuerpo 198 px de ancho</span></figcaption>
+      </figure>
+      <figure class="hero-card now">
+        <div class="hero-stage" data-bg="neutral" data-group="hero1">
+          <div class="i256"><img data-svg="new@256" alt="Ícono nuevo a 256 px"><span class="measure" style="--x:8px;--w:12.92px"><b>12,9 px</b></span></div>
+        </div>
+        <figcaption><b>Ahora</b><span>borde 1,4 de 26 · cuerpo 214 px de ancho</span></figcaption>
+      </figure>
+    </div>
+    <div class="hero-bar bar-row">
+      <div class="seg" data-switch="hero1"><button data-v="neutral" class="on">Neutro</button><button data-v="dark">Barra oscura</button><button data-v="light">Barra clara</button><button data-v="wall">Fondo cargado</button></div>
+      <span class="hint">Los dos a 256 px, vectoriales a la resolución de tu pantalla.</span>
+    </div>
+
+    <div class="sub">
+      <h3>En contexto, a tamaño real</h3>
+      <p>Frames reales del .ico, un píxel de imagen por píxel de pantalla, como los pinta Windows (con la pantalla escalada se ven más chicos que el resto de la página, y está bien). Los íconos grises son genéricos, para comparar escala; la rayita debajo imita el indicador de app abierta.</p>
+    </div>
+    <div class="ctx" id="ctx1"></div>
+
+    <div class="sub">
+      <div class="bar-row">
+        <h3>Frame por frame</h3>
+        <div class="bar-row" style="gap:10px">
+          <div class="seg" id="fwhich"><button data-v="new" class="on">Ahora</button><button data-v="prev">Antes</button></div>
+          <div class="seg" data-switch="frames"><button data-v="dark" class="on">Barra oscura</button><button data-v="light">Barra clara</button><button data-v="wall">Fondo</button></div>
+        </div>
+      </div>
+      <p>Ampliados sin suavizado y, al lado, a tamaño real. Cambiá entre ahora y antes para ver qué se movió en cada grilla. Se dibujan con el mismo código que <code>build/icon.ico</code>: los frames extraídos del .ico son idénticos byte a byte.</p>
+    </div>
+    <div class="frames" id="frames"></div>
+  </section>
+
+  <!-- ═══ 02 ═══ -->
+  <section class="sec" id="direcciones">
+    <div class="sec-head">
+      <span class="num">02</span>
+      <h2>Otras direcciones</h2>
+      <p>Tres caminos más con la misma premisa. Ninguno está implementado: son para elegir, combinar o descartar. Los tres conservan la silueta a sangre, el cuerpo oscuro y un solo acento lima, y cada uno tiene sus frames chicos dibujados sobre la grilla.</p>
+    </div>
+
+    <div class="dirs">
+      <article class="dir">
+        <div class="hero-stage" data-bg="neutral" data-group="dirs"><div class="i256"><img data-svg="mono@256" alt="Dirección Monolínea"></div></div>
+        <div class="dir-body">
+          <span class="kicker">Dirección A</span>
+          <h3>Monolínea</h3>
+          <p class="one">Todo en un solo trazo fino.</p>
+          <p>Borde, costura y onda con el mismo grosor (0,9 unidades, 8 px a 256), como una lámina técnica. El candado baja un 30% y queda como la única pieza sólida. Es la más cercana al lenguaje de los íconos de la app y al diapasón de Resonance: trazo parejo, puntas redondas.</p>
+          <p class="risk">A 16 px es igual al implementado y a 24 solo cambian las barras; a 48 px sobre barra clara el borde de 1 px se pierde.</p>
+          <div class="pair">Se acompaña con <b>Trazo</b></div>
+        </div>
+      </article>
+      <article class="dir">
+        <div class="hero-stage" data-bg="neutral" data-group="dirs"><div class="i256"><img data-svg="satin@256" alt="Dirección Satinado"></div></div>
+        <div class="dir-body">
+          <span class="kicker">Dirección B</span>
+          <h3>Satinado</h3>
+          <p class="one">La geometría implementada, con material.</p>
+          <p>El borde como metal satinado con luz de arriba, el cuerpo apenas hundido bajo el borde, las barras con un relieve mínimo y el candado como una joya con sombra propia. El relieve aparece desde 64 px; abajo son solo degradés, así los frames chicos siguen nítidos.</p>
+          <p class="risk">Es la que más se parece a un objeto. Si se exagera, envejece rápido.</p>
+          <div class="pair">Se acompaña con <b>Brillo</b></div>
+        </div>
+      </article>
+      <article class="dir">
+        <div class="hero-stage" data-bg="neutral" data-group="dirs"><div class="i256"><img data-svg="clasp@256" alt="Dirección Broche"></div></div>
+        <div class="dir-body">
+          <span class="kicker">Dirección C</span>
+          <h3>Broche</h3>
+          <p class="one">Proporciones afinadas, el lima como detalle.</p>
+          <p>La costura sube a la proporción áurea (tapa 1,618 : base 1), la onda gana altura y el candado deja de ser una placa para ser un broche sobre la costura, como el cierre de un estuche. El lima ocupa poco más de la mitad que hoy y queda como un detalle, no como una placa.</p>
+          <p class="risk">Es la que más cambia la marca: habría que llevarla también al logo de la app.</p>
+          <div class="pair">Se acompaña con <b>Asentar</b></div>
+        </div>
+      </article>
+    </div>
+    <div class="hero-bar bar-row">
+      <div class="seg" data-switch="dirs"><button data-v="neutral" class="on">Neutro</button><button data-v="dark">Barra oscura</button><button data-v="light">Barra clara</button><button data-v="wall">Fondo cargado</button></div>
+      <span class="hint">256 px, el tamaño de íconos extra grandes del Explorador.</span>
+    </div>
+
+    <div class="sub">
+      <h3>Las cuatro, a tamaño real</h3>
+      <p>16, 24, 32 y 48 px, a un píxel de imagen por píxel de pantalla.</p>
+    </div>
+    <div class="matrix" id="matrix"></div>
+  </section>
+
+  <!-- ═══ 03 ═══ -->
+  <section class="sec" id="carga">
+    <div class="sec-head">
+      <span class="num">03</span>
+      <h2>Pantalla de carga</h2>
+      <p>Hoy el cofre aparece a 96 px, late cada 3,2 s y al final se convierte en ecualizador antes de fundirse; la palabra va en negrita con 8 px de interletra. Las propuestas bajan el volumen: cofre más chico y de trazo fino, la palabra en peso regular y muy espaciada, y una regla común para que se vea bien corta o larga.</p>
+    </div>
+    <div class="rules">
+      <div><b>Rápida: entrada y salida</b>En un arranque rápido no hay nada más. Se queda al menos 700 ms (hoy 650; Trazo, 950) para que la entrada no se corte.</div>
+      <div><b>Larga: un solo movimiento lento</b>Si la biblioteca tarda, recién pasado un segundo aparece un movimiento lento, de 2,4 a 3,2 s por ciclo.</div>
+      <div><b>Siempre termina en la app</b>La salida dura de 0,6 a 0,85 s y deja la app a la vista, lista para usar.</div>
+    </div>
+
+    <div class="props" id="props">
+      <button class="prop rec on" data-p="asentar"><span class="pn">1</span><b>Asentar <span class="tag">Recomendada</span></b><em>con el ícono implementado</em></button>
+      <button class="prop" data-p="trazo"><span class="pn">2</span><b>Trazo</b><em>con Monolínea</em></button>
+      <button class="prop" data-p="brillo"><span class="pn">3</span><b>Brillo</b><em>con Satinado</em></button>
+      <button class="prop ghost" data-p="hoy"><b>Hoy</b><em>para comparar</em></button>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="win-wrap" id="winWrap"><div class="win" id="win"></div></div>
+      <div class="tl" id="tl"><div class="fill"></div><i class="mk ready" data-l="app lista"></i><i class="mk done" data-l="app a la vista"></i></div>
+      <div class="tl-scale"><span>0 s</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6 s</span></div>
+      <div class="controls">
+        <div class="seg" id="scen"><button data-s="fast" class="on">Arranque rápido</button><button data-s="normal">Normal, 1,6 s</button><button data-s="slow">Biblioteca grande, 5 s</button></div>
+        <button class="btn" id="replay"><svg viewBox="0 0 16 16"><path d="M2.8 8a5.2 5.2 0 1 0 1.6-3.8M2.6 2.2v2.6h2.6"/></svg>Repetir</button>
+        <label class="check" id="modeOpt"><input type="checkbox" id="soundMode"> La app abre en modo Sound</label>
+        <div class="clock" id="clock">&nbsp;</div>
+      </div>
+    </div>
+
+    <div class="detail" id="detail"></div>
+    <template id="d-asentar">
+      <div>
+        <p>El cofre aparece a 64 px, con el trazo fino del ícono nuevo, y la palabra SOUNDVAULT en peso regular. Si la biblioteca tarda más de 1,2 s, la onda de la tapa respira, barra por barra, como una señal que pasa.</p>
+        <p>Cuando la app está lista, el cofre vuela a su lugar en la barra de título y se convierte en la marca que queda ahí, mientras el fondo se disuelve. La marca nunca desaparece: es el mismo objeto que después te acompaña en la app. Si la app abre en modo Sound, el cofre se hace barras durante el vuelo.</p>
+      </div>
+      <dl><dt>Entrada</dt><dd>0,5 s, fundido</dd><dt>Espera</dt><dd>desde 1,2 s, respiración de 2,4 s</dd><dt>Salida</dt><dd>0,6 s, vuelo a la barra de título</dd><dt>Rápido, total</dt><dd>1,3 s</dd><dt>Costo</dt><dd>splash.css y 41 líneas de main.js (hoy 17)</dd></dl>
+    </template>
+    <template id="d-trazo">
+      <div>
+        <p>El contorno del cofre se dibuja con una línea fina, de arriba hacia abajo por los dos lados; aparece el candado, la costura sale de él hacia los costados y las barras crecen. Si la espera sigue, una luz corta recorre el contorno como la punta de una pluma.</p>
+        <p>Al terminar, la onda crece hasta ser la marca de Sound, igual que hoy, y la pantalla se funde. Va con Monolínea porque el dibujo es de un solo trazo.</p>
+      </div>
+      <dl><dt>Entrada</dt><dd>0,9 s, dibujo</dd><dt>Espera</dt><dd>desde 1,4 s, una luz por vuelta de 3,2 s</dd><dt>Salida</dt><dd>0,85 s, onda y fundido</dd><dt>Rápido, total</dt><dd>1,8 s</dd><dt>Costo</dt><dd>una marca de trazo propia para el splash</dd></dl>
+    </template>
+    <template id="d-brillo">
+      <div>
+        <p>El ícono satinado, quieto, a 88 px y con sombra suave: la pantalla de carga muestra el objeto, como el ícono de la barra de tareas pero grande. Si la espera se alarga, cada 2,8 s una luz diagonal le cruza la superficie.</p>
+        <p>Cuando la app está lista, el candado se enciende un instante, el ícono se acerca apenas y se funde con el fondo. Va con Satinado: la luz solo tiene sentido si hay material.</p>
+      </div>
+      <dl><dt>Entrada</dt><dd>0,6 s, fundido y escala</dd><dt>Espera</dt><dd>desde 1,2 s, una luz cada 2,8 s</dd><dt>Salida</dt><dd>0,77 s, candado y fundido</dd><dt>Rápido, total</dt><dd>1,47 s</dd><dt>Costo</dt><dd>el ícono satinado como imagen en la app</dd></dl>
+    </template>
+    <template id="d-hoy">
+      <div>
+        <p>La pantalla actual, con el mismo código que hoy tiene la app: el cofre a 96 px con sombra, un golpe interno cada 3,2 s, la palabra en negrita. Al estar lista, el cofre se convierte en ecualizador y todo se funde.</p>
+      </div>
+      <dl><dt>Entrada</dt><dd>ninguna, aparece de golpe</dd><dt>Espera</dt><dd>un golpe cada 3,2 s desde el inicio</dd><dt>Salida</dt><dd>0,98 s, ecualizador y fundido</dd><dt>Rápido, total</dt><dd>1,63 s</dd></dl>
+    </template>
+  </section>
+
+  <!-- ═══ 04 ═══ -->
+  <section class="sec" id="implementacion">
+    <div class="sec-head">
+      <span class="num">04</span>
+      <h2>Cómo implementar Asentar</h2>
+      <p>Dos archivos, sin assets nuevos y sin tocar <code>logo.js</code> ni <code>titlebar.js</code>: el vuelo es una animación de la Web Animations API sobre el SVG de la marca. La vista previa de arriba corre exactamente este CSS.</p>
+    </div>
+    <div class="impl">
+      <div class="file">
+        <div class="file-head"><b>src/renderer/css/splash.css</b><span>reemplazo completo del archivo</span></div>
+        <pre id="code-css"></pre>
+      </div>
+      <div class="file">
+        <div class="file-head"><b>src/renderer/js/main.js</b><span>reemplaza las líneas 21 a 37 (el bloque del splash y <code>revealApp</code>); los imports ya están</span></div>
+        <pre id="code-js"></pre>
+      </div>
+      <div class="file nochange">
+        <div class="file-head"><b>src/renderer/index.html</b><span>sin cambios</span></div>
+        <pre>&lt;div id="splash" role="status" aria-live="polite"&gt;&lt;/div&gt;   <span class="c">&lt;!-- sigue vacío: lo arma main.js --&gt;</span></pre>
+      </div>
+      <ul class="notes">
+        <li>El trazo del cofre pasa de 1,5 a 2,3 (el de la barra de título) mientras vuela, así el relevo entre la marca del splash y la de la barra no se nota.</li>
+        <li>El mínimo en pantalla sube de 650 a 700 ms para que el fundido de entrada termine antes de salir.</li>
+        <li>Con movimiento reducido no hay vuelo ni respiración: la pantalla se funde en 300 ms. Lo mismo si la marca de la barra no existe.</li>
+        <li>Las barras que quedan a mitad de respiración vuelven a su altura en 220 ms en vez de saltar.</li>
+        <li><code>boot().catch</code> no cambia: el error queda en la línea de estado y la marca sigue respirando.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <span>Ahora: <code>scripts/make-icon.js</code> de este cambio. Antes: el mismo script en e838b45. Direcciones A, B y C: dibujadas para esta página, con sus frames chicos a mano.</span>
+    <span><code>docs/design/elegant-brand.html</code></span>
+  </footer>
+</div>
+
+<!-- Proposed main.js block for Asentar (shown in section 04; the preview mirrors it line by line). -->
+<script type="text/plain" id="js-asentar">
+// ── splash ─────────────────────────────────────────────────────────────
+const splash = document.getElementById('splash');
+const splashMark = createMark('vault', 64);
+const splashStatus = h('div.status', { text: 'Opening the vault' });
+splash.append(splashMark, h('div.name', { text: 'SOUNDVAULT' }), splashStatus);
+const t0 = performance.now();
+// Only a long wait gets motion: after 1.2 s the lid's waveform starts to breathe.
+const breathe = setTimeout(() => splashMark.classList.add('breathe'), 1200);
+
+function revealApp() {
+    document.getElementById('app').removeAttribute('aria-hidden');
+    const wait = Math.max(0, 700 - (performance.now() - t0));   // let the fade-in land on very fast boots
+    setTimeout(settleSplash, wait);
+}
+
+// The splash mark flies to the titlebar mark and becomes it while the backdrop dissolves.
+function settleSplash() {
+    clearTimeout(breathe);
+    for (const bar of splashMark.querySelectorAll('.bar')) {    // bars caught mid-breath ease back, no snap
+        const from = getComputedStyle(bar).transform;
+        bar.getAnimations().forEach(a => a.cancel());
+        if (from !== 'none') bar.animate([{ transform: from }, { transform: 'none' }], { duration: 220, easing: 'ease-out' });
+    }
+    splashMark.classList.remove('breathe');
+    splash.classList.add('leaving');
+    const target = document.querySelector('#titlebar .brand .mark');
+    if (!target || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        const fade = splash.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: 'forwards' });
+        fade.finished.then(() => splash.remove());
+        return;
+    }
+    const a = splashMark.getBoundingClientRect(), b = target.getBoundingClientRect();
+    const to = `translate(${b.left - a.left}px, ${b.top - a.top}px) scale(${b.width / a.width})`;
+    target.style.visibility = 'hidden';
+    setMarkMode(splashMark, state.mode);                              // lands in the app's current mode
+    splashMark.querySelector('.shell').style.strokeWidth = '2.3';     // the titlebar's weight
+    splashMark.style.transformOrigin = '0 0';
+    const flight = splashMark.animate([{ transform: 'none' }, { transform: to }],
+        { duration: 600, easing: 'cubic-bezier(.2, 0, 0, 1)', fill: 'forwards' });
+    flight.finished.then(() => { target.style.visibility = ''; splash.remove(); });
+}
+</script>
+
+<script id="svg-data" type="application/json">{"prev@16":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\" width=\"16\" height=\"16\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"15\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"15\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"0\" y=\"1\" width=\"15\" height=\"14\" rx=\"3.5\" fill=\"url(#rim)\"/><rect x=\"1\" y=\"2\" width=\"13\" height=\"12\" rx=\"2.5\" fill=\"url(#body)\"/><rect x=\"0.5\" y=\"9\" width=\"14\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"4\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"7\" y=\"3\" width=\"1\" height=\"4\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"9\" y=\"4\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"4\" y=\"7\" width=\"7\" height=\"7\" rx=\"2\" fill=\"url(#body)\"/><rect x=\"5\" y=\"8\" width=\"5\" height=\"5\" rx=\"1\" fill=\"#c8f76d\"/><path d=\"M7 9.5h1v2.5h-1z\" fill=\"#16161a\"/><rect x=\"0.5\" y=\"1.5\" width=\"14\" height=\"13\" rx=\"3\" fill=\"none\" stroke=\"rgba(0,0,0,0.16)\" stroke-width=\"1\"/><\/svg>","new@16":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\" width=\"16\" height=\"16\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"15\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"15\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"0\" y=\"1\" width=\"15\" height=\"14\" rx=\"3.5\" fill=\"url(#rim)\"/><rect x=\"1\" y=\"2\" width=\"13\" height=\"12\" rx=\"2.5\" fill=\"url(#body)\"/><rect x=\"0.5\" y=\"9\" width=\"14\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"4\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"7\" y=\"3\" width=\"1\" height=\"4\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"9\" y=\"4\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"4\" y=\"7\" width=\"7\" height=\"7\" rx=\"2\" fill=\"url(#body)\"/><rect x=\"5\" y=\"8\" width=\"5\" height=\"5\" rx=\"1\" fill=\"#c8f76d\"/><path d=\"M7 9.5h1v2.5h-1z\" fill=\"#16161a\"/><rect x=\"0.5\" y=\"1.5\" width=\"14\" height=\"13\" rx=\"3\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","prev@20":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\" width=\"20\" height=\"20\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"19\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"19\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"0\" y=\"1\" width=\"19\" height=\"18\" rx=\"4.5\" fill=\"url(#rim)\"/><rect x=\"2\" y=\"3\" width=\"15\" height=\"14\" rx=\"2.5\" fill=\"url(#body)\"/><rect x=\"1.5\" y=\"11\" width=\"16\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"6\" width=\"1\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"7\" y=\"5\" width=\"1\" height=\"3\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"9\" y=\"4\" width=\"1\" height=\"5\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"11\" y=\"5\" width=\"1\" height=\"3\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"13\" y=\"6\" width=\"1\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"6\" y=\"9\" width=\"7\" height=\"8\" rx=\"2.2\" fill=\"url(#body)\"/><rect x=\"7\" y=\"10\" width=\"5\" height=\"6\" rx=\"1.2\" fill=\"#c8f76d\"/><path d=\"M9 11.5h1v3h-1z\" fill=\"#16161a\"/><rect x=\"0.5\" y=\"1.5\" width=\"18\" height=\"17\" rx=\"4\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"1\"/><\/svg>","new@20":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\" width=\"20\" height=\"20\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"19\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"19\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"0\" y=\"1\" width=\"19\" height=\"18\" rx=\"4.5\" fill=\"url(#rim)\"/><rect x=\"1\" y=\"2\" width=\"17\" height=\"16\" rx=\"3.5\" fill=\"url(#body)\"/><rect x=\"0.5\" y=\"12\" width=\"18\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"6\" width=\"1\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"7\" y=\"5\" width=\"1\" height=\"3\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"9\" y=\"4\" width=\"1\" height=\"5\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"11\" y=\"5\" width=\"1\" height=\"3\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"13\" y=\"6\" width=\"1\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"6\" y=\"9\" width=\"7\" height=\"8\" rx=\"2.2\" fill=\"url(#body)\"/><rect x=\"7\" y=\"10\" width=\"5\" height=\"6\" rx=\"1.2\" fill=\"#c8f76d\"/><path d=\"M9 11.5h1v3h-1z\" fill=\"#16161a\"/><rect x=\"0.5\" y=\"1.5\" width=\"18\" height=\"17\" rx=\"4\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","prev@24":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"22\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"22\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"1\" width=\"22\" height=\"21\" rx=\"5.5\" fill=\"url(#rim)\"/><rect x=\"3\" y=\"3\" width=\"18\" height=\"17\" rx=\"3.5\" fill=\"url(#body)\"/><rect x=\"2.5\" y=\"13\" width=\"19\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"7\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"8\" y=\"6\" width=\"2\" height=\"4\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"11\" y=\"5\" width=\"2\" height=\"6\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"14\" y=\"6\" width=\"2\" height=\"4\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"17\" y=\"7\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"8\" y=\"11\" width=\"8\" height=\"8\" rx=\"2.5\" fill=\"url(#body)\"/><rect x=\"9\" y=\"12\" width=\"6\" height=\"6\" rx=\"1.5\" fill=\"#c8f76d\"/><path d=\"M12 13.2A1 1 0 0 1 12.55 15.04L12.9 16.6H11.1L11.45 15.04A1 1 0 0 1 12 13.2Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"1.5\" width=\"21\" height=\"20\" rx=\"5\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"1\"/><\/svg>","new@24":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"22\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"22\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"1\" width=\"22\" height=\"21\" rx=\"5.5\" fill=\"url(#rim)\"/><rect x=\"2\" y=\"2\" width=\"20\" height=\"19\" rx=\"4.5\" fill=\"url(#body)\"/><rect x=\"1.5\" y=\"14\" width=\"21\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"7\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"8\" y=\"6\" width=\"2\" height=\"4\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"11\" y=\"5\" width=\"2\" height=\"6\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"14\" y=\"6\" width=\"2\" height=\"4\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"17\" y=\"7\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"8\" y=\"11\" width=\"8\" height=\"8\" rx=\"2.5\" fill=\"url(#body)\"/><rect x=\"9\" y=\"12\" width=\"6\" height=\"6\" rx=\"1.5\" fill=\"#c8f76d\"/><path d=\"M12 13.2A1 1 0 0 1 12.55 15.04L12.9 16.6H11.1L11.45 15.04A1 1 0 0 1 12 13.2Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"1.5\" width=\"21\" height=\"20\" rx=\"5\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","prev@32":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\" width=\"32\" height=\"32\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"30\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"30\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"1\" width=\"30\" height=\"29\" rx=\"7\" fill=\"url(#rim)\"/><rect x=\"4\" y=\"4\" width=\"24\" height=\"23\" rx=\"4\" fill=\"url(#body)\"/><rect x=\"3.5\" y=\"18\" width=\"25\" height=\"3\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"9\" y=\"9\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"12\" y=\"7\" width=\"2\" height=\"6\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"15\" y=\"6\" width=\"2\" height=\"8\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"18\" y=\"8\" width=\"2\" height=\"4\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"21\" y=\"9\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"11\" y=\"15\" width=\"10\" height=\"10\" rx=\"3\" fill=\"url(#body)\"/><rect x=\"12\" y=\"16\" width=\"8\" height=\"8\" rx=\"2\" fill=\"#c8f76d\"/><path d=\"M16 17.5A1.5 1.5 0 0 1 16.8 20.27L17 22H15L15.2 20.27A1.5 1.5 0 0 1 16 17.5Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"1.5\" width=\"29\" height=\"28\" rx=\"6.5\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"1\"/><\/svg>","new@32":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\" width=\"32\" height=\"32\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"30\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"30\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"1\" width=\"30\" height=\"29\" rx=\"7\" fill=\"url(#rim)\"/><rect x=\"3\" y=\"3\" width=\"26\" height=\"25\" rx=\"5\" fill=\"url(#body)\"/><rect x=\"2.5\" y=\"18\" width=\"27\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"9\" y=\"9\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"12\" y=\"7\" width=\"2\" height=\"6\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"15\" y=\"6\" width=\"2\" height=\"8\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"18\" y=\"8\" width=\"2\" height=\"4\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"21\" y=\"9\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"11\" y=\"15\" width=\"10\" height=\"10\" rx=\"3\" fill=\"url(#body)\"/><rect x=\"12\" y=\"16\" width=\"8\" height=\"8\" rx=\"2\" fill=\"#c8f76d\"/><path d=\"M16 17.5A1.5 1.5 0 0 1 16.8 20.27L17 22H15L15.2 20.27A1.5 1.5 0 0 1 16 17.5Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"1.5\" width=\"29\" height=\"28\" rx=\"6.5\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","prev@40":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 40 40\" width=\"40\" height=\"40\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"38\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"38\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"20\" x2=\"0\" y2=\"30\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"2\" width=\"37\" height=\"36\" rx=\"9\" fill=\"url(#rim)\"/><rect x=\"4\" y=\"5\" width=\"31\" height=\"30\" rx=\"6\" fill=\"url(#body)\"/><rect x=\"3.5\" y=\"23\" width=\"32\" height=\"3\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"8\" y=\"11\" width=\"3\" height=\"4\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"13\" y=\"9\" width=\"3\" height=\"8\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"18\" y=\"8\" width=\"3\" height=\"10\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"23\" y=\"10\" width=\"3\" height=\"6\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"28\" y=\"12\" width=\"3\" height=\"2\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"14\" y=\"19\" width=\"11\" height=\"12\" rx=\"3.5\" fill=\"url(#body)\"/><rect x=\"15\" y=\"20\" width=\"9\" height=\"10\" rx=\"2.5\" fill=\"url(#plate)\"/><path d=\"M19.5 22.5A1.5 1.5 0 0 1 20.4 25.2L20.85 28H18.15L18.6 25.2A1.5 1.5 0 0 1 19.5 22.5Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"2.5\" width=\"36\" height=\"35\" rx=\"8.5\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"1\"/><\/svg>","new@40":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 40 40\" width=\"40\" height=\"40\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"38\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"38\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"20\" x2=\"0\" y2=\"30\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"2\" width=\"37\" height=\"36\" rx=\"9\" fill=\"url(#rim)\"/><rect x=\"3\" y=\"4\" width=\"33\" height=\"32\" rx=\"7\" fill=\"url(#body)\"/><rect x=\"2.5\" y=\"24\" width=\"34\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"8\" y=\"11\" width=\"3\" height=\"4\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"13\" y=\"9\" width=\"3\" height=\"8\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"18\" y=\"8\" width=\"3\" height=\"10\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"23\" y=\"10\" width=\"3\" height=\"6\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"28\" y=\"12\" width=\"3\" height=\"2\" rx=\"1\" fill=\"url(#rim)\"/><rect x=\"14\" y=\"19\" width=\"11\" height=\"12\" rx=\"3.5\" fill=\"url(#body)\"/><rect x=\"15\" y=\"20\" width=\"9\" height=\"10\" rx=\"2.5\" fill=\"url(#plate)\"/><path d=\"M19.5 22.5A1.5 1.5 0 0 1 20.4 25.2L20.85 28H18.15L18.6 25.2A1.5 1.5 0 0 1 19.5 22.5Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"2.5\" width=\"36\" height=\"35\" rx=\"8.5\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","prev@48":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" width=\"48\" height=\"48\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"45\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"45\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"24\" x2=\"0\" y2=\"36\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"2\" width=\"45\" height=\"43\" rx=\"11\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"6\" width=\"37\" height=\"35\" rx=\"7\" fill=\"url(#body)\"/><rect x=\"4.5\" y=\"27\" width=\"38\" height=\"4\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"12\" y=\"13\" width=\"3\" height=\"5\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"17\" y=\"11\" width=\"3\" height=\"9\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"22\" y=\"9\" width=\"3\" height=\"13\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"27\" y=\"12\" width=\"3\" height=\"7\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"32\" y=\"14\" width=\"3\" height=\"3\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"16.5\" y=\"22.5\" width=\"14\" height=\"15\" rx=\"4.5\" fill=\"url(#body)\"/><rect x=\"18\" y=\"24\" width=\"11\" height=\"12\" rx=\"3\" fill=\"url(#plate)\"/><path d=\"M23.5 26.8A1.8 1.8 0 0 1 24.55 30.06L25.1 33.4H21.9L22.45 30.06A1.8 1.8 0 0 1 23.5 26.8Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"2.5\" width=\"44\" height=\"42\" rx=\"10.5\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"1\"/><\/svg>","new@48":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" width=\"48\" height=\"48\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"45\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"45\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"24\" x2=\"0\" y2=\"36\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"2\" width=\"45\" height=\"43\" rx=\"11\" fill=\"url(#rim)\"/><rect x=\"3\" y=\"4\" width=\"41\" height=\"39\" rx=\"9\" fill=\"url(#body)\"/><rect x=\"2.5\" y=\"28\" width=\"42\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"12\" y=\"13\" width=\"3\" height=\"5\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"17\" y=\"11\" width=\"3\" height=\"9\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"22\" y=\"9\" width=\"3\" height=\"13\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"27\" y=\"12\" width=\"3\" height=\"7\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"32\" y=\"14\" width=\"3\" height=\"3\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"16.5\" y=\"22.5\" width=\"14\" height=\"15\" rx=\"4.5\" fill=\"url(#body)\"/><rect x=\"18\" y=\"24\" width=\"11\" height=\"12\" rx=\"3\" fill=\"url(#plate)\"/><path d=\"M23.5 26.8A1.8 1.8 0 0 1 24.55 30.06L25.1 33.4H21.9L22.45 30.06A1.8 1.8 0 0 1 23.5 26.8Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"2.5\" width=\"44\" height=\"42\" rx=\"10.5\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","prev@64":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"3\" x2=\"0\" y2=\"61\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"3\" x2=\"0\" y2=\"61\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"33\" x2=\"0\" y2=\"50\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"2\" y=\"3\" width=\"60\" height=\"58\" rx=\"14.5\" fill=\"url(#rim)\"/><rect x=\"7\" y=\"8\" width=\"50\" height=\"48\" rx=\"9.5\" fill=\"url(#body)\"/><rect x=\"6.5\" y=\"37\" width=\"51\" height=\"5\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"16\" y=\"19\" width=\"4\" height=\"6\" rx=\"2\" fill=\"url(#rim)\"/><rect x=\"23\" y=\"16\" width=\"4\" height=\"12\" rx=\"2\" fill=\"url(#rim)\"/><rect x=\"30\" y=\"13\" width=\"4\" height=\"18\" rx=\"2\" fill=\"url(#rim)\"/><rect x=\"37\" y=\"17\" width=\"4\" height=\"10\" rx=\"2\" fill=\"url(#rim)\"/><rect x=\"44\" y=\"20\" width=\"4\" height=\"4\" rx=\"2\" fill=\"url(#rim)\"/><rect x=\"23\" y=\"31\" width=\"18\" height=\"21\" rx=\"6\" fill=\"url(#body)\"/><rect x=\"25\" y=\"33\" width=\"14\" height=\"17\" rx=\"4\" fill=\"url(#plate)\"/><path d=\"M32 36.5A2.5 2.5 0 0 1 33.45 41.04L34.1 45.5H29.9L30.55 41.04A2.5 2.5 0 0 1 32 36.5Z\" fill=\"#16161a\"/><rect x=\"2.5\" y=\"3.5\" width=\"59\" height=\"57\" rx=\"14\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"1\"/><\/svg>","new@64":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\" width=\"64\" height=\"64\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"3\" x2=\"0\" y2=\"61\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"3\" x2=\"0\" y2=\"61\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"33\" x2=\"0\" y2=\"50\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"2\" y=\"3\" width=\"60\" height=\"58\" rx=\"14.5\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"6\" width=\"54\" height=\"52\" rx=\"11.5\" fill=\"url(#body)\"/><rect x=\"4.5\" y=\"39\" width=\"55\" height=\"3\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"16\" y=\"19\" width=\"4\" height=\"6\" rx=\"2\" fill=\"url(#rim)\"/><rect x=\"23\" y=\"16\" width=\"4\" height=\"12\" rx=\"2\" fill=\"url(#rim)\"/><rect x=\"30\" y=\"13\" width=\"4\" height=\"18\" rx=\"2\" fill=\"url(#rim)\"/><rect x=\"37\" y=\"17\" width=\"4\" height=\"10\" rx=\"2\" fill=\"url(#rim)\"/><rect x=\"44\" y=\"20\" width=\"4\" height=\"4\" rx=\"2\" fill=\"url(#rim)\"/><rect x=\"23\" y=\"31\" width=\"18\" height=\"21\" rx=\"6\" fill=\"url(#body)\"/><rect x=\"25\" y=\"33\" width=\"14\" height=\"17\" rx=\"4\" fill=\"url(#plate)\"/><path d=\"M32 36.5A2.5 2.5 0 0 1 33.45 41.04L34.1 45.5H29.9L30.55 41.04A2.5 2.5 0 0 1 32 36.5Z\" fill=\"#16161a\"/><rect x=\"2.5\" y=\"3.5\" width=\"59\" height=\"57\" rx=\"14\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"1\"/><\/svg>","prev@128":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 128 128\" width=\"128\" height=\"128\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"6.308\" x2=\"0\" y2=\"121.692\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"6.308\" x2=\"0\" y2=\"121.692\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"65.385\" x2=\"0\" y2=\"98.615\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"4\" y=\"6.308\" width=\"120\" height=\"115.385\" rx=\"29.308\" fill=\"url(#rim)\"/><rect x=\"14.615\" y=\"16.923\" width=\"98.769\" height=\"94.154\" rx=\"18.692\" fill=\"url(#body)\"/><rect x=\"14.115\" y=\"74.385\" width=\"99.769\" height=\"10.615\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"32.615\" y=\"37.692\" width=\"8.769\" height=\"11.077\" rx=\"4.385\" fill=\"url(#rim)\"/><rect x=\"46.923\" y=\"31.692\" width=\"8.769\" height=\"23.077\" rx=\"4.385\" fill=\"url(#rim)\"/><rect x=\"59.615\" y=\"26.154\" width=\"8.769\" height=\"34.154\" rx=\"4.385\" fill=\"url(#rim)\"/><rect x=\"73.692\" y=\"34\" width=\"8.769\" height=\"18.462\" rx=\"4.385\" fill=\"url(#rim)\"/><rect x=\"88\" y=\"39.077\" width=\"8.769\" height=\"8.308\" rx=\"4.385\" fill=\"url(#rim)\"/><rect x=\"45.538\" y=\"61.692\" width=\"36.923\" height=\"40.615\" rx=\"12\" fill=\"url(#body)\"/><rect x=\"49.231\" y=\"65.385\" width=\"29.538\" height=\"33.231\" rx=\"8.308\" fill=\"url(#plate)\"/><path d=\"M64 72.769A4.846 4.846 0 0 1 66.862 81.538L68.338 90.538H59.662L61.138 81.538A4.846 4.846 0 0 1 64 72.769Z\" fill=\"#16161a\"/><rect x=\"4.5\" y=\"6.808\" width=\"119\" height=\"114.385\" rx=\"28.808\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"1\"/><\/svg>","new@128":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 128 128\" width=\"128\" height=\"128\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"6.308\" x2=\"0\" y2=\"121.692\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"6.308\" x2=\"0\" y2=\"121.692\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"65.385\" x2=\"0\" y2=\"98.615\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"4\" y=\"6.308\" width=\"120\" height=\"115.385\" rx=\"29.308\" fill=\"url(#rim)\"/><rect x=\"10.462\" y=\"12.769\" width=\"107.077\" height=\"102.462\" rx=\"22.846\" fill=\"url(#body)\"/><rect x=\"9.962\" y=\"76.462\" width=\"108.077\" height=\"6.462\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"32.615\" y=\"37.692\" width=\"8.769\" height=\"11.077\" rx=\"4.385\" fill=\"url(#rim)\"/><rect x=\"46.923\" y=\"31.692\" width=\"8.769\" height=\"23.077\" rx=\"4.385\" fill=\"url(#rim)\"/><rect x=\"59.615\" y=\"26.154\" width=\"8.769\" height=\"34.154\" rx=\"4.385\" fill=\"url(#rim)\"/><rect x=\"73.692\" y=\"34\" width=\"8.769\" height=\"18.462\" rx=\"4.385\" fill=\"url(#rim)\"/><rect x=\"88\" y=\"39.077\" width=\"8.769\" height=\"8.308\" rx=\"4.385\" fill=\"url(#rim)\"/><rect x=\"45.538\" y=\"61.692\" width=\"36.923\" height=\"40.615\" rx=\"12\" fill=\"url(#body)\"/><rect x=\"49.231\" y=\"65.385\" width=\"29.538\" height=\"33.231\" rx=\"8.308\" fill=\"url(#plate)\"/><path d=\"M64 72.769A4.846 4.846 0 0 1 66.862 81.538L68.338 90.538H59.662L61.138 81.538A4.846 4.846 0 0 1 64 72.769Z\" fill=\"#16161a\"/><rect x=\"4.5\" y=\"6.808\" width=\"119\" height=\"114.385\" rx=\"28.808\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"1\"/><\/svg>","prev@256":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"256\" height=\"256\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"12.615\" x2=\"0\" y2=\"243.385\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"12.615\" x2=\"0\" y2=\"243.385\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"130.769\" x2=\"0\" y2=\"197.231\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"8\" y=\"12.615\" width=\"240\" height=\"230.769\" rx=\"58.615\" fill=\"url(#rim)\"/><rect x=\"29.231\" y=\"33.846\" width=\"197.538\" height=\"188.308\" rx=\"37.385\" fill=\"url(#body)\"/><rect x=\"28.731\" y=\"148.769\" width=\"198.538\" height=\"21.231\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"65.231\" y=\"75.385\" width=\"17.538\" height=\"22.154\" rx=\"8.769\" fill=\"url(#rim)\"/><rect x=\"93.846\" y=\"63.385\" width=\"17.538\" height=\"46.154\" rx=\"8.769\" fill=\"url(#rim)\"/><rect x=\"119.231\" y=\"52.308\" width=\"17.538\" height=\"68.308\" rx=\"8.769\" fill=\"url(#rim)\"/><rect x=\"147.385\" y=\"68\" width=\"17.538\" height=\"36.923\" rx=\"8.769\" fill=\"url(#rim)\"/><rect x=\"176\" y=\"78.154\" width=\"17.538\" height=\"16.615\" rx=\"8.769\" fill=\"url(#rim)\"/><rect x=\"91.077\" y=\"123.385\" width=\"73.846\" height=\"81.231\" rx=\"24\" fill=\"url(#body)\"/><rect x=\"98.462\" y=\"130.769\" width=\"59.077\" height=\"66.462\" rx=\"16.615\" fill=\"url(#plate)\"/><path d=\"M128 145.538A9.692 9.692 0 0 1 133.723 163.077L136.677 181.077H119.323L122.277 163.077A9.692 9.692 0 0 1 128 145.538Z\" fill=\"#16161a\"/><rect x=\"9\" y=\"13.615\" width=\"238\" height=\"228.769\" rx=\"57.615\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"2\"/><\/svg>","new@256":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"256\" height=\"256\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"12.615\" x2=\"0\" y2=\"243.385\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"12.615\" x2=\"0\" y2=\"243.385\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"130.769\" x2=\"0\" y2=\"197.231\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"8\" y=\"12.615\" width=\"240\" height=\"230.769\" rx=\"58.615\" fill=\"url(#rim)\"/><rect x=\"20.923\" y=\"25.538\" width=\"214.154\" height=\"204.923\" rx=\"45.692\" fill=\"url(#body)\"/><rect x=\"20.423\" y=\"152.923\" width=\"215.154\" height=\"12.923\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"65.231\" y=\"75.385\" width=\"17.538\" height=\"22.154\" rx=\"8.769\" fill=\"url(#rim)\"/><rect x=\"93.846\" y=\"63.385\" width=\"17.538\" height=\"46.154\" rx=\"8.769\" fill=\"url(#rim)\"/><rect x=\"119.231\" y=\"52.308\" width=\"17.538\" height=\"68.308\" rx=\"8.769\" fill=\"url(#rim)\"/><rect x=\"147.385\" y=\"68\" width=\"17.538\" height=\"36.923\" rx=\"8.769\" fill=\"url(#rim)\"/><rect x=\"176\" y=\"78.154\" width=\"17.538\" height=\"16.615\" rx=\"8.769\" fill=\"url(#rim)\"/><rect x=\"91.077\" y=\"123.385\" width=\"73.846\" height=\"81.231\" rx=\"24\" fill=\"url(#body)\"/><rect x=\"98.462\" y=\"130.769\" width=\"59.077\" height=\"66.462\" rx=\"16.615\" fill=\"url(#plate)\"/><path d=\"M128 145.538A9.692 9.692 0 0 1 133.723 163.077L136.677 181.077H119.323L122.277 163.077A9.692 9.692 0 0 1 128 145.538Z\" fill=\"#16161a\"/><rect x=\"9\" y=\"13.615\" width=\"238\" height=\"228.769\" rx=\"57.615\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"2\"/><\/svg>","mono@16":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\" width=\"16\" height=\"16\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"15\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"15\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"0\" y=\"1\" width=\"15\" height=\"14\" rx=\"3.5\" fill=\"url(#rim)\"/><rect x=\"1\" y=\"2\" width=\"13\" height=\"12\" rx=\"2.5\" fill=\"url(#body)\"/><rect x=\"0.5\" y=\"9\" width=\"14\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"4\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"7\" y=\"3\" width=\"1\" height=\"4\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"9\" y=\"4\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"4\" y=\"7\" width=\"7\" height=\"7\" rx=\"2\" fill=\"url(#body)\"/><rect x=\"5\" y=\"8\" width=\"5\" height=\"5\" rx=\"1\" fill=\"#c8f76d\"/><path d=\"M7 9.5h1v2.5h-1z\" fill=\"#16161a\"/><rect x=\"0.5\" y=\"1.5\" width=\"14\" height=\"13\" rx=\"3\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","clasp@16":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\" width=\"16\" height=\"16\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"15\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"15\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"0\" y=\"1\" width=\"15\" height=\"14\" rx=\"3.5\" fill=\"url(#rim)\"/><rect x=\"1\" y=\"2\" width=\"13\" height=\"12\" rx=\"2.5\" fill=\"url(#body)\"/><rect x=\"0.5\" y=\"9\" width=\"14\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"4\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"7\" y=\"3\" width=\"1\" height=\"4\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"9\" y=\"4\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"3\" y=\"7\" width=\"9\" height=\"5\" rx=\"2\" fill=\"url(#body)\"/><rect x=\"4\" y=\"8\" width=\"7\" height=\"3\" rx=\"1\" fill=\"#c8f76d\"/><rect x=\"0.5\" y=\"1.5\" width=\"14\" height=\"13\" rx=\"3\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","satin@16":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 16\" width=\"16\" height=\"16\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"15\"><stop offset=\"0\" stop-color=\"#fdfcf8\"/><stop offset=\"0.14\" stop-color=\"#f0eee7\"/><stop offset=\"0.55\" stop-color=\"#dcd9d0\"/><stop offset=\"1\" stop-color=\"#b6b3a9\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"15\"><stop offset=\"0\" stop-color=\"#34343d\"/><stop offset=\"0.45\" stop-color=\"#1f1f25\"/><stop offset=\"1\" stop-color=\"#111114\"/><\/linearGradient><linearGradient id=\"bar\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#faf9f5\"/><stop offset=\"1\" stop-color=\"#d2cfc6\"/><\/linearGradient><linearGradient id=\"plate\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#e2fd9c\"/><stop offset=\"1\" stop-color=\"#aee050\"/><\/linearGradient><linearGradient id=\"ish\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"2.8\"><stop offset=\"0\" stop-color=\"#000\" stop-opacity=\"0.38\"/><stop offset=\"1\" stop-color=\"#000\" stop-opacity=\"0\"/><\/linearGradient><linearGradient id=\"phl\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#fff\" stop-opacity=\"0.3\"/><stop offset=\"0.4\" stop-color=\"#fff\" stop-opacity=\"0\"/><\/linearGradient><\/defs><rect x=\"0\" y=\"1\" width=\"15\" height=\"14\" rx=\"3.5\" fill=\"url(#rim)\"/><rect x=\"1\" y=\"2\" width=\"13\" height=\"12\" rx=\"2.5\" fill=\"url(#body)\"/><rect x=\"0.5\" y=\"9\" width=\"14\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"4\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#bar)\"/><rect x=\"7\" y=\"3\" width=\"1\" height=\"4\" rx=\"0\" fill=\"url(#bar)\"/><rect x=\"9\" y=\"4\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#bar)\"/><rect x=\"4\" y=\"7\" width=\"7\" height=\"7\" rx=\"2\" fill=\"url(#body)\"/><rect x=\"5\" y=\"8\" width=\"5\" height=\"5\" rx=\"1\" fill=\"url(#plate)\"/><path d=\"M7 9.5h1v2.5h-1z\" fill=\"#16161a\"/><rect x=\"0.5\" y=\"1.5\" width=\"14\" height=\"13\" rx=\"3\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","mono@24":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"23\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"23\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"0\" y=\"1\" width=\"23\" height=\"22\" rx=\"5.5\" fill=\"url(#rim)\"/><rect x=\"1\" y=\"2\" width=\"21\" height=\"20\" rx=\"4.5\" fill=\"url(#body)\"/><rect x=\"0.5\" y=\"14\" width=\"22\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"7\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"8\" y=\"5\" width=\"1\" height=\"6\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"11\" y=\"4\" width=\"1\" height=\"8\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"14\" y=\"6\" width=\"1\" height=\"4\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"17\" y=\"7\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"8\" y=\"12\" width=\"7\" height=\"8\" rx=\"2.2\" fill=\"url(#body)\"/><rect x=\"9\" y=\"13\" width=\"5\" height=\"6\" rx=\"1.2\" fill=\"#c8f76d\"/><path d=\"M11 14.5h1v3.5h-1z\" fill=\"#16161a\"/><rect x=\"0.5\" y=\"1.5\" width=\"22\" height=\"21\" rx=\"5\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","clasp@24":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"23\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"23\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"0\" y=\"1\" width=\"23\" height=\"22\" rx=\"5.5\" fill=\"url(#rim)\"/><rect x=\"1\" y=\"2\" width=\"21\" height=\"20\" rx=\"4.5\" fill=\"url(#body)\"/><rect x=\"0.5\" y=\"14\" width=\"22\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"7\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"8\" y=\"5\" width=\"1\" height=\"6\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"11\" y=\"4\" width=\"1\" height=\"8\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"14\" y=\"6\" width=\"1\" height=\"4\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"17\" y=\"7\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"7\" y=\"12\" width=\"9\" height=\"5\" rx=\"2.2\" fill=\"url(#body)\"/><rect x=\"8\" y=\"13\" width=\"7\" height=\"3\" rx=\"1.2\" fill=\"#c8f76d\"/><path d=\"M11 14h1v1h-1z\" fill=\"#16161a\"/><rect x=\"0.5\" y=\"1.5\" width=\"22\" height=\"21\" rx=\"5\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","satin@24":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"22\"><stop offset=\"0\" stop-color=\"#fdfcf8\"/><stop offset=\"0.14\" stop-color=\"#f0eee7\"/><stop offset=\"0.55\" stop-color=\"#dcd9d0\"/><stop offset=\"1\" stop-color=\"#b6b3a9\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"22\"><stop offset=\"0\" stop-color=\"#34343d\"/><stop offset=\"0.45\" stop-color=\"#1f1f25\"/><stop offset=\"1\" stop-color=\"#111114\"/><\/linearGradient><linearGradient id=\"bar\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#faf9f5\"/><stop offset=\"1\" stop-color=\"#d2cfc6\"/><\/linearGradient><linearGradient id=\"plate\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#e2fd9c\"/><stop offset=\"1\" stop-color=\"#aee050\"/><\/linearGradient><linearGradient id=\"ish\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"3.2\"><stop offset=\"0\" stop-color=\"#000\" stop-opacity=\"0.38\"/><stop offset=\"1\" stop-color=\"#000\" stop-opacity=\"0\"/><\/linearGradient><linearGradient id=\"phl\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#fff\" stop-opacity=\"0.3\"/><stop offset=\"0.4\" stop-color=\"#fff\" stop-opacity=\"0\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"1\" width=\"22\" height=\"21\" rx=\"5.5\" fill=\"url(#rim)\"/><rect x=\"2\" y=\"2\" width=\"20\" height=\"19\" rx=\"4.5\" fill=\"url(#body)\"/><rect x=\"1.5\" y=\"14\" width=\"21\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"5\" y=\"7\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#bar)\"/><rect x=\"8\" y=\"6\" width=\"2\" height=\"4\" rx=\"1\" fill=\"url(#bar)\"/><rect x=\"11\" y=\"5\" width=\"2\" height=\"6\" rx=\"1\" fill=\"url(#bar)\"/><rect x=\"14\" y=\"6\" width=\"2\" height=\"4\" rx=\"1\" fill=\"url(#bar)\"/><rect x=\"17\" y=\"7\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#bar)\"/><rect x=\"8\" y=\"11\" width=\"8\" height=\"8\" rx=\"2.5\" fill=\"url(#body)\"/><rect x=\"9\" y=\"12\" width=\"6\" height=\"6\" rx=\"1.5\" fill=\"url(#plate)\"/><path d=\"M12 13.2A1 1 0 0 1 12.55 15.04L12.9 16.6H11.1L11.45 15.04A1 1 0 0 1 12 13.2Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"1.5\" width=\"21\" height=\"20\" rx=\"5\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","mono@32":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\" width=\"32\" height=\"32\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"31\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"31\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"0\" y=\"1\" width=\"31\" height=\"30\" rx=\"7.5\" fill=\"url(#rim)\"/><rect x=\"1\" y=\"2\" width=\"29\" height=\"28\" rx=\"6.5\" fill=\"url(#body)\"/><rect x=\"0.5\" y=\"20\" width=\"30\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"9\" y=\"9\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"12\" y=\"7\" width=\"1\" height=\"6\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"15\" y=\"5\" width=\"1\" height=\"10\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"18\" y=\"8\" width=\"1\" height=\"4\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"21\" y=\"9\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"11\" y=\"16\" width=\"9\" height=\"9\" rx=\"2.5\" fill=\"url(#body)\"/><rect x=\"12\" y=\"17\" width=\"7\" height=\"7\" rx=\"1.5\" fill=\"#c8f76d\"/><path d=\"M15.5 18.8A1.1 1.1 0 0 1 16.05 20.85L16.3 22.6H14.7L14.95 20.85A1.1 1.1 0 0 1 15.5 18.8Z\" fill=\"#16161a\"/><rect x=\"0.5\" y=\"1.5\" width=\"30\" height=\"29\" rx=\"7\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","clasp@32":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\" width=\"32\" height=\"32\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"31\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"31\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><\/defs><rect x=\"0\" y=\"1\" width=\"31\" height=\"30\" rx=\"7.5\" fill=\"url(#rim)\"/><rect x=\"1\" y=\"2\" width=\"29\" height=\"28\" rx=\"6.5\" fill=\"url(#body)\"/><rect x=\"0.5\" y=\"19\" width=\"30\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"9\" y=\"8\" width=\"1\" height=\"4\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"12\" y=\"7\" width=\"1\" height=\"6\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"15\" y=\"5\" width=\"1\" height=\"10\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"18\" y=\"7\" width=\"1\" height=\"6\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"21\" y=\"9\" width=\"1\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"10\" y=\"17\" width=\"11\" height=\"5\" rx=\"2.5\" fill=\"url(#body)\"/><rect x=\"11\" y=\"18\" width=\"9\" height=\"3\" rx=\"1.5\" fill=\"#c8f76d\"/><path d=\"M15 19h1v1h-1z\" fill=\"#16161a\"/><rect x=\"0.5\" y=\"1.5\" width=\"30\" height=\"29\" rx=\"7\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","satin@32":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\" width=\"32\" height=\"32\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"30\"><stop offset=\"0\" stop-color=\"#fdfcf8\"/><stop offset=\"0.14\" stop-color=\"#f0eee7\"/><stop offset=\"0.55\" stop-color=\"#dcd9d0\"/><stop offset=\"1\" stop-color=\"#b6b3a9\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"1\" x2=\"0\" y2=\"30\"><stop offset=\"0\" stop-color=\"#34343d\"/><stop offset=\"0.45\" stop-color=\"#1f1f25\"/><stop offset=\"1\" stop-color=\"#111114\"/><\/linearGradient><linearGradient id=\"bar\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#faf9f5\"/><stop offset=\"1\" stop-color=\"#d2cfc6\"/><\/linearGradient><linearGradient id=\"plate\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#e2fd9c\"/><stop offset=\"1\" stop-color=\"#aee050\"/><\/linearGradient><linearGradient id=\"ish\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"3\" x2=\"0\" y2=\"4.6\"><stop offset=\"0\" stop-color=\"#000\" stop-opacity=\"0.38\"/><stop offset=\"1\" stop-color=\"#000\" stop-opacity=\"0\"/><\/linearGradient><linearGradient id=\"phl\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#fff\" stop-opacity=\"0.3\"/><stop offset=\"0.4\" stop-color=\"#fff\" stop-opacity=\"0\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"1\" width=\"30\" height=\"29\" rx=\"7\" fill=\"url(#rim)\"/><rect x=\"3\" y=\"3\" width=\"26\" height=\"25\" rx=\"5\" fill=\"url(#body)\"/><rect x=\"2.5\" y=\"18\" width=\"27\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"9\" y=\"9\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#bar)\"/><rect x=\"12\" y=\"7\" width=\"2\" height=\"6\" rx=\"1\" fill=\"url(#bar)\"/><rect x=\"15\" y=\"6\" width=\"2\" height=\"8\" rx=\"1\" fill=\"url(#bar)\"/><rect x=\"18\" y=\"8\" width=\"2\" height=\"4\" rx=\"1\" fill=\"url(#bar)\"/><rect x=\"21\" y=\"9\" width=\"2\" height=\"2\" rx=\"1\" fill=\"url(#bar)\"/><rect x=\"11\" y=\"15\" width=\"10\" height=\"10\" rx=\"3\" fill=\"url(#body)\"/><rect x=\"12\" y=\"16\" width=\"8\" height=\"8\" rx=\"2\" fill=\"url(#plate)\"/><path d=\"M16 17.5A1.5 1.5 0 0 1 16.8 20.27L17 22H15L15.2 20.27A1.5 1.5 0 0 1 16 17.5Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"1.5\" width=\"29\" height=\"28\" rx=\"6.5\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","mono@48":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" width=\"48\" height=\"48\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"45\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"45\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"25\" x2=\"0\" y2=\"35\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"2\" width=\"45\" height=\"43\" rx=\"11\" fill=\"url(#rim)\"/><rect x=\"2\" y=\"3\" width=\"43\" height=\"41\" rx=\"10\" fill=\"url(#body)\"/><rect x=\"1.5\" y=\"29\" width=\"44\" height=\"1\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"13\" y=\"14\" width=\"1\" height=\"4\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"18\" y=\"11\" width=\"1\" height=\"10\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"23\" y=\"9\" width=\"1\" height=\"14\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"28\" y=\"12\" width=\"1\" height=\"8\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"33\" y=\"14\" width=\"1\" height=\"4\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"18\" y=\"24\" width=\"11\" height=\"12\" rx=\"3.5\" fill=\"url(#body)\"/><rect x=\"19\" y=\"25\" width=\"9\" height=\"10\" rx=\"2.5\" fill=\"url(#plate)\"/><path d=\"M23.5 27.4A1.5 1.5 0 0 1 24.35 30.1L24.8 32.8H22.2L22.65 30.1A1.5 1.5 0 0 1 23.5 27.4Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"2.5\" width=\"44\" height=\"42\" rx=\"10.5\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","clasp@48":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" width=\"48\" height=\"48\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"45\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"45\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"25\" x2=\"0\" y2=\"31\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"2\" width=\"45\" height=\"43\" rx=\"11\" fill=\"url(#rim)\"/><rect x=\"3\" y=\"4\" width=\"41\" height=\"39\" rx=\"9\" fill=\"url(#body)\"/><rect x=\"2.5\" y=\"27\" width=\"42\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"12\" y=\"12\" width=\"3\" height=\"6\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"17\" y=\"10\" width=\"3\" height=\"10\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"22\" y=\"8\" width=\"3\" height=\"14\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"27\" y=\"11\" width=\"3\" height=\"8\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"32\" y=\"13\" width=\"3\" height=\"4\" rx=\"1.5\" fill=\"url(#rim)\"/><rect x=\"14.5\" y=\"23.5\" width=\"18\" height=\"9\" rx=\"4.5\" fill=\"url(#body)\"/><rect x=\"16\" y=\"25\" width=\"15\" height=\"6\" rx=\"3\" fill=\"url(#plate)\"/><path d=\"M23.5 26.3A1.1 1.1 0 0 1 24.15 28.3L24.4 29.8H22.6L22.85 28.3A1.1 1.1 0 0 1 23.5 26.3Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"2.5\" width=\"44\" height=\"42\" rx=\"10.5\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","satin@48":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 48 48\" width=\"48\" height=\"48\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"45\"><stop offset=\"0\" stop-color=\"#fdfcf8\"/><stop offset=\"0.14\" stop-color=\"#f0eee7\"/><stop offset=\"0.55\" stop-color=\"#dcd9d0\"/><stop offset=\"1\" stop-color=\"#b6b3a9\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"2\" x2=\"0\" y2=\"45\"><stop offset=\"0\" stop-color=\"#34343d\"/><stop offset=\"0.45\" stop-color=\"#1f1f25\"/><stop offset=\"1\" stop-color=\"#111114\"/><\/linearGradient><linearGradient id=\"bar\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#faf9f5\"/><stop offset=\"1\" stop-color=\"#d2cfc6\"/><\/linearGradient><linearGradient id=\"plate\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#e2fd9c\"/><stop offset=\"1\" stop-color=\"#aee050\"/><\/linearGradient><linearGradient id=\"ish\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"4\" x2=\"0\" y2=\"6.4\"><stop offset=\"0\" stop-color=\"#000\" stop-opacity=\"0.38\"/><stop offset=\"1\" stop-color=\"#000\" stop-opacity=\"0\"/><\/linearGradient><linearGradient id=\"phl\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#fff\" stop-opacity=\"0.3\"/><stop offset=\"0.4\" stop-color=\"#fff\" stop-opacity=\"0\"/><\/linearGradient><\/defs><rect x=\"1\" y=\"2\" width=\"45\" height=\"43\" rx=\"11\" fill=\"url(#rim)\"/><rect x=\"3\" y=\"4\" width=\"41\" height=\"39\" rx=\"9\" fill=\"url(#body)\"/><rect x=\"2.5\" y=\"28\" width=\"42\" height=\"2\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"12\" y=\"13\" width=\"3\" height=\"5\" rx=\"1.5\" fill=\"url(#bar)\"/><rect x=\"17\" y=\"11\" width=\"3\" height=\"9\" rx=\"1.5\" fill=\"url(#bar)\"/><rect x=\"22\" y=\"9\" width=\"3\" height=\"13\" rx=\"1.5\" fill=\"url(#bar)\"/><rect x=\"27\" y=\"12\" width=\"3\" height=\"7\" rx=\"1.5\" fill=\"url(#bar)\"/><rect x=\"32\" y=\"14\" width=\"3\" height=\"3\" rx=\"1.5\" fill=\"url(#bar)\"/><rect x=\"16.5\" y=\"22.5\" width=\"14\" height=\"15\" rx=\"4.5\" fill=\"url(#body)\"/><rect x=\"18\" y=\"24\" width=\"11\" height=\"12\" rx=\"3\" fill=\"url(#plate)\"/><rect x=\"18.369\" y=\"24.369\" width=\"10.262\" height=\"11.262\" rx=\"2.631\" fill=\"url(#phl)\"/><path d=\"M23.5 26.8A1.8 1.8 0 0 1 24.55 30.06L25.1 33.4H21.9L22.45 30.06A1.8 1.8 0 0 1 23.5 26.8Z\" fill=\"#16161a\"/><rect x=\"1.5\" y=\"2.5\" width=\"44\" height=\"42\" rx=\"10.5\" fill=\"none\" stroke=\"rgba(0,0,0,0.12)\" stroke-width=\"1\"/><\/svg>","mono@256":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"256\" height=\"256\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"12.615\" x2=\"0\" y2=\"243.385\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"12.615\" x2=\"0\" y2=\"243.385\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"136.308\" x2=\"0\" y2=\"191.692\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"8\" y=\"12.615\" width=\"240\" height=\"230.769\" rx=\"58.615\" fill=\"url(#rim)\"/><rect x=\"16.308\" y=\"20.923\" width=\"223.385\" height=\"214.154\" rx=\"50.308\" fill=\"url(#body)\"/><rect x=\"15.808\" y=\"155.231\" width=\"224.385\" height=\"8.308\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"68.462\" y=\"74.462\" width=\"8.308\" height=\"24\" rx=\"4.154\" fill=\"url(#rim)\"/><rect x=\"96.154\" y=\"62.462\" width=\"8.308\" height=\"48\" rx=\"4.154\" fill=\"url(#rim)\"/><rect x=\"123.846\" y=\"51.385\" width=\"8.308\" height=\"70.154\" rx=\"4.154\" fill=\"url(#rim)\"/><rect x=\"151.538\" y=\"67.077\" width=\"8.308\" height=\"38.769\" rx=\"4.154\" fill=\"url(#rim)\"/><rect x=\"179.231\" y=\"77.231\" width=\"8.308\" height=\"18.462\" rx=\"4.154\" fill=\"url(#rim)\"/><rect x=\"98.462\" y=\"130.769\" width=\"59.077\" height=\"66.462\" rx=\"19.385\" fill=\"url(#body)\"/><rect x=\"104\" y=\"136.308\" width=\"48\" height=\"55.385\" rx=\"13.846\" fill=\"url(#plate)\"/><path d=\"M128 150.154A7.846 7.846 0 0 1 132.615 164.462L134.923 178.308H121.077L123.385 164.462A7.846 7.846 0 0 1 128 150.154Z\" fill=\"#16161a\"/><rect x=\"9\" y=\"13.615\" width=\"238\" height=\"228.769\" rx=\"57.615\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"2\"/><\/svg>","clasp@256":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"256\" height=\"256\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"12.615\" x2=\"0\" y2=\"243.385\"><stop offset=\"0\" stop-color=\"#f4f3ee\"/><stop offset=\"1\" stop-color=\"#c9c7bf\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"12.615\" x2=\"0\" y2=\"243.385\"><stop offset=\"0\" stop-color=\"#2b2b33\"/><stop offset=\"1\" stop-color=\"#131316\"/><\/linearGradient><linearGradient id=\"plate\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"135.385\" x2=\"0\" y2=\"166.769\"><stop offset=\"0\" stop-color=\"#d3fa82\"/><stop offset=\"1\" stop-color=\"#bff063\"/><\/linearGradient><\/defs><rect x=\"8\" y=\"12.615\" width=\"240\" height=\"230.769\" rx=\"58.615\" fill=\"url(#rim)\"/><rect x=\"19.077\" y=\"23.692\" width=\"217.846\" height=\"208.615\" rx=\"47.538\" fill=\"url(#body)\"/><rect x=\"18.577\" y=\"145.538\" width=\"218.846\" height=\"11.077\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"65.692\" y=\"69.846\" width=\"13.846\" height=\"25.846\" rx=\"6.923\" fill=\"url(#rim)\"/><rect x=\"93.385\" y=\"56.923\" width=\"13.846\" height=\"51.692\" rx=\"6.923\" fill=\"url(#rim)\"/><rect x=\"121.077\" y=\"45.846\" width=\"13.846\" height=\"73.846\" rx=\"6.923\" fill=\"url(#rim)\"/><rect x=\"148.769\" y=\"62.462\" width=\"13.846\" height=\"40.615\" rx=\"6.923\" fill=\"url(#rim)\"/><rect x=\"176.462\" y=\"73.538\" width=\"13.846\" height=\"18.462\" rx=\"6.923\" fill=\"url(#rim)\"/><rect x=\"84.615\" y=\"128.923\" width=\"86.769\" height=\"44.308\" rx=\"22.154\" fill=\"url(#body)\"/><rect x=\"91.077\" y=\"135.385\" width=\"73.846\" height=\"31.385\" rx=\"15.692\" fill=\"url(#plate)\"/><path d=\"M128 142.954A5.538 5.538 0 0 1 131.323 152.923L132.615 160.769H123.385L124.677 152.923A5.538 5.538 0 0 1 128 142.954Z\" fill=\"#16161a\"/><rect x=\"9\" y=\"13.615\" width=\"238\" height=\"228.769\" rx=\"57.615\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"2\"/><\/svg>","satin@256":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"256\" height=\"256\"><defs><linearGradient id=\"rim\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"12.615\" x2=\"0\" y2=\"243.385\"><stop offset=\"0\" stop-color=\"#fdfcf8\"/><stop offset=\"0.14\" stop-color=\"#f0eee7\"/><stop offset=\"0.55\" stop-color=\"#dcd9d0\"/><stop offset=\"1\" stop-color=\"#b6b3a9\"/><\/linearGradient><linearGradient id=\"body\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"12.615\" x2=\"0\" y2=\"243.385\"><stop offset=\"0\" stop-color=\"#34343d\"/><stop offset=\"0.45\" stop-color=\"#1f1f25\"/><stop offset=\"1\" stop-color=\"#111114\"/><\/linearGradient><linearGradient id=\"bar\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#faf9f5\"/><stop offset=\"1\" stop-color=\"#d2cfc6\"/><\/linearGradient><linearGradient id=\"plate\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#e2fd9c\"/><stop offset=\"1\" stop-color=\"#aee050\"/><\/linearGradient><linearGradient id=\"ish\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"25.538\" x2=\"0\" y2=\"37.538\"><stop offset=\"0\" stop-color=\"#000\" stop-opacity=\"0.38\"/><stop offset=\"1\" stop-color=\"#000\" stop-opacity=\"0\"/><\/linearGradient><linearGradient id=\"phl\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#fff\" stop-opacity=\"0.3\"/><stop offset=\"0.4\" stop-color=\"#fff\" stop-opacity=\"0\"/><\/linearGradient><radialGradient id=\"psh\"><stop offset=\"0\" stop-color=\"#000\" stop-opacity=\".5\"/><stop offset=\".6\" stop-color=\"#000\" stop-opacity=\".26\"/><stop offset=\"1\" stop-color=\"#000\" stop-opacity=\"0\"/><\/radialGradient><radialGradient id=\"glow\" cx=\"50%\" cy=\"0%\" r=\"75%\"><stop offset=\"0\" stop-color=\"#fff\" stop-opacity=\".07\"/><stop offset=\"1\" stop-color=\"#fff\" stop-opacity=\"0\"/><\/radialGradient><\/defs><rect x=\"8\" y=\"12.615\" width=\"240\" height=\"230.769\" rx=\"58.615\" fill=\"url(#rim)\"/><rect x=\"20.923\" y=\"25.538\" width=\"214.154\" height=\"204.923\" rx=\"45.692\" fill=\"url(#body)\"/><rect x=\"20.923\" y=\"25.538\" width=\"214.154\" height=\"204.923\" rx=\"45.692\" fill=\"url(#ish)\"/><rect x=\"20.923\" y=\"25.538\" width=\"214.154\" height=\"204.923\" rx=\"45.692\" fill=\"url(#glow)\"/><rect x=\"20.423\" y=\"152.923\" width=\"215.154\" height=\"12.923\" rx=\"0\" fill=\"url(#rim)\"/><rect x=\"65.231\" y=\"75.385\" width=\"17.538\" height=\"22.154\" rx=\"8.769\" fill=\"url(#bar)\"/><rect x=\"93.846\" y=\"63.385\" width=\"17.538\" height=\"46.154\" rx=\"8.769\" fill=\"url(#bar)\"/><rect x=\"119.231\" y=\"52.308\" width=\"17.538\" height=\"68.308\" rx=\"8.769\" fill=\"url(#bar)\"/><rect x=\"147.385\" y=\"68\" width=\"17.538\" height=\"36.923\" rx=\"8.769\" fill=\"url(#bar)\"/><rect x=\"176\" y=\"78.154\" width=\"17.538\" height=\"16.615\" rx=\"8.769\" fill=\"url(#bar)\"/><rect x=\"91.077\" y=\"123.385\" width=\"73.846\" height=\"81.231\" rx=\"24\" fill=\"url(#body)\"/><ellipse cx=\"128\" cy=\"170.923\" rx=\"37.846\" ry=\"41.538\" fill=\"url(#psh)\"/><rect x=\"98.462\" y=\"130.769\" width=\"59.077\" height=\"66.462\" rx=\"16.615\" fill=\"url(#plate)\"/><rect x=\"100.308\" y=\"132.615\" width=\"55.385\" height=\"62.769\" rx=\"14.769\" fill=\"url(#phl)\"/><path d=\"M128 145.538A9.692 9.692 0 0 1 133.723 163.077L136.677 181.077H119.323L122.277 163.077A9.692 9.692 0 0 1 128 145.538Z\" fill=\"#16161a\"/><rect x=\"9\" y=\"13.615\" width=\"238\" height=\"228.769\" rx=\"57.615\" fill=\"none\" stroke=\"rgba(0,0,0,0.2)\" stroke-width=\"2\"/><\/svg>","ph-square":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"256\" height=\"256\"><defs><linearGradient id=\"p\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#8e96a3\"/><stop offset=\"1\" stop-color=\"#5d6470\"/><\/linearGradient><\/defs><rect x=\"8\" y=\"8\" width=\"240\" height=\"240\" rx=\"56\" fill=\"url(#p)\"/><rect x=\"64\" y=\"64\" width=\"128\" height=\"128\" rx=\"28\" fill=\"#c9ced6\"/><\/svg>","ph-circle":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"256\" height=\"256\"><defs><linearGradient id=\"p\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#d3d6db\"/><stop offset=\"1\" stop-color=\"#a4a9b1\"/><\/linearGradient><\/defs><circle cx=\"128\" cy=\"128\" r=\"120\" fill=\"url(#p)\"/><circle cx=\"128\" cy=\"128\" r=\"50\" fill=\"#6f7580\"/><\/svg>","ph-folder":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"256\" height=\"256\"><defs><linearGradient id=\"p\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#b8bcc3\"/><stop offset=\"1\" stop-color=\"#8f949c\"/><\/linearGradient><\/defs><path d=\"M8 52a20 20 0 0 1 20-20h62l24 24h114a20 20 0 0 1 20 20v8H8z\" fill=\"#7d828b\"/><rect x=\"8\" y=\"70\" width=\"240\" height=\"160\" rx=\"20\" fill=\"url(#p)\"/><\/svg>","ph-page":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 256 256\" width=\"256\" height=\"256\"><path d=\"M44 8h116l56 56v164a20 20 0 0 1-20 20H44a20 20 0 0 1-20-20V28A20 20 0 0 1 44 8z\" fill=\"#e4e6ea\" stroke=\"#8a9099\" stroke-width=\"6\"/><path d=\"M160 8v40a16 16 0 0 0 16 16h40\" fill=\"#c3c7cd\"/><rect x=\"62\" y=\"110\" width=\"132\" height=\"12\" rx=\"6\" fill=\"#9aa0a8\"/><rect x=\"62\" y=\"140\" width=\"132\" height=\"12\" rx=\"6\" fill=\"#9aa0a8\"/><rect x=\"62\" y=\"170\" width=\"92\" height=\"12\" rx=\"6\" fill=\"#9aa0a8\"/><\/svg>"}</script>
+
+<script>
+(() => {
+'use strict';
+const SVG = JSON.parse(document.getElementById('svg-data').textContent);
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const dpr = () => window.devicePixelRatio || 1;
+const svgURL = key => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(SVG[key]);
+
+/* ── icon frames at 1 image px per device px, rasterised like scripts/make-icon.js ── */
+const rasters = new Map();
+function raster(k, n) {
+  const key = SVG[k + '@' + n] ? k + '@' + n : SVG[k] ? k : k + '@256';
+  const id = key + '|' + n;
+  if (!rasters.has(id)) rasters.set(id, new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => { const c = document.createElement('canvas'); c.width = c.height = n; const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, n, n); res(c); };
+    img.onerror = rej;
+    img.src = svgURL(key);
+  }));
+  return rasters.get(id);
+}
+async function paint(c) {
+  const n = +c.dataset.n, z = +(c.dataset.z || 1), src = await raster(c.dataset.k, n);
+  if (c.width !== n * z) { c.width = c.height = n * z; }
+  const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.clearRect(0, 0, n * z, n * z); x.drawImage(src, 0, 0, n * z, n * z);
+  c.style.width = c.style.height = (n * z / dpr()) + 'px';
+}
+const paintAll = (root = document) => $$('canvas[data-k]', root).forEach(paint);
+const cv = (k, n, z = 1) => `<canvas class="px" data-k="${k}" data-n="${n}"${z > 1 ? ` data-z="${z}"` : ''}></canvas>`;
+
+/* ── 01 context table ── */
+const BGS = [['dark', 'Barra oscura · #202020'], ['light', 'Barra clara · #f3f3f3'], ['wall', 'Fondo cargado']];
+const CTX = [[16, 'barra de título, Explorador en lista'], [24, 'barra de tareas al 100%'], [32, 'barra de tareas al 125%'], [48, 'escritorio, íconos medianos']];
+const slot = (k, n, cap, run) => `<div class="slot">${cv(k, n)}${run ? '<i class="run"></i>' : ''}${cap ? `<span class="cap">${cap}</span>` : ''}</div>`;
+$('#ctx1').innerHTML = `<div class="ctx-head"><div></div>${BGS.map(([, l]) => `<div>${l}</div>`).join('')}</div>`
+  + CTX.map(([n, what]) => `<div class="crow"><div class="clabel"><b>${n}</b><span>px</span><em>${what}</em></div>`
+    + BGS.map(([bg]) => `<div class="strip" data-bg="${bg}">${slot('ph-square', n)}${slot('prev', n, 'antes', n === 24 || n === 32)}${slot('new', n, 'ahora', n === 24 || n === 32)}${slot('ph-folder', n)}</div>`).join('') + '</div>').join('')
+  + `<div class="big-row"><div class="bar-row"><div class="clabel" style="padding:0"><b>256</b><span>px</span><em>Explorador, íconos extra grandes</em></div>`
+  + `<div class="seg" data-switch="big1"><button data-v="dark" class="on">Barra oscura</button><button data-v="light">Clara</button><button data-v="wall">Fondo</button></div></div>`
+  + `<div class="big-strip" data-bg="dark" data-group="big1">${slot('ph-square', 256)}${slot('prev', 256, 'antes')}${slot('new', 256, 'ahora')}</div></div>`;
+
+/* ── 01 frames ── */
+const FR = [
+  [16, 12, 'igual', 'Cofre 15×14. El borde ya era de 1 px y queda igual; la línea de contraste baja de 16% a 12%, así el borde se ve más claro.'],
+  [20, 10, '2 → 1 px', 'Cofre 19×18. Borde y costura de 1 px; las cinco barras de 1 px y el candado 5×6 no cambian, ganan aire.'],
+  [24, 8, '2 → 1 px', 'Cofre 22×21, la barra de tareas al 100%. Borde y costura de 1 px, barras de 2 px, candado 6×6 con cerradura.'],
+  [32, 6, '3 → 2 px', 'Cofre 30×29, la barra de tareas al 125%. Borde y costura de 2 px, barras de 2 px.'],
+  [40, 5, '3 → 2 px', 'Cofre 37×36. Borde y costura de 2 px, barras de 3 px con paso de 5. A 150% Windows lo baja a 36.'],
+  [48, 4, '4 → 2 px', 'Cofre 45×43. Borde y costura de 2 px, barras de 3 px, candado 11×12.'],
+  [64, 3, '5 → 3 px', 'Cofre 60×58. Borde y costura de 3 px; desde acá la línea de contraste vuelve al 20%.'],
+];
+$('#frames').innerHTML = FR.map(([n, z, d, t]) => `<figure class="frame"><div class="fz" data-bg="dark" data-group="frames">${cv('new', n, z)}</div>`
+  + `<figcaption><b>${n} px<small>${d}</small></b><span class="f11" data-bg="dark" data-group="frames">${cv('new', n)}</span><p>${t}</p></figcaption></figure>`).join('')
+  + `<figure class="frame wide"><div class="fz" data-bg="dark" data-group="frames">${cv('new', 128)}${cv('new', 256)}</div><figcaption><b>128 y 256 px<small>10,6 → 6,5 px · 21,2 → 12,9 px</small></b><p>La marca escalada en una caja de 240/256 del lienzo, con las proporciones y los radios del logo de la app. Los dos a tamaño real.</p></figcaption></figure>`;
+$('#fwhich').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  $$('#fwhich button').forEach(x => x.classList.toggle('on', x === b));
+  $$('#frames canvas').forEach(c => { c.dataset.k = b.dataset.v; paint(c); });
+});
+
+/* ── 02 matrix ── */
+const DIRS = [['new', 'Implementado', 'borde fino'], ['mono', 'A · Monolínea', 'un solo trazo'], ['satin', 'B · Satinado', 'material'], ['clasp', 'C · Broche', 'proporción']];
+$('#matrix').innerHTML = `<div class="mrow mhead"><div></div>${BGS.map(([, l]) => `<div>${l}</div>`).join('')}</div>`
+  + DIRS.map(([k, name, sub]) => `<div class="mrow"><div class="mname"><b>${name}</b><span>${sub}</span></div>`
+    + BGS.map(([bg]) => `<div class="mcell" data-bg="${bg}">${[16, 24, 32, 48].map(n => cv(k, n)).join('')}</div>`).join('') + '</div>').join('');
+
+/* ── background switches ── */
+$$('[data-switch]').forEach(seg => seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  $$('button', seg).forEach(x => x.classList.toggle('on', x === b));
+  $$(`[data-group="${seg.dataset.switch}"]`).forEach(el => { el.dataset.bg = b.dataset.v; });
+}));
+
+$$('img[data-svg]').forEach(i => { i.src = svgURL(i.dataset.svg); });
+paintAll();
+// the satin icon's blur filters are slow to rasterise: do it once, before any preview needs it
+(window.requestIdleCallback || setTimeout)(() => raster('satin', Math.round(88 * dpr())));
+let lastDpr = dpr();
+window.addEventListener('resize', () => { if (dpr() !== lastDpr) { lastDpr = dpr(); paintAll(); } fitWin(); });
+
+/* ── 04 code blocks: printed from the exact sources used by the preview ── */
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const hl = s => esc(s).replace(/(\/\*[\s\S]*?\*\/|\/\/[^\n]*)/g, '<span class="c">$1</span>');
+$('#code-css').innerHTML = hl($('#css-asentar').textContent.trim());
+$('#code-js').innerHTML = hl($('#js-asentar').textContent.trim());
+
+/* ════ 03: the splash stage ════════════════════════════════════════════ */
+// logo.js, ported as is
+const NS = 'http://www.w3.org/2000/svg';
+const VAULT = [[9.2, 10.3, 1.9, 2.4], [12.3, 9.0, 1.9, 5.0], [15.05, 7.8, 1.9, 7.4], [18.1, 9.5, 1.9, 4.0], [21.2, 10.6, 1.9, 1.8]];
+const SOUND = [[3.2, 11, 3.4, 10], [9.1, 6.5, 3.4, 19], [14.3, 3.5, 3.4, 25], [19.5, 8.5, 3.4, 15], [25.4, 12.5, 3.4, 7]];
+function createMark(mode = 'vault', size = 22) {
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 32 32'); svg.setAttribute('width', size); svg.setAttribute('height', size);
+  svg.setAttribute('class', 'mark'); svg.setAttribute('aria-hidden', 'true');
+  const shell = document.createElementNS(NS, 'g'); shell.setAttribute('class', 'shell');
+  const body = document.createElementNS(NS, 'rect');
+  body.setAttribute('x', '4.15'); body.setAttribute('y', '4.65'); body.setAttribute('width', '23.7'); body.setAttribute('height', '22.7'); body.setAttribute('rx', '5.2');
+  const seam = document.createElementNS(NS, 'path'); seam.setAttribute('d', 'M4.15 19.4h23.7');
+  shell.append(body, seam); svg.appendChild(shell);
+  for (let i = 0; i < 5; i++) { const r = document.createElementNS(NS, 'rect'); r.setAttribute('class', 'bar b' + (i + 1)); svg.appendChild(r); }
+  const lock = document.createElementNS(NS, 'g'); lock.setAttribute('class', 'lock');
+  const plate = document.createElementNS(NS, 'rect'); plate.setAttribute('class', 'plate');
+  plate.setAttribute('x', '12.8'); plate.setAttribute('y', '16.3'); plate.setAttribute('width', '6.4'); plate.setAttribute('height', '7.2'); plate.setAttribute('rx', '1.8');
+  const hole = document.createElementNS(NS, 'path'); hole.setAttribute('class', 'hole');
+  hole.setAttribute('d', 'M16 17.9a1.05 1.05 0 0 1 .62 1.9l.32 1.95h-1.88l.32-1.95A1.05 1.05 0 0 1 16 17.9z');
+  lock.append(plate, hole); svg.appendChild(lock);
+  setMarkMode(svg, mode, false);
+  return svg;
+}
+function setMarkMode(svg, mode, animate = true) {
+  const geo = mode === 'sounds' || mode === 'sound' ? SOUND : VAULT;
+  svg.querySelectorAll('.bar').forEach((r, i) => {
+    if (!animate) r.style.transition = 'none';
+    const [x, y, w, hh] = geo[i];
+    r.style.x = x + 'px'; r.style.y = y + 'px'; r.style.width = w + 'px'; r.style.height = hh + 'px'; r.style.rx = (w / 2) + 'px';
+    if (!animate) { r.getBoundingClientRect(); r.style.transition = ''; }
+  });
+  svg.classList.toggle('sound', geo === SOUND);
+}
+// util.js h(), trimmed
+function h(sel, props = {}, ...kids) {
+  const [tag, ...cls] = sel.split('.');
+  const el = document.createElement(tag || 'div');
+  if (cls.length) el.className = cls.join(' ');
+  for (const [k, v] of Object.entries(props)) { if (v == null) continue; if (k === 'text') el.textContent = v; else if (k === 'html') el.innerHTML = v; else el.setAttribute(k, v); }
+  for (const c of kids.flat()) if (c != null) el.append(c);
+  return el;
+}
+const icon = (name, cls = '') => { const s = document.createElementNS(NS, 'svg'); s.setAttribute('class', 'i ' + cls); s.innerHTML = `<use href="#i-${name}"/>`; return s; };
+
+// mock app: titlebar, sidebar, list and player with the app's own tokens and sizes
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+function wave(w, hgt, n, sd) {
+  seed = sd;
+  const hits = Array.from({ length: 2 + Math.floor(rnd() * 3) }, () => [0.04 + rnd() * 0.72, 0.55 + rnd() * 0.45, 5 + rnd() * 10]);
+  const amp = Array.from({ length: n }, (_, i) => {
+    let a = 0.025 + rnd() * 0.03;
+    for (const [p, g, d] of hits) { const t = i / n - p; if (t >= 0) a += g * Math.exp(-t * d * 5) * (0.72 + rnd() * 0.28); }
+    return Math.min(1, a);
+  });
+  const X = i => (i / (n - 1) * w).toFixed(1), m = hgt / 2;
+  return amp.map((a, i) => `${i ? 'L' : 'M'}${X(i)} ${(m - a * m * .92).toFixed(1)}`).join('') + amp.map((a, i) => [a, i]).reverse().map(([a, i]) => `L${X(i)} ${(m + a * m * .92).toFixed(1)}`).join('') + 'Z';
+}
+const ROWS = [['FS_Gravel_Walk_01.wav', '0:02.4'], ['FS_Gravel_Run_03.wav', '0:01.8'], ['FS_Wood_Creak_Step_02.wav', '0:03.1'], ['FS_Snow_Crunch_05.wav', '0:02.7'], ['FS_Concrete_Heel_01.wav', '0:01.2'], ['FS_Mud_Squelch_04.wav', '0:02.9'], ['FS_Metal_Grate_02.wav', '0:01.6']];
+function buildApp(mode, ids) {
+  const mark = createMark(mode, 22);
+  const word = h('span.word', { text: mode === 'sounds' ? 'Sound' : 'Vault' }), underline = h('span.underline');
+  const brand = h('div.brand', {}, mark, h('span.word-wrap', {}, word, underline));
+  const search = h('div.search', {}, icon('search'), h('span.q', { text: 'Search…' }), h('span.chip', { text: 'Footsteps' }), h('span.chip', {}, icon('resonance', 'xs'), 'Describe'));
+  const capBtn = d => h('span', { html: `<svg viewBox="0 0 10 10">${d}</svg>` });
+  const titlebar = h('header.titlebar', { id: ids ? 'titlebar' : null }, brand, search,
+    h('div.tb-right', {}, h('span.status-pill', {}, h('span.led'), '70,112 sounds'), h('span.icon-btn', {}, icon('gear'))),
+    h('div.wco', {}, capBtn('<path d="M0 5.5h10"/>'), capBtn('<rect x=".5" y=".5" width="9" height="9" rx="1"/>'), capBtn('<path d="M.5.5l9 9M9.5.5l-9 9"/>')));
+  const node = (name, cnt, { depth = 0, open = null, active = false } = {}) => h('div.node' + (active ? '.active' : ''), { style: `padding-left:${6 + depth * 14}px` },
+    h('span.tw' + (open === null ? '.leaf' : ''), {}, icon(open ? 'chev-d' : 'chev-r', 'xs')), icon('folder', 'sm ico'), h('span.name', { text: name }), h('span.cnt', { text: cnt }));
+  const sidebar = h('aside.sidebar', {},
+    h('div.vault-switch', {}, h('span.dot'), h('span.vs-name', { text: 'Main vault' }), h('span.vs-sub', { text: '70,112' })),
+    h('div.sb-head', {}, h('span.sb-title', { text: 'Library' })),
+    h('div.sb-scroll', {}, node('Foley', '12,430', { open: true }), node('Footsteps', '386', { depth: 1, active: true }), node('Cloth', '1,204', { depth: 1 }), node('Impacts', '2,911', { depth: 1 }),
+      node('Ambience', '8,702', { open: false }), node('UI', '3,140', { open: false }), node('Whooshes', '1,877', { open: false }), node('Weapons', '5,066', { open: false }), node('Creatures', '2,318', { open: false })),
+    h('div.sb-foot', {}, icon('folder', 'sm'), h('span', { text: 'D:\\Sounds' })));
+  const rows = ROWS.map(([nm, dur], i) => h('div.row' + (i === 0 ? '.cursor' : ''), {},
+    h('span.pbtn', {}, icon('play')), h('div.meta', {}, h('div.nm', { text: nm }), h('div.rsub', { text: 'Foley/Footsteps · 48 kHz · 24-bit' })),
+    h('div.wf', { html: `<svg viewBox="0 0 300 40" preserveAspectRatio="none"><path d="${wave(300, 40, 150, 11 + i * 97)}" fill="var(--wave)"/></svg>` }),
+    h('span.dur', { text: dur }), h('span.grip', {}, icon('grip', 'sm'))));
+  const main = h('main.main', {}, h('div.panel-head', {}, h('div.crumbs', {}, h('span.crumb', { text: 'Foley' }), h('span.sep', { text: '›' }), h('h1', { text: 'Footsteps' }), h('span.count', { text: '386 sounds' })), h('span.icon-btn', {}, icon('sort'))), h('div.list', {}, rows));
+  const player = h('footer.player', {},
+    h('div.transport', {}, h('span.icon-btn', {}, icon('prev', 'sm')), h('span.big-play', {}, icon('play')), h('span.icon-btn', {}, icon('next', 'sm'))),
+    h('div.now', {}, h('div.t', { text: 'FS_Gravel_Walk_01.wav' }), h('div.p', { text: 'Foley/Footsteps' })),
+    h('div.scrub', {}, h('span.t0', { text: '0:00.0' }), h('div.track', { html: `<svg viewBox="0 0 300 34" preserveAspectRatio="none"><path d="${wave(300, 34, 160, 11)}" fill="var(--wave-rms)" opacity=".7"/></svg>` }), h('span', { text: '0:02.4' })),
+    h('span.icon-btn', {}, icon('volume')));
+  const app = h('div.app', { id: ids ? 'app' : null, 'aria-hidden': 'true' }, titlebar, h('div.app-body', {}, sidebar, main), player);
+  return { app, mark, word, underline };
+}
+
+// Each proposal: mount(ctx) builds the splash; reveal(ctx) is revealApp(), called when the app is ready.
+const P = {};
+P.asentar = {
+  // Mirrors the main.js block of section 04. Only difference: the preview window may be scaled to fit
+  // the page (ctx.k), so the flight distance is divided by it.
+  mount(ctx) {
+    const splash = ctx.splash;
+    const splashMark = createMark('vault', 64);
+    const splashStatus = h('div.status', { text: 'Opening the vault' });
+    splash.append(splashMark, h('div.name', { text: 'SOUNDVAULT' }), splashStatus);
+    Object.assign(ctx, { splashMark, splashStatus });
+    ctx.breathe = ctx.later(() => splashMark.classList.add('breathe'), 1200);
+  },
+  reveal(ctx) {
+    document.getElementById('app').removeAttribute('aria-hidden');
+    const wait = Math.max(0, 700 - (performance.now() - ctx.t0));
+    ctx.later(() => P.asentar.settle(ctx), wait);
+  },
+  settle(ctx) {
+    const { splash, splashMark } = ctx;
+    clearTimeout(ctx.breathe);
+    for (const bar of splashMark.querySelectorAll('.bar')) {
+      const from = getComputedStyle(bar).transform;
+      bar.getAnimations().forEach(a => a.cancel());
+      if (from !== 'none') bar.animate([{ transform: from }, { transform: 'none' }], { duration: 220, easing: 'ease-out' });
+    }
+    splashMark.classList.remove('breathe');
+    splash.classList.add('leaving');
+    const target = document.querySelector('#titlebar .brand .mark');
+    if (!target || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const fade = splash.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, fill: 'forwards' });
+      fade.finished.then(() => { splash.remove(); ctx.done(); });
+      return;
+    }
+    const a = splashMark.getBoundingClientRect(), b = target.getBoundingClientRect(), k = ctx.k;
+    const to = `translate(${(b.left - a.left) / k}px, ${(b.top - a.top) / k}px) scale(${b.width / a.width})`;
+    target.style.visibility = 'hidden';
+    setMarkMode(splashMark, ctx.mode);
+    splashMark.querySelector('.shell').style.strokeWidth = '2.3';
+    splashMark.style.transformOrigin = '0 0';
+    const flight = splashMark.animate([{ transform: 'none' }, { transform: to }],
+      { duration: 600, easing: 'cubic-bezier(.2, 0, 0, 1)', fill: 'forwards' });
+    flight.finished.then(() => { target.style.visibility = ''; splash.remove(); ctx.done(); });
+  },
+};
+
+const kh = (cx, cy, r, nh, ny, bh, by) => `M${cx} ${cy - r}A${r} ${r} 0 0 1 ${cx + nh} ${ny}L${cx + bh} ${by}H${cx - bh}L${cx - nh} ${ny}A${r} ${r} 0 0 1 ${cx} ${cy - r}Z`;
+const MONO = [10, 13, 16, 19, 22].map((c, i) => { const w = .9, hh = [2.6, 5.2, 7.6, 4.2, 2.0][i]; return [c - w / 2, 11.5 - hh / 2, w, hh]; });
+P.trazo = {
+  mount(ctx) {
+    const outline = 'M16 4H22.65A5.85 5.85 0 0 1 28.5 9.85V22.15A5.85 5.85 0 0 1 22.65 28H9.35A5.85 5.85 0 0 1 3.5 22.15V9.85A5.85 5.85 0 0 1 9.35 4Z';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 32 32'); svg.setAttribute('class', 'tz pre'); svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = `<g class="tz-frame">`
+      + `<path class="ln o" pathLength="1" d="M16 4H9.35A5.85 5.85 0 0 0 3.5 9.85V22.15A5.85 5.85 0 0 0 9.35 28H16"/>`
+      + `<path class="ln o" pathLength="1" d="M16 4H22.65A5.85 5.85 0 0 1 28.5 9.85V22.15A5.85 5.85 0 0 1 22.65 28H16"/>`
+      + `<path class="ln s" pathLength="1" d="M16 19.4H3.5"/><path class="ln s" pathLength="1" d="M16 19.4H28.5"/>`
+      + `<path class="glint halo" pathLength="1" d="${outline}"/><path class="glint core" pathLength="1" d="${outline}"/></g>`
+      + MONO.map(([x, y, w, hh], i) => `<rect class="bar b${i + 1}" style="--d:${(.58 + i * .05).toFixed(2)}s;x:${x}px;y:${y}px;width:${w}px;height:${hh}px;rx:${w / 2}px"/>`).join('')
+      + `<g class="lock"><rect class="plate" x="13.4" y="16.9" width="5.2" height="6" rx="1.5"/><path class="hole" d="${kh(16, 19.25, .85, .5, 19.95, .75, 21.45)}"/></g>`;
+    ctx.splash.append(svg, h('div.name', { text: 'SOUNDVAULT' }), ctx.splashStatus = h('div.status', { text: 'Opening the vault' }));
+    ctx.tz = svg;
+    requestAnimationFrame(() => requestAnimationFrame(() => svg.classList.remove('pre')));
+    ctx.later(() => svg.classList.add('waiting'), 1400);
+  },
+  reveal(ctx) {
+    ctx.app.removeAttribute('aria-hidden');
+    ctx.later(() => {
+      const svg = ctx.tz;
+      svg.classList.remove('waiting'); svg.classList.add('sound');
+      $$('.bar', svg).forEach((r, i) => { const [x, y, w, hh] = SOUND[i]; Object.assign(r.style, { x: x + 'px', y: y + 'px', width: w + 'px', height: hh + 'px', rx: w / 2 + 'px' }); });
+      ctx.later(() => { ctx.splash.classList.add('gone'); ctx.later(() => { ctx.splash.remove(); ctx.done(); }, 470); }, 380);
+    }, Math.max(0, 950 - (performance.now() - ctx.t0)));
+  },
+};
+P.brillo = {
+  mount(ctx) {
+    const icon = h('canvas.br-icon'), n = Math.round(88 * dpr());
+    raster('satin', n).then(src => { icon.width = icon.height = n; icon.getContext('2d').drawImage(src, 0, 0); });   // one raster, no live SVG filters
+    const br = h('div.br', {}, icon, h('div.br-sheen'), h('div.br-glow'));
+    ctx.splash.append(br, h('div.name', { text: 'SOUNDVAULT' }), ctx.splashStatus = h('div.status', { text: 'Opening the vault' }));
+  },
+  reveal(ctx) {
+    ctx.app.removeAttribute('aria-hidden');
+    ctx.later(() => {
+      ctx.splash.classList.add('unlock');
+      ctx.later(() => { ctx.splash.classList.remove('unlock'); ctx.splash.classList.add('gone'); ctx.later(() => { ctx.splash.remove(); ctx.done(); }, 580); }, 190);
+    }, Math.max(0, 700 - (performance.now() - ctx.t0)));
+  },
+};
+P.hoy = {
+  // the current main.js splash block
+  mount(ctx) {
+    const m = createMark('vault', 96); m.classList.add('thump');
+    ctx.splash.append(m, h('div.name', { text: 'SOUNDVAULT' }), ctx.splashStatus = h('div.status', { text: 'Opening the vault' }));
+    ctx.hoyMark = m;
+  },
+  reveal(ctx) {
+    ctx.app.removeAttribute('aria-hidden');
+    ctx.later(() => {
+      ctx.hoyMark.classList.remove('thump');
+      setMarkMode(ctx.hoyMark, 'sounds');
+      ctx.later(() => { ctx.splash.classList.add('gone'); ctx.later(() => { ctx.splash.remove(); ctx.done(); }, 600); }, 380);
+    }, Math.max(0, 650 - (performance.now() - ctx.t0)));
+  },
+};
+
+const SCEN = { fast: { ready: 450 }, normal: { ready: 1600 }, slow: { ready: 5200, scanning: true } };
+const TL_MAX = 6500;
+const win = $('#win'), winWrap = $('#winWrap');
+let cur = 'asentar', scen = 'fast', run = null;
+function fitWin() { const k = Math.min(1, winWrap.clientWidth / 900); winWrap.style.setProperty('--k', k); win.style.setProperty('--k', k); if (run) run.k = k; }
+const fmt = ms => (ms / 1000).toFixed(2).replace('.', ',') + ' s';
+function start() {
+  if (run) run.stop();
+  fitWin();
+  const timers = [];
+  const ctx = run = {
+    k: Math.min(1, winWrap.clientWidth / 900), mode: $('#soundMode').checked ? 'sounds' : 'vault',
+    later: (fn, ms) => { const t = setTimeout(fn, ms); timers.push(t); return t; },
+    stop() { timers.forEach(clearTimeout); cancelAnimationFrame(ctx.raf); ctx.stopped = true; },
+  };
+  win.replaceChildren();
+  const { app, underline, word } = buildApp(ctx.mode, cur === 'asentar');
+  ctx.app = app;
+  const splash = h('div', cur === 'asentar' ? { id: 'splash', role: 'status' } : { class: 'splash ' + cur });
+  ctx.splash = splash;
+  win.append(app, splash);
+  requestAnimationFrame(() => { underline.style.width = word.offsetWidth - 3 + 'px'; });
+  ctx.t0 = performance.now();
+  P[cur].mount(ctx);
+  const s = SCEN[scen];
+  if (s.scanning) ctx.later(() => { if (ctx.splashStatus) ctx.splashStatus.textContent = 'Scanning your library'; }, 180);
+  ctx.later(() => { ctx.readyAt = performance.now() - ctx.t0; P[cur].reveal(ctx); }, s.ready);
+  ctx.done = () => { ctx.doneAt = performance.now() - ctx.t0; };
+  const tl = $('#tl'), fill = $('.fill', tl), mkR = $('.mk.ready', tl), mkD = $('.mk.done', tl), clock = $('#clock');
+  mkR.style.opacity = mkD.style.opacity = 0;
+  const tick = () => {
+    if (ctx.stopped) return;
+    const t = performance.now() - ctx.t0, end = ctx.doneAt ?? t;
+    fill.style.width = Math.min(100, end / TL_MAX * 100) + '%';
+    if (ctx.readyAt != null) { mkR.style.left = ctx.readyAt / TL_MAX * 100 + '%'; mkR.style.opacity = 1; }
+    if (ctx.doneAt != null) { mkD.style.left = Math.min(100, ctx.doneAt / TL_MAX * 100) + '%'; mkD.style.opacity = 1; }
+    clock.innerHTML = ctx.doneAt != null ? `pantalla de carga <b>${fmt(ctx.doneAt)}</b> · app lista a ${fmt(ctx.readyAt)}` : `<b>${fmt(t)}</b>`;
+    if (ctx.doneAt == null) ctx.raf = requestAnimationFrame(tick);
+  };
+  ctx.raf = requestAnimationFrame(tick);
+}
+function select(p) {
+  cur = p;
+  $$('#props .prop').forEach(b => b.classList.toggle('on', b.dataset.p === p));
+  $('#detail').replaceChildren($(`#d-${p}`).content.cloneNode(true));
+  $('#modeOpt').style.visibility = p === 'asentar' ? '' : 'hidden';
+  start();
+}
+$('#props').addEventListener('click', e => { const b = e.target.closest('.prop'); if (b) select(b.dataset.p); });
+$('#scen').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  scen = b.dataset.s; $$('#scen button').forEach(x => x.classList.toggle('on', x === b)); start();
+});
+$('#replay').addEventListener('click', start);
+$('#soundMode').addEventListener('change', start);
+$('#detail').replaceChildren($('#d-asentar').content.cloneNode(true));
+fitWin();
+// build the idle window right away; play the first run when the stage scrolls into view
+const idle = buildApp('vault', true); win.append(idle.app); idle.app.removeAttribute('aria-hidden');
+requestAnimationFrame(() => { idle.underline.style.width = idle.word.offsetWidth - 3 + 'px'; });
+let played = false;
+// (after the one slow raster, so it never lands in the middle of the first run)
+new IntersectionObserver((ents, obs) => {
+  if (played || !ents.some(e => e.isIntersecting)) return;
+  played = true; obs.disconnect();
+  raster('satin', Math.round(88 * dpr())).then(() => start(), () => start());
+}, { threshold: .45 }).observe($('#winWrap'));
+window.__sv = { t: () => (run && run.t0 ? performance.now() - run.t0 : -1), select, start, setScen: s => { scen = s; $$('#scen button').forEach(x => x.classList.toggle('on', x.dataset.s === s)); } };
+})();
+</script>
+</body>
+</html>

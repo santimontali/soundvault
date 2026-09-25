@@ -129,6 +129,9 @@ Referencias a tests:
 | I4 | Vaults: crear, editar, duplicar, borrar, cambiar. El color del vault es identidad (logo, punto, barra de colección), nunca pinta la interfaz de "peligro" | ✅ |
 | I5 | Resonance: sugerencias para una colección. Una colección mixta (pasos + explosiones) recibe de ambos. Duplicados exactos se muestran una sola vez | ✅ |
 | I6 | `vaults.json` dañado | Se recupera del `.bak` (antes se reemplazaba por un vault vacío y se perdían todas las colecciones) | ✅ test |
+| I7 | Brief del vault: palabras, sonidos de referencia e imágenes se convierten en colecciones sugeridas, cada una con sus candidatos. Un sonido aparece en una sola tarjeta. Lo que no tiene material fuerte en la librería se informa como "sin coincidencia" en vez de inventar una tarjeta floja | ✅ engine test (brief) · **librería real: 10 palabras dan 7 tarjetas en 52 ms, ningún sonido repetido** |
+| I8 | Imagen de referencia: se reconocen conceptos UCS (mar, bosque, sangre, arma sci-fi, magia) que entran al Brief como consultas. Busca también por el código UCS en el nombre del archivo (`AMBSea_...`) y por sinónimos ("tiger" para felinos) | ✅ **librería real, 45 imágenes: una playa da una tarjeta de grabaciones de costa, una portada gore da "blood", "gore splat" y "gore", la de magia 6 tarjetas.** 🟡 Las portadas con mucho texto y el arte abstracto no dan conceptos (a propósito), y a veces aparece uno de más ("leather" en un tigre), que se quita con un clic |
+| I9 | Imágenes compartidas entre vaults: se guardan una vez por contenido y se borran cuando ningún vault las usa | ✅ `VaultStore` test |
 
 ## J. Gestión de archivos
 

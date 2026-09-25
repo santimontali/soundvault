@@ -55,6 +55,21 @@ The UI opens on the persisted library index (no engine wait). In the engine host
 - Fragment query: extracted with ±50 ms of real context. Coarse candidates are the union of the top-250 by z-mean and the top-250 by attack window (150 each for selections of 2.5 s or more). Fine stage: exact sliding cosine with a pruning floor. Score: calibrated against chance for the query length.
 - File query ("more like this"): CLAP neighbours (88% sibling@10 on the real library), with exact duplicates grouped by fingerprint hash.
 
+## Vault Brief (suggested collections)
+- A vault's home is its Brief: words, reference sounds (library paths) and images, stored per vault in `soundvault-vaults.json` (`brief`); images are content-addressed files in `%APPDATA%\soundvault\brief\` shared between vaults and deleted when no vault uses them.
+- `brief:suggest` (main) turns the brief into queries: each word (plus the files whose NAME matches it, cached per library version), each image concept, each reference sound. `SemanticEngine.brief()` then:
+  - embeds text queries with CLAP (the vault description adds a light context) and uses reference sounds' own vectors;
+  - keeps only results above the calibrated floor that search uses, rescaled per query so text and sound queries compare;
+  - merges only near-synonymous queries (vector similarity above 0.9) into one card, gives each sound to the one card where it ranks best, and drops cards without a strong top 8 or a few well-matching named files (reported as `unmatched`);
+  - diversifies each card (MMR, near-duplicates, one take per folder at a time).
+- Measured on the real 70k library: a 10-word brief gives 7 cards in 52 ms (338 ms the first time, while the words are embedded), no sound in two cards.
+- Image understanding: a picture becomes UCS concepts ("seaside", "blood", "sci-fi weapon") that enter the brief as queries.
+  - Model: SigLIP 2 ViT-B/16 image encoder (int8; `scripts/prepare-image-model.js` turns its patch embedding into a float Conv because ORT 1.14 lacks signed-int8 ConvInteger). It runs in the engine host, loads on the first image and is released after 2 idle minutes (~200 MB of RAM). The renderer squashes the picture to 224×224 RGB, as SigLIP's processor does, and sends those pixels with the image; main stores the concepts on it.
+  - Vocabulary: the 753 UCS v8.2.1 subcategories, embedded offline with SigLIP's text encoder (`scripts/build-image-vocabulary.js`), so only the image half ships. Each concept keeps its distinctive UCS synonyms ("tiger", "lion" for wild cats).
+  - Selection (`ImageConcepts.concepts`): each concept's z-score within the picture. Nothing when the best z is under 3.2 (logos, abstract art, flat colour, covers that are mostly lettering); otherwise up to 6 above max(2.8, best minus 1.8), one per material (the picture shows paper, not whether it rips) and three per other category. Production-only entries (PFX, trademarked, designed) and echoes of an animal or a person in other categories ("animal bell") never count. About 130 ms per picture, 0.7 s for the first.
+  - Queries: CLAP hears the concept's label; the files named for it lift the ranking: UCS CatID prefix ("AMBSea_...") and label count as evidence, synonyms in the name or folder only lift. A concept was not typed by anyone, so its card needs firmer ground: 5 exactly named files that also sound right, or a top-8 strength of 0.58 (0.52 for words).
+  - Measured on the real 70k library with 45 pictures: a beach gives a "seaside" card of rock-pool and shore recordings; a gore cover "blood", "gore splat" and "gore"; a magic cover six cards (magic, spell, sci-fi); a mountain lake "lakeside", while "tundra" and "alpine" stay unmatched because nothing in the library sounds like them; most abstract wallpapers give no concepts.
+
 ## Invariants worth keeping
 - Nothing heavy runs on Electron's main thread; the renderer never blocks on IPC.
 - Never write to the library except through FileOps (unique names, `COPYFILE_EXCL`, Recycle Bin).

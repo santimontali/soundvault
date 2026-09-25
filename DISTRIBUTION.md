@@ -10,6 +10,19 @@ Cómo generar el instalador y compartirlo. El empaquetado está cubierto por `te
 Copy-Item "node_modules\@xenova\transformers\.cache\Xenova" "build-assets\models\Xenova" -Recurse -Force
 ```
 
+- Modelo de imágenes del Brief (sin él, las imágenes solo aportan su paleta de colores). En `build-assets/vocab-build/`, que también está en `.gitignore`:
+  - `siglip2-base-patch16-224-ONNX/` desde https://huggingface.co/onnx-community/siglip2-base-patch16-224-ONNX: `onnx/vision_model_int8.onnx` (95 MB), `onnx/text_model_int8.onnx` (283 MB), `tokenizer.json`, `tokenizer_config.json`, `special_tokens_map.json`, `config.json` y `preprocessor_config.json`.
+  - `UCS v8.2.1 Full List.xlsx`, la lista de categorías de https://universalcategorysystem.com (dominio público).
+
+  Después, una sola vez:
+
+```powershell
+node scripts/prepare-image-model.js
+node scripts/run-electron-node.js scripts/build-image-vocabulary.js
+```
+
+  El primero adapta el codificador de imagen al ONNX Runtime de la app y lo deja en `build-assets/models/siglip2/` (96 MB). El segundo usa el codificador de texto para calcular los 753 conceptos UCS con sus sinónimos (`concepts.json` y `concepts.f16`, unos 3 min). Al instalador solo viajan el codificador de imagen y el vocabulario; el de texto se usa únicamente para compilar.
+
 ## 2. Comandos
 
 ```powershell
@@ -24,6 +37,7 @@ npm run verify:dist    # valida dist\win-unpacked
 `npm run dist` primero:
 - deja las DLL del runtime de Visual C++ junto a `onnxruntime.dll`,
 - convierte el modelo de texto de CLAP a float16 (`scripts/prepare-models.js`; el FP32 original queda en `build-assets\text_model.fp32.onnx`),
+- revisa el modelo de imágenes (`scripts/prepare-image-model.js --if-needed`: lo prepara si falta o quedó viejo, y corta el build si falta el vocabulario),
 - genera el ícono multi-tamaño (`electron scripts/make-icon.js`).
 
 ## 3. Artefactos (`dist/`)
@@ -32,7 +46,7 @@ npm run verify:dist    # valida dist\win-unpacked
 | `soundvault-<versión>-Setup.exe` | Instalador por usuario (sin permisos de administrador). Accesos directos en Escritorio y Menú Inicio, y desinstalador. **Es el que conviene compartir** |
 | `soundvault-<versión>-x64.zip` | Versión portable: se descomprime y se ejecuta `soundvault.exe`. Reemplaza al `.exe` portable anterior, que re-extraía ~1 GB en %TEMP% en cada arranque (70-166 s) |
 
-La app funciona 100% offline desde el primer arranque. Los modelos van incluidos: audio 117 MB y texto 251 MB en float16, con resultados idénticos a FP32 (coseno ≥ 0,99999) y ~480 MB menos de RAM.
+La app funciona 100% offline desde el primer arranque. Los modelos van incluidos: audio 117 MB y texto 251 MB en float16, con resultados idénticos a FP32 (coseno ≥ 0,99999) y ~480 MB menos de RAM. La comprensión de imágenes (SigLIP 2, 97 MB) se carga recién al analizar una imagen y se libera después de 2 minutos sin uso.
 
 ## 4. En la PC de destino
 1. Ejecutar el Setup. SmartScreen muestra *"Windows protected your PC"* → **More info → Run anyway** (sin certificado de firma; ver §6).
@@ -42,7 +56,7 @@ La app funciona 100% offline desde el primer arranque. Los modelos van incluidos
 
 **Actualizar desde 1.x:** se instala encima y conserva vaults, colecciones y el análisis ya hecho. La primera vez, Echo convierte su tabla al formato nuevo en segundo plano (~1-2 min con 70k archivos). Los ~4.300 archivos que la versión vieja había guardado mal se re-analizan solos.
 
-**Requisitos:** Windows 10/11 x64, ~1,2 GB de espacio, 8 GB de RAM recomendados. No hace falta Node, Python ni el Visual C++ Redistributable.
+**Requisitos:** Windows 10/11 x64, ~1,3 GB de espacio, 8 GB de RAM recomendados. No hace falta Node, Python ni el Visual C++ Redistributable.
 
 ## 5. Datos del usuario
 - Todo queda en `%APPDATA%\soundvault\`. Desinstalar **no** lo borra.
@@ -60,6 +74,8 @@ npm run dist
 ## 7. Notas legales
 - `ffmpeg-static` (GPL) se redistribuye: al publicar la app hay que ofrecer el código fuente de ffmpeg (alcanza con un enlace a https://ffmpeg.org/download.html).
 - Modelo `Xenova/clap-htsat-unfused` (LAION CLAP): revisar la licencia de los pesos para uso comercial.
+- Modelo de imágenes SigLIP 2 (`google/siglip2-base-patch16-224`, exportado por onnx-community): Apache 2.0.
+- Vocabulario de conceptos: UCS v8.2.1 (Universal Category System), dominio público.
 
 ## 8. REAPER (opcional)
 `reaper-scripts/SoundVault_Export.lua` se copia a mano a `%APPDATA%\REAPER\Scripts`. Encuentra la librería leyendo `%APPDATA%\soundvault\soundvault-config.json`; por eso `productName` sigue en minúsculas.
