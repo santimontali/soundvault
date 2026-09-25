@@ -1,14 +1,14 @@
 /**
- * SoundVault — Spectral Fingerprint Engine
+ * SoundVault: Spectral Fingerprint Engine
  * 
  * Pure-JS DSP pipeline for fragment-level audio similarity search.
  * Extracts MFCCs + delta/delta-delta + spectral features from raw PCM audio.
  * Used by Echo Vault (Stage 2) for fine-grained timbral matching.
  * 
  * Features per window (44 floats):
- *   [0..12]   MFCCs (13 coefficients) — static spectral shape
- *   [13..25]  Δ-MFCCs (13 coefficients) — velocity of spectral change
- *   [26..38]  ΔΔ-MFCCs (13 coefficients) — acceleration of spectral change
+ *   [0..12]   MFCCs (13 coefficients), static spectral shape
+ *   [13..25]  Δ-MFCCs (13 coefficients), velocity of spectral change
+ *   [26..38]  ΔΔ-MFCCs (13 coefficients), acceleration of spectral change
  *   [39]      Spectral Centroid (normalized)
  *   [40]      Spectral Flatness
  *   [41]      Spectral Bandwidth (normalized)
@@ -16,7 +16,6 @@
  *   [43]      Zero-Crossing Rate
  */
 
-const zlib = require('zlib');
 
 // ═══════════════════════════════════════════════════════════════════
 //  Constants
@@ -34,32 +33,26 @@ const HALF_FFT = FFT_SIZE / 2 + 1; // 1025 bins
 //  Radix-2 Cooley-Tukey FFT (in-place, iterative)
 // ═══════════════════════════════════════════════════════════════════
 
-// Pre-compute bit-reversal table and twiddle factors for FFT_SIZE
-const _bitRev = new Uint32Array(FFT_SIZE);
-const _twiddleRe = new Float64Array(FFT_SIZE / 2);
-const _twiddleIm = new Float64Array(FFT_SIZE / 2);
-
+// Real FFT of FFT_SIZE through one complex FFT of half the size (even/odd
+// packing), half the work of a full complex transform, identical output.
+const _H = FFT_SIZE / 2;
+const _bitRev = new Uint32Array(_H);
+const _twRe = new Float64Array(_H / 2), _twIm = new Float64Array(_H / 2);
+const _wRe = new Float64Array(_H + 1), _wIm = new Float64Array(_H + 1);
 (function precomputeFFT() {
-    // Bit-reversal permutation
-    const bits = Math.log2(FFT_SIZE);
-    for (let i = 0; i < FFT_SIZE; i++) {
+    const bits = Math.log2(_H);
+    for (let i = 0; i < _H; i++) {
         let rev = 0;
-        for (let b = 0; b < bits; b++) {
-            rev = (rev << 1) | ((i >> b) & 1);
-        }
+        for (let b = 0; b < bits; b++) rev = (rev << 1) | ((i >> b) & 1);
         _bitRev[i] = rev;
     }
-    // Twiddle factors: e^(-j * 2π * k / N) for k = 0..N/2-1
-    for (let k = 0; k < FFT_SIZE / 2; k++) {
-        const angle = -2 * Math.PI * k / FFT_SIZE;
-        _twiddleRe[k] = Math.cos(angle);
-        _twiddleIm[k] = Math.sin(angle);
-    }
+    for (let k = 0; k < _H / 2; k++) { _twRe[k] = Math.cos(-2 * Math.PI * k / _H); _twIm[k] = Math.sin(-2 * Math.PI * k / _H); }
+    for (let k = 0; k <= _H; k++) { _wRe[k] = Math.cos(-2 * Math.PI * k / FFT_SIZE); _wIm[k] = Math.sin(-2 * Math.PI * k / FFT_SIZE); }
 })();
 
 // Reusable buffers for FFT computation (avoid GC pressure)
-const _fftRe = new Float64Array(FFT_SIZE);
-const _fftIm = new Float64Array(FFT_SIZE);
+const _fftRe = new Float64Array(_H);
+const _fftIm = new Float64Array(_H);
 
 /**
  * Compute magnitude spectrum of a windowed frame.
@@ -68,32 +61,32 @@ const _fftIm = new Float64Array(FFT_SIZE);
  * @param {Float64Array} outMag - Output buffer of length HALF_FFT
  */
 function fftMagnitude(frame, outMag) {
-    // Bit-reversal permutation into work buffers
-    for (let i = 0; i < FFT_SIZE; i++) {
-        _fftRe[_bitRev[i]] = frame[i];
-        _fftIm[_bitRev[i]] = 0;
+    for (let n = 0; n < _H; n++) {
+        const j = _bitRev[n];
+        _fftRe[j] = frame[2 * n];
+        _fftIm[j] = frame[2 * n + 1];
     }
-
-    // Iterative butterfly stages
-    for (let size = 2; size <= FFT_SIZE; size *= 2) {
-        const half = size / 2;
-        const step = FFT_SIZE / size;
-        for (let i = 0; i < FFT_SIZE; i += size) {
+    for (let size = 2; size <= _H; size *= 2) {
+        const half = size / 2, step = _H / size;
+        for (let i = 0; i < _H; i += size) {
             for (let j = 0; j < half; j++) {
-                const twIdx = j * step;
-                const tRe = _twiddleRe[twIdx] * _fftRe[i + j + half] - _twiddleIm[twIdx] * _fftIm[i + j + half];
-                const tIm = _twiddleRe[twIdx] * _fftIm[i + j + half] + _twiddleIm[twIdx] * _fftRe[i + j + half];
-                _fftRe[i + j + half] = _fftRe[i + j] - tRe;
-                _fftIm[i + j + half] = _fftIm[i + j] - tIm;
-                _fftRe[i + j] += tRe;
-                _fftIm[i + j] += tIm;
+                const t = j * step, a = i + j, b = a + half;
+                const tRe = _twRe[t] * _fftRe[b] - _twIm[t] * _fftIm[b];
+                const tIm = _twRe[t] * _fftIm[b] + _twIm[t] * _fftRe[b];
+                _fftRe[b] = _fftRe[a] - tRe; _fftIm[b] = _fftIm[a] - tIm;
+                _fftRe[a] += tRe; _fftIm[a] += tIm;
             }
         }
     }
-
-    // Compute magnitude spectrum (first half + Nyquist)
-    for (let i = 0; i < HALF_FFT; i++) {
-        outMag[i] = Math.sqrt(_fftRe[i] * _fftRe[i] + _fftIm[i] * _fftIm[i]);
+    // X[k] = E[k] + W^k·O[k], with E/O recovered from Z[k] and conj(Z[H-k])
+    for (let k = 0; k <= _H; k++) {
+        const k1 = k === _H ? 0 : k, k2 = k === 0 ? 0 : _H - k;
+        const zr = _fftRe[k1], zi = _fftIm[k1], cr = _fftRe[k2], ci = -_fftIm[k2];
+        const er = (zr + cr) * 0.5, ei = (zi + ci) * 0.5;
+        const or = (zi - ci) * 0.5, oi = (cr - zr) * 0.5;
+        const xr = er + _wRe[k] * or - _wIm[k] * oi;
+        const xi = ei + _wRe[k] * oi + _wIm[k] * or;
+        outMag[k] = Math.sqrt(xr * xr + xi * xi);
     }
 }
 
@@ -182,23 +175,8 @@ for (let k = 0; k < N_MFCC; k++) {
 
 class SpectralFingerprinter {
     /**
-     * Extract feature matrix from raw PCM audio.
-     * Features are Z-score normalized per-file (each feature dimension).
-     * Use for runtime query extraction where global stats are not applicable.
-     * 
-     * @param {Float32Array} pcmFloat32 - Mono audio samples
-     * @param {number} [sampleRate=48000] - Sample rate of input
-     * @returns {{ matrix: Float32Array, numWindows: number, windowMs: number, hopMs: number }}
-     */
-    extract(pcmFloat32, sampleRate = SAMPLE_RATE) {
-        const result = this.extractRaw(pcmFloat32, sampleRate);
-        this._normalizeMatrix(result.matrix, result.numWindows);
-        return result;
-    }
-
-    /**
      * Extract RAW feature matrix (no normalization).
-     * Used during indexing — normalization is applied later with global stats.
+     * Used during indexing: normalization is applied later with global stats.
      * 
      * @param {Float32Array} pcmFloat32 - Mono audio samples
      * @param {number} [sampleRate=48000] - Sample rate of input
@@ -340,68 +318,8 @@ class SpectralFingerprinter {
             }
         }
 
-        // NO normalization here — raw features returned
+        // NO normalization here: raw features returned
         return { matrix, numWindows, windowMs: Math.round(FFT_SIZE / SAMPLE_RATE * 1000), hopMs: Math.round(HOP_SIZE / SAMPLE_RATE * 1000) };
-    }
-
-    /**
-     * Compute a compact spectral summary (mean of all windows' features).
-     * Used as a fast coarse filter for short-fragment queries (<1s).
-     * @param {Float32Array} matrix - Feature matrix
-     * @param {number} numWindows - Number of windows
-     * @returns {Float32Array} - 18-D summary vector, L2-normalized
-     */
-    computeSummary(matrix, numWindows) {
-        const summary = new Float32Array(FEATURES_PER_WINDOW);
-        for (let w = 0; w < numWindows; w++) {
-            const off = w * FEATURES_PER_WINDOW;
-            for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
-                summary[d] += matrix[off + d];
-            }
-        }
-        for (let d = 0; d < FEATURES_PER_WINDOW; d++) summary[d] /= numWindows;
-
-        // L2 normalize
-        let sumSq = 0;
-        for (let d = 0; d < FEATURES_PER_WINDOW; d++) sumSq += summary[d] * summary[d];
-        const mag = Math.sqrt(sumSq);
-        if (mag > 0) for (let d = 0; d < FEATURES_PER_WINDOW; d++) summary[d] /= mag;
-
-        return summary;
-    }
-
-    /**
-     * Z-score normalize each feature dimension across all windows in the matrix.
-     * Used for per-file normalization (runtime queries).
-     */
-    _normalizeMatrix(matrix, numWindows) {
-        for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
-            // Compute mean
-            let mean = 0;
-            for (let w = 0; w < numWindows; w++) {
-                mean += matrix[w * FEATURES_PER_WINDOW + d];
-            }
-            mean /= numWindows;
-
-            // Compute std
-            let variance = 0;
-            for (let w = 0; w < numWindows; w++) {
-                const diff = matrix[w * FEATURES_PER_WINDOW + d] - mean;
-                variance += diff * diff;
-            }
-            const std = Math.sqrt(variance / numWindows);
-
-            // Normalize
-            if (std > 1e-10) {
-                for (let w = 0; w < numWindows; w++) {
-                    matrix[w * FEATURES_PER_WINDOW + d] = (matrix[w * FEATURES_PER_WINDOW + d] - mean) / std;
-                }
-            } else {
-                for (let w = 0; w < numWindows; w++) {
-                    matrix[w * FEATURES_PER_WINDOW + d] = 0;
-                }
-            }
-        }
     }
 
     /**
@@ -420,219 +338,6 @@ class SpectralFingerprinter {
         }
         return output;
     }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  Global CMVN — Apply dataset-level normalization
-// ═══════════════════════════════════════════════════════════════════
-
-/**
- * Apply global CMVN normalization to a raw feature matrix in-place.
- * @param {Float32Array} matrix - Raw feature matrix
- * @param {number} numWindows - Number of windows
- * @param {Float32Array} globalMean - 18-D mean vector
- * @param {Float32Array} globalStd - 18-D std vector
- */
-function applyGlobalNorm(matrix, numWindows, globalMean, globalStd) {
-    for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
-        const mean = globalMean[d];
-        const std = globalStd[d];
-        if (std > 1e-10) {
-            for (let w = 0; w < numWindows; w++) {
-                matrix[w * FEATURES_PER_WINDOW + d] = (matrix[w * FEATURES_PER_WINDOW + d] - mean) / std;
-            }
-        } else {
-            for (let w = 0; w < numWindows; w++) {
-                matrix[w * FEATURES_PER_WINDOW + d] = 0;
-            }
-        }
-    }
-}
-
-/**
- * Compute global mean/std from per-file running statistics.
- * Uses Welford's online algorithm accumulated stats.
- * @param {Float64Array} sumPerDim - Running sum per dimension (across ALL windows of ALL files)
- * @param {Float64Array} sumSqPerDim - Running sum-of-squares per dimension
- * @param {number} totalWindows - Total number of windows across all files
- * @returns {{ mean: Float32Array, std: Float32Array }}
- */
-function computeGlobalStats(sumPerDim, sumSqPerDim, totalWindows) {
-    const mean = new Float32Array(FEATURES_PER_WINDOW);
-    const std = new Float32Array(FEATURES_PER_WINDOW);
-    for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
-        mean[d] = sumPerDim[d] / totalWindows;
-        const variance = (sumSqPerDim[d] / totalWindows) - (mean[d] * mean[d]);
-        std[d] = Math.sqrt(Math.max(0, variance));
-    }
-    return { mean, std };
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  Segment Matching — Sliding Window Cosine Similarity
-// ═══════════════════════════════════════════════════════════════════
-
-/**
- * Find the best matching segment within a candidate file's feature matrix.
- * Uses sliding window cosine similarity (averaged across query windows).
- * 
- * @param {Float32Array} queryMatrix - Query feature matrix
- * @param {number} queryLen - Number of windows in query
- * @param {Float32Array} fileMatrix - Candidate file feature matrix
- * @param {number} fileLen - Number of windows in candidate
- * @param {Float32Array|null} featureWeights - Optional 18-D weight vector
- * @returns {{ score: number, offsetWindows: number }}
- */
-function findBestSegment(queryMatrix, queryLen, fileMatrix, fileLen, featureWeights = null) {
-    const effectiveQueryLen = Math.min(queryLen, fileLen);
-    const maxOffset = Math.max(0, fileLen - effectiveQueryLen);
-
-    let bestScore = -Infinity;
-    let bestOffset = 0;
-
-    // Pre-apply weights to query matrix for speed (avoid per-iteration branching)
-    let weightedQuery = queryMatrix;
-    let useWeights = false;
-    if (featureWeights) {
-        // Check if weights are non-uniform
-        let allOne = true;
-        for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
-            if (featureWeights[d] !== 1) { allOne = false; break; }
-        }
-        if (!allOne) {
-            useWeights = true;
-            weightedQuery = new Float32Array(effectiveQueryLen * FEATURES_PER_WINDOW);
-            for (let w = 0; w < effectiveQueryLen; w++) {
-                const off = w * FEATURES_PER_WINDOW;
-                for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
-                    weightedQuery[off + d] = queryMatrix[off + d] * featureWeights[d];
-                }
-            }
-        }
-    }
-
-    for (let offset = 0; offset <= maxOffset; offset++) {
-        let score = 0;
-        let earlyExit = false;
-
-        for (let w = 0; w < effectiveQueryLen; w++) {
-            const qOff = w * FEATURES_PER_WINDOW;
-            const fOff = (offset + w) * FEATURES_PER_WINDOW;
-
-            let dot = 0, qNorm = 0, fNorm = 0;
-
-            if (useWeights) {
-                for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
-                    const qw = weightedQuery[qOff + d];
-                    const fw = fileMatrix[fOff + d] * featureWeights[d];
-                    dot += qw * fw;
-                    qNorm += qw * qw;
-                    fNorm += fw * fw;
-                }
-            } else {
-                for (let d = 0; d < FEATURES_PER_WINDOW; d++) {
-                    const qVal = queryMatrix[qOff + d];
-                    const fVal = fileMatrix[fOff + d];
-                    dot += qVal * fVal;
-                    qNorm += qVal * qVal;
-                    fNorm += fVal * fVal;
-                }
-            }
-            score += dot / (Math.sqrt(qNorm * fNorm) + 1e-8);
-
-            // ── Early exit: if remaining windows all scored 1.0 (perfect),
-            // would the average still beat bestScore? If not, skip this offset.
-            if (w >= 3 && bestScore > -Infinity) {
-                const windowsDone = w + 1;
-                const windowsLeft = effectiveQueryLen - windowsDone;
-                const optimisticTotal = score + windowsLeft; // max possible remaining (each window ≤ 1.0)
-                const optimisticAvg = optimisticTotal / effectiveQueryLen;
-                if (optimisticAvg <= bestScore) {
-                    earlyExit = true;
-                    break;
-                }
-            }
-        }
-
-        if (!earlyExit) {
-            score /= effectiveQueryLen;
-            if (score > bestScore) {
-                bestScore = score;
-                bestOffset = offset;
-            }
-        }
-    }
-
-    return { score: bestScore, offsetWindows: bestOffset };
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  LRU Feature Cache
-// ═══════════════════════════════════════════════════════════════════
-
-class LRUFeatureCache {
-    /**
-     * @param {number} maxSize - Maximum number of files to cache
-     */
-    constructor(maxSize = 2000) {
-        this.maxSize = maxSize;
-        this._map = new Map();  // path → { matrix, numWindows, summary }
-    }
-
-    get(filePath) {
-        const entry = this._map.get(filePath);
-        if (!entry) return null;
-        // Move to end (most recently used)
-        this._map.delete(filePath);
-        this._map.set(filePath, entry);
-        return entry;
-    }
-
-    set(filePath, data) {
-        if (this._map.has(filePath)) {
-            this._map.delete(filePath);
-        } else if (this._map.size >= this.maxSize) {
-            // Evict least recently used (first key)
-            const firstKey = this._map.keys().next().value;
-            this._map.delete(firstKey);
-        }
-        this._map.set(filePath, data);
-    }
-
-    has(filePath) {
-        return this._map.has(filePath);
-    }
-
-    get size() {
-        return this._map.size;
-    }
-
-    clear() {
-        this._map.clear();
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════
-//  Compression Helpers (for SQLite storage)
-// ═══════════════════════════════════════════════════════════════════
-
-/**
- * Compress a Float32Array feature matrix using zlib.
- * @param {Float32Array} matrix
- * @returns {Buffer}
- */
-function compressMatrix(matrix) {
-    return zlib.deflateSync(Buffer.from(matrix.buffer, matrix.byteOffset, matrix.byteLength), { level: 6 });
-}
-
-/**
- * Decompress a zlib-compressed feature matrix back to Float32Array.
- * @param {Buffer} compressed
- * @returns {Float32Array}
- */
-function decompressMatrix(compressed) {
-    const buf = zlib.inflateSync(compressed);
-    return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -657,11 +362,11 @@ function buildFeatureWeights(axes = {}) {
     for (let i = 1; i < N_MFCC; i++) w[i] = timbre;
 
     // Δ-MFCCs [13..25]: temporal dynamics → transient weight
-    w[13] = energy;         // Δ-MFCC[0] — energy change rate
+    w[13] = energy;         // Δ-MFCC[0], energy change rate
     for (let i = 1; i < N_MFCC; i++) w[N_MFCC + i] = transient;
 
     // ΔΔ-MFCCs [26..38]: acceleration → slightly reduced transient weight
-    w[26] = energy * 0.7;   // ΔΔ-MFCC[0] — energy acceleration
+    w[26] = energy * 0.7;   // ΔΔ-MFCC[0], energy acceleration
     for (let i = 1; i < N_MFCC; i++) w[2 * N_MFCC + i] = transient * 0.7;
 
     // Spectral features [39..43]
@@ -680,15 +385,9 @@ function buildFeatureWeights(axes = {}) {
 
 module.exports = {
     SpectralFingerprinter,
-    LRUFeatureCache,
-    findBestSegment,
-    compressMatrix,
-    decompressMatrix,
     buildFeatureWeights,
-    applyGlobalNorm,
-    computeGlobalStats,
     FEATURES_PER_WINDOW,
     HOP_SIZE,
-    SAMPLE_RATE,
     FFT_SIZE,
+    SAMPLE_RATE,
 };
