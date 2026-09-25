@@ -118,6 +118,21 @@ test('native modules and ffmpeg are unpacked; models ship as extraResources', ()
     assert.ok(JSON.stringify(b.extraResources).includes('build-assets/models'));
 });
 
+test('the image model ships prepared and alone (never the raw downloads or the text encoder)', () => {
+    const models = b.extraResources.find(r => r.from === 'build-assets/models/');
+    assert.ok(models && Array.isArray(models.filter), 'models are copied through an explicit filter');
+    const f = models.filter.join(' ');
+    assert.match(f, /siglip2\/\{vision_model\.onnx,concepts\.json,concepts\.f16/);
+    assert.doesNotMatch(f, /onnx-community|text_model_int8|\*\*\/\*/, 'raw SigLIP downloads or a catch-all would add ~400 MB');
+    for (const k of ['prepack', 'predist']) assert.match(pkg.scripts[k], /prepare-image-model\.js --if-needed/);
+    assert.match(read('src/engine/engine-host.js'), /resourcesPath, 'models', 'siglip2'\)/);
+    assert.match(read('src/main.js'), /resourcesPath, 'models', 'siglip2'\)/);
+    // the image model is loaded on first use, never at startup
+    const ic = read('src/engine/image-concepts.js');
+    const topLevel = ic.split(String.fromCharCode(10)).filter(l => /^(const|let|var) /.test(l));
+    assert.ok(!topLevel.some(l => l.includes("require('onnxruntime-node')")), 'onnxruntime is required at module load');
+});
+
 test('Windows targets: installer + zip (no self-extracting portable), uninstall keeps user data', () => {
     const targets = b.win.target.map(t => (typeof t === 'string' ? t : t.target));
     assert.ok(targets.includes('nsis') && targets.includes('zip'));

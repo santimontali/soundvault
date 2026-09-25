@@ -71,6 +71,11 @@ for (const f of ['config.json', 'preprocessor_config.json', 'tokenizer.json', 't
 ok(mb(path.join(MODEL, 'onnx', 'audio_model.onnx')) > 100, 'audio model bundled');
 const text = mb(path.join(MODEL, 'onnx', 'text_model.onnx'));
 ok(text > 200 && text < 300, `text model bundled as float16 (${text.toFixed(0)} MB)`);
+const IMG = path.join(RES, 'models', 'siglip2');
+const vision = mb(path.join(IMG, 'vision_model.onnx'));
+ok(vision > 80 && vision < 120, `image model bundled (${vision.toFixed(0)} MB)`);
+ok(exists(path.join(IMG, 'concepts.json')) && mb(path.join(IMG, 'concepts.f16')) > 1, 'image vocabulary bundled');
+ok(!exists(path.join(RES, 'models', 'onnx-community')), 'raw image model downloads not shipped');
 
 // ── locales trimmed ────────────────────────────────────────────────────────
 const locales = exists(path.join(DIST, 'locales')) ? fs.readdirSync(path.join(DIST, 'locales')) : [];

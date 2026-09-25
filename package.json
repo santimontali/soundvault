@@ -9,14 +9,14 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "postinstall": "electron-rebuild --only=better-sqlite3",
-    "test": "node --test tests/lexical-search.test.js tests/translate.test.js tests/decode.test.js tests/wav-io.test.js tests/vector-store.test.js tests/echo-core.test.js tests/main-modules.test.js tests/edit-dsp.test.js tests/packaging.test.js",
+    "test": "node --test tests/lexical-search.test.js tests/translate.test.js tests/decode.test.js tests/wav-io.test.js tests/vector-store.test.js tests/echo-core.test.js tests/main-modules.test.js tests/edit-dsp.test.js tests/packaging.test.js tests/style.test.js",
     "test:engine": "node scripts/run-electron-node.js tests/engine.electron.js --hnsw && node scripts/run-electron-node.js tests/clap-fbank.electron.js",
     "test:e2e": "node tests/e2e/run.js --all",
     "icon": "electron scripts/make-icon.js",
     "models": "node scripts/prepare-models.js",
-    "prepack": "node scripts/stage-crt-dlls.js && node scripts/prepare-models.js && electron scripts/make-icon.js",
+    "prepack": "node scripts/stage-crt-dlls.js && node scripts/prepare-models.js && node scripts/prepare-image-model.js --if-needed && electron scripts/make-icon.js",
     "pack": "electron-builder --dir",
-    "predist": "node scripts/stage-crt-dlls.js && node scripts/prepare-models.js && electron scripts/make-icon.js",
+    "predist": "node scripts/stage-crt-dlls.js && node scripts/prepare-models.js && node scripts/prepare-image-model.js --if-needed && electron scripts/make-icon.js",
     "dist": "electron-builder --win",
     "verify:dist": "node scripts/verify-dist.js"
   },
@@ -92,7 +92,11 @@
     "extraResources": [
       {
         "from": "build-assets/models/",
-        "to": "models/"
+        "to": "models/",
+        "filter": [
+          "Xenova/**",
+          "siglip2/{vision_model.onnx,concepts.json,concepts.f16,preprocessor_config.json}"
+        ]
       }
     ],
     "win": {
