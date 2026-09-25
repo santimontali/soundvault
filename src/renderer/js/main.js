@@ -92,7 +92,7 @@ async function boot() {
         else if (r && r.relinked) toast(`${r.relinked.toLocaleString('en-US')} collection item${r.relinked === 1 ? '' : 's'} relinked to the new location`, { icon: 'check' });
     });
     bus.on('library:rescan', () => app.rescan());
-    bus.on('accent', () => { for (const r of list.pool) r.drawnKey = ''; list.refreshAll(); });
+    bus.on('accent', () => list.retint());
     bus.on('settings', s => { if (s && s.accentColor) refreshColors(); });
 
     splashStatus.textContent = libStatus.ready ? 'Opening the vault' : 'Scanning your library';

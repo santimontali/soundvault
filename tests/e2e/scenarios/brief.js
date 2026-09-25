@@ -1,14 +1,20 @@
 'use strict';
 // Vault Brief end to end on the fixture library (real app, isolated userData):
-// the empty Brief, words typed in the real field (trusted keys), suggestions
-// once the catalog is done, Create collection (sidebar + sounds + card gone),
-// Dismiss (still dismissed after reopening the Brief), the Review sheet driven
-// by the keyboard, the "no strong matches" line, a reference from the row
-// menu, images through the paste and drop paths, "Use image colors".
+// the vault's home shows its collections and never suggests on its own (the
+// suggestion and "more" requests are counted in the main process); the calm
+// empty vault; the suggestions opened on demand: words typed in the real field
+// (trusted keys), cards once the catalog is done, Create collection (sidebar,
+// the home's grid, sounds, card gone), Dismiss (still dismissed after reopening
+// the Brief), the Review sheet driven by the keyboard, the "no strong matches"
+// line, a reference from the row menu, images through the paste and drop paths,
+// "Use image colors"; then the collections grid: hiding the suggestions stops
+// them, a card auditions its sounds, "Find more" goes through the review sheet
+// and grows the collection, a click opens it.
 // Screenshots of every state at 1280x800 and a few at 1440x900.
 // The fixture's rain files are near-identical takes, so the engine keeps one of
 // them and fills the card with other rain-like sounds (the dur_* files are
 // rain noise too); other words may legitimately give no card.
+const { ipcMain } = require('electron');
 const { T, checker } = require('../editor-helpers');
 
 const RAINY = /^rain_|^dur_\d+s/i;
@@ -16,6 +22,16 @@ const RAINY = /^rain_|^dur_\d+s/i;
 module.exports = async (ctx) => {
     const { check, done } = checker(ctx);
     const t0 = Date.now();
+
+    // Count the suggestion requests in the main process (nothing may ask unless the user did).
+    const asked = { suggest: 0, more: [] };
+    const H = ipcMain._invokeHandlers;
+    const counting = !!(H && H.get('brief:suggest') && H.get('brief:more'));
+    if (counting) {
+        const s = H.get('brief:suggest'), m = H.get('brief:more');
+        H.set('brief:suggest', (e, ...a) => { asked.suggest++; return s(e, ...a); });
+        H.set('brief:more', (e, ...a) => { asked.more.push((a[0] && a[0].name) || '*'); return m(e, ...a); });
+    } else ctx.log('ipcMain handlers not reachable: request counts are not checked');
 
     // ── helpers ─────────────────────────────────────────────────────────
     const shot = async name => { ctx.wc.invalidate(); await ctx.wait(160); return ctx.shot(name); };
@@ -33,6 +49,8 @@ module.exports = async (ctx) => {
     const typeText = async text => { for (const ch of text) await T.key(ctx, ch === ' ' ? 'Space' : ch); };
     const cards = () => ctx.exec(() => [...document.querySelectorAll('.cards > .card:not(.leaving)')].map(c => ({ key: c.dataset.key, title: c.querySelector('h3').textContent, n: c._card.candidates.length, names: c._card.candidates.map(x => x.name) })));
     const cardBtn = () => (k, a) => { const c = [...document.querySelectorAll('.cards > .card:not(.leaving)')].find(e => e.dataset.key === k); return c && c.querySelector(`[data-act="${a}"]`); };
+    const colCard = () => n => [...document.querySelectorAll('.cols > .col')].find(e => e.dataset.col === n);
+    const grid = () => ctx.exec(() => [...document.querySelectorAll('.cols > .col')].map(c => ({ name: c.dataset.col, count: c.querySelector('.c-count').textContent, rows: c.querySelectorAll('.c-row').length })));
     const until = async (fn, args, ms, label) => {
         const end = Date.now() + ms;
         while (Date.now() < end) {
@@ -50,24 +68,29 @@ module.exports = async (ctx) => {
     await ctx.exec(async () => { (await import('./js/audio/engine.js')).setVolume(0); return true; });
     const autoPlay = await ctx.exec(() => window.sv.settings.get().then(s => !!s.autoPlay));
 
-    // ── 1. A new vault opens on its empty Brief ─────────────────────────
-    const home = await ctx.waitFor(() => document.querySelector('.main.brief-on .ezone') && {
+    // ── 1. A new vault opens on its home: no collections, a calm offer, nothing suggested ──
+    const home = await ctx.waitFor(() => document.querySelector('.main.brief-on .cols-empty:not(.hidden)') && {
         mode: document.querySelector('.brand .word').textContent,
         briefNode: !!document.querySelector('.brief-node.active'),
-        ghosts: document.querySelectorAll('.ghost-cards .gcard').length,
-        examples: [...document.querySelectorAll('.ez-try .ex')].map(b => b.textContent),
+        nodeCount: !!document.querySelector('.brief-node .cnt'),
+        open: document.querySelector('.bv').classList.contains('open'),
+        suggestShown: !!(document.querySelector('.suggest') && document.querySelector('.suggest').offsetParent),
+        toggle: (t => t && { text: t.textContent, expanded: t.getAttribute('aria-expanded') })(document.querySelector('.bhead .suggest-toggle')),
+        emptyActions: [...document.querySelectorAll('.cols-empty .actions .btn')].map(b => b.textContent),
+        moving: document.querySelectorAll('.cols-empty [class*="shim"], .cols-empty .gcard').length,
         header: document.querySelector('.bhead h1').textContent,
         headText: document.querySelector('.bhead').textContent,
-    }, 20000, 'empty brief');
-    check('vault mode opens on the empty Brief', home.mode === 'Vault' && home.briefNode && home.ghosts === 3 && home.examples.length === 3 && !/null|undefined/.test(home.headText), home);
+    }, 20000, 'empty vault home');
+    check('a new vault opens on its home: no collections, "New collection" and "Start from a brief", nothing moving', home.mode === 'Vault' && home.briefNode && !home.open && !home.suggestShown && home.emptyActions.join() === 'New collection,Start from a brief' && home.moving === 0 && !/null|undefined/.test(home.headText), home);
+    check('the Brief node carries no suggestion count, the header offers "Suggest collections"', !home.nodeCount && home.toggle && home.toggle.text === 'Suggest collections' && home.toggle.expanded === 'false', home);
     const leak = await ctx.exec(() => { const w = document.querySelector('.search .words'); return w ? getComputedStyle(w).borderTopWidth : 'none'; });
     check('Brief styles do not leak into the title bar search', leak === '0px' || leak === 'none', leak);
-    await shot('01-empty-brief');
+    await shot('01-empty-vault');
     ctx.win.setContentSize(1440, 900); await ctx.wait(500);
-    await shot('01b-empty-brief-1440');
+    await shot('01b-empty-vault-1440');
     ctx.win.setContentSize(1280, 800); await ctx.wait(500);
 
-    // The one-line description is edited in place.
+    // The one-line description is edited in place (the suggestions stay closed).
     await clickOn('description', () => document.querySelector('.bhead .desc'));
     await ctx.waitFor(() => document.activeElement && document.activeElement.matches('.bhead .desc.editing input'), 3000, 'description editor');
     await typeText('Close, wet, 1890s.');
@@ -79,8 +102,19 @@ module.exports = async (ctx) => {
         return d && shown && { saved: d, shown: shown.textContent };
     }, 5000, 'description saved');
     check('the one-line description is edited in place and saved on the vault', desc.saved === 'Close, wet, 1890s.' && desc.shown === desc.saved, desc);
+    await ctx.wait(1500);
+    if (counting) check('nothing asked Resonance for suggestions while the home was shown', asked.suggest === 0 && asked.more.length === 0, asked);
 
-    // ── 2. Words through the real field (trusted input) ─────────────────
+    // ── 2. Suggestions on demand: the brief opens, words through the real field ──
+    await clickOn('Start from a brief', () => [...document.querySelectorAll('.cols-empty .btn')].find(b => b.textContent === 'Start from a brief'));
+    const opened = await ctx.waitFor(() => document.querySelector('.bv.open .ezone') && {
+        expanded: document.querySelector('.bhead .suggest-toggle').getAttribute('aria-expanded'),
+        text: document.querySelector('.bhead .suggest-toggle').textContent,
+        ghosts: document.querySelectorAll('.ghost-cards .gcard').length,
+        examples: [...document.querySelectorAll('.ez-try .ex')].map(b => b.textContent),
+        compact: !!document.querySelector('.cols-empty.compact'),
+    }, 5000, 'brief opened');
+    check('"Start from a brief" opens the brief with its examples; the toggle reads "Hide suggestions"', opened.expanded === 'true' && opened.text === 'Hide suggestions' && opened.ghosts === 3 && opened.examples.length === 3 && opened.compact, opened);
     await clickOn('words field', () => document.querySelector('.ez-field input'));
     await typeText('rain');
     await T.key(ctx, 'Enter');
@@ -90,7 +124,7 @@ module.exports = async (ctx) => {
     }, 5000, 'first chip');
     check('Enter turns the typed word into a chip and keeps the focus in the field', afterFirst.chips.join() === 'rain' && afterFirst.focused, afterFirst);
     await ctx.wait(500);
-    const early = await ctx.exec(() => ({ sub: document.querySelector('.bv .sec-head .sub').textContent, empty: document.querySelector('.cards-empty').textContent, ghosts: !document.querySelector('.ghost-cards').classList.contains('hidden') }));
+    const early = await ctx.exec(() => ({ sub: document.querySelector('.bv .suggest .sec-head .sub').textContent, empty: document.querySelector('.cards-empty').textContent, ghosts: !document.querySelector('.ghost-cards').classList.contains('hidden') }));
     ctx.log('while the library is analysed:', JSON.stringify(early));
     check('before the library is analysed the Brief waits calmly (no "nothing to suggest")', !/Nothing/.test(early.empty) && !/null/.test(early.sub + early.empty), early);
     await shot('02-first-word');
@@ -122,8 +156,8 @@ module.exports = async (ctx) => {
     let unmatched = await visibleUnmatched();
     ctx.log('unmatched', JSON.stringify(unmatched), 'whoosh card:', list.some(c => c.key === 'w:whoosh'));
     check('every word is a card or listed under "No strong matches yet"', !unmatched.includes('rain') && (list.some(c => c.key === 'w:whoosh') || unmatched.includes('whoosh')), { unmatched });
-    const count0 = await ctx.exec(() => document.querySelector('.brief-node .cnt').textContent);
-    check('the Brief node shows the number of open suggestions', count0 === String(list.length), { count0, cards: list.length });
+    const nodeCount = await ctx.exec(() => ({ cnt: !!document.querySelector('.brief-node .cnt'), text: document.querySelector('.brief-node').textContent }));
+    check('the Brief node still shows no count while suggestions are open', !nodeCount.cnt && nodeCount.text === 'Brief', nodeCount);
 
     // A word the fixture library cannot answer: listed calmly, editable and removable from there.
     await clickOn('words field', () => document.querySelector('.brief .words-in'));
@@ -241,6 +275,8 @@ module.exports = async (ctx) => {
     const rainSounds = await ctx.exec(() => window.sv.collections.sounds('Rain'));
     const rainNames = rainSounds.sounds.map(s => s.name);
     check('Create collection adds "Rain" to the sidebar with the card\'s sounds', before.every(c => c.name !== 'Rain') && rainNames.length === rain.n && +node.count === rain.n && rainNames.every(n => RAINY.test(n)), { node, rainNames });
+    const rainCard = await ctx.waitFor(() => { const c = [...document.querySelectorAll('.cols > .col')].find(e => e.dataset.col === 'Rain'); return c && { count: c.querySelector('.c-count').textContent, rows: [...c.querySelectorAll('.c-row .nm')].map(x => x.textContent), empty: !document.querySelector('.cols-empty:not(.hidden)') }; }, 5000, 'Rain in the grid');
+    check('the new collection shows in the home\'s grid with its first sounds', rainCard.count === `${rain.n} sounds` && rainCard.rows.length === Math.min(3, rain.n) && rainCard.rows[0] === rainNames[0].replace(/\.wav$/i, '') && rainCard.empty, rainCard);
     await ctx.waitFor(() => ![...document.querySelectorAll('.cards > .card:not(.leaving)')].some(c => c.dataset.key === 'w:rain'), 5000, 'rain card gone');
     const toastActs = await ctx.exec(() => [...document.querySelectorAll('.toast')].filter(t => /Created “Rain”/.test(t.textContent)).map(t => [...t.querySelectorAll('.act')].map(a => a.textContent)));
     check('the card is gone and the toast offers Open and Undo', toastActs.length === 1 && toastActs[0].join() === 'Open,Undo', toastActs);
@@ -266,7 +302,8 @@ module.exports = async (ctx) => {
         await settle();
         const again = await cards();
         const st = await ctx.exec(() => window.sv.brief.get());
-        check('a dismissed suggestion stays dismissed after reopening the Brief', !again.some(c => c.key === dismissKey) && st.dismissed.includes(dismissKey) && !again.some(c => c.key === 'w:rain'), { again: again.map(c => c.key), dismissed: st.dismissed, created: st.created });
+        const stillOpen = await ctx.exec(() => document.querySelector('.bv').classList.contains('open'));
+        check('a dismissed suggestion stays dismissed after reopening the Brief (the suggestions stay open this session)', stillOpen && !again.some(c => c.key === dismissKey) && st.dismissed.includes(dismissKey) && !again.some(c => c.key === 'w:rain'), { stillOpen, again: again.map(c => c.key), dismissed: st.dismissed, created: st.created });
     }
 
     // ── 7. Review and create with the keyboard (Ctrl+Enter), then Undo ───
@@ -286,9 +323,9 @@ module.exports = async (ctx) => {
         await ctx.exec(n => { const t = [...document.querySelectorAll('.toast')].find(x => x.textContent.includes(`“${n}”`)); const u = t && [...t.querySelectorAll('.act')].find(a => a.textContent === 'Undo'); if (u) u.click(); return !!u; }, name);
         await until(n => window.sv.collections.list().then(l => !l.some(c => c.name === n)), [name], 8000, 'undo removed the collection').catch(() => null);
         await until(k => [...document.querySelectorAll('.cards > .card:not(.leaving)')].some(c => c.dataset.key === k), [rk], 15000, 'card back after undo').catch(() => null);
-        const back = await ctx.exec(k => ({ card: [...document.querySelectorAll('.cards > .card:not(.leaving)')].some(c => c.dataset.key === k) }), rk);
+        const back = await ctx.exec((k, n) => ({ card: [...document.querySelectorAll('.cards > .card:not(.leaving)')].some(c => c.dataset.key === k), inGrid: [...document.querySelectorAll('.cols > .col')].some(c => c.dataset.col === n) }), rk, name);
         const cols = await ctx.exec(() => window.sv.collections.list());
-        check('Undo removes the collection and brings the suggestion back', back.card && !cols.some(c => c.name === name), { back, cols: cols.map(c => c.name) });
+        check('Undo removes the collection (sidebar and grid) and brings the suggestion back', back.card && !back.inGrid && !cols.some(c => c.name === name), { back, cols: cols.map(c => c.name) });
     }
 
     // ── 8. A reference sound from the row menu ───────────────────────────
@@ -304,7 +341,11 @@ module.exports = async (ctx) => {
     const refToast = await ctx.waitFor(() => { const t = [...document.querySelectorAll('.toast')].find(x => x.textContent.includes('Brief')); return t && t.textContent; }, 4000, 'reference toast');
     check('a toast confirms the reference', /Added “.+” to the .+ Brief/.test(refToast), refToast);
     await clickOn('Brief node', () => document.querySelector('.brief-node'));
-    const tile = await ctx.waitFor(() => { const t = document.querySelector('.brief .tile.snd'); return t && { name: t.querySelector('.s-name').textContent, meta: t.querySelector('.s-meta').textContent }; }, 8000, 'reference tile');
+    // the duration comes with the tile's waveform, which loads once the tile is in view
+    const tileNow = () => { const t = document.querySelector('.brief .tile.snd'); return t && { name: t.querySelector('.s-name').textContent, meta: t.querySelector('.s-meta').textContent }; };
+    await ctx.waitFor(tileNow, 8000, 'reference tile');
+    await center(() => document.querySelector('.brief .tile.snd'));
+    const tile = await ctx.waitFor(`(${tileNow})() && /\\d/.test((${tileNow})().meta) && (${tileNow})()`, 8000, 'reference duration').catch(() => ctx.exec(tileNow));
     check('the reference shows in the Brief with its name and duration', tile.name === refName && /\d/.test(tile.meta), tile);
     await clickOn('reference play', () => document.querySelector('.brief .tile.snd .pb'));
     const refPlaying = await ctx.waitFor(() => !!document.querySelector('.brief .tile.snd .media.playing'), 6000, 'reference playing').catch(() => false);
@@ -351,8 +392,8 @@ module.exports = async (ctx) => {
     const vaultBefore = await ctx.exec(() => window.sv.vaults.list().then(v => v.vaults.find(x => x.id === v.activeVaultId).color));
     await clickOn('Use image colors', () => [...document.querySelectorAll('.bv .palette .btn')].find(b => /Use image colors/.test(b.textContent)));
     const vaultAfter = await until(async b => { const v = await window.sv.vaults.list(); const c = v.vaults.find(x => x.id === v.activeVaultId).color; return c !== b && c; }, [vaultBefore], 5000, 'vault color').catch(() => null);
-    const modeColor = await ctx.exec(() => getComputedStyle(document.documentElement).getPropertyValue('--mode-color').trim());
-    check('"Use image colors" sets the vault color from the moodboard', !!vaultAfter && vaultAfter !== vaultBefore && modeColor.toLowerCase() === vaultAfter.toLowerCase(), { vaultBefore, vaultAfter, modeColor });
+    const colors = await ctx.exec(async () => { const cs = getComputedStyle(document.documentElement); const t = await import('./js/theme.js'); const v = await window.sv.vaults.list(); const c = v.vaults.find(x => x.id === v.activeVaultId).color; return { mode: cs.getPropertyValue('--mode-color').trim(), accent: cs.getPropertyValue('--accent').trim(), legible: t.legible(c), derived: t.vaultAccent(c) }; });
+    check('"Use image colors" sets the vault color from the moodboard, and the interface follows it', !!vaultAfter && vaultAfter !== vaultBefore && colors.mode === colors.legible && colors.accent === colors.derived, { vaultBefore, vaultAfter, colors });
     await ctx.wait(600);
     await settle();
     await ctx.exec(() => { document.querySelector('.bscroll').scrollTop = 0; return true; });
@@ -364,9 +405,71 @@ module.exports = async (ctx) => {
     await shot('08d-brief-1440-bottom');
     ctx.win.setContentSize(1280, 800); await ctx.wait(500);
 
-    // ── 10. Housekeeping: no renderer errors along the way ──────────────
+    // ── 10. Hide the suggestions: the home is the collections, nothing runs unasked ──
+    await clickOn('Hide suggestions', () => document.querySelector('.bhead .suggest-toggle'));
+    await ctx.waitFor(() => !document.querySelector('.bv').classList.contains('open'), 3000, 'suggestions hidden');
+    await ctx.wait(800);
+    const hidden = await ctx.exec(() => ({ shown: !!document.querySelector('.suggest').offsetParent, toggle: document.querySelector('.bhead .suggest-toggle').textContent }));
+    const askedBefore = asked.suggest;
+    await ctx.exec(async () => {
+        const all = await window.sv.library.list({ folder: '' });
+        await window.sv.collections.create('Kicks');
+        await window.sv.collections.add('Kicks', all.filter(x => /kick/i.test(x.name)).slice(0, 5).map(x => x.path));
+        await window.sv.collections.setColor('Kicks', '#f79e6d');
+        await window.sv.collections.create('Empty one');
+        await (await import('./js/actions.js')).refreshCollections();
+        return true;
+    });
+    await ctx.waitFor(() => document.querySelectorAll('.cols > .col').length >= 3, 5000, 'grid updated');
+    await ctx.wait(2000);
+    const g = await grid();
+    check('hidden suggestions stay hidden (the brief is kept), the grid follows the collections', !hidden.shown && hidden.toggle === 'Suggest collections' && g.some(c => c.name === 'Kicks' && c.count === '5 sounds' && c.rows === 3) && g.some(c => c.name === 'Empty one' && c.rows === 0), { hidden, g });
+    if (counting) check('with the suggestions hidden nothing asks for them, even as collections change', asked.suggest === askedBefore, { before: askedBefore, after: asked.suggest });
+    const emptyCard = await ctx.exec(() => { const c = [...document.querySelectorAll('.cols > .col')].find(e => e.dataset.col === 'Empty one'); return { text: c.textContent, find: !!c.querySelector('.find') }; });
+    check('an empty collection says how to fill it (no "Find more")', /No sounds yet/.test(emptyCard.text) && !emptyCard.find && !/null|undefined/.test(emptyCard.text), emptyCard);
+    await shot('09-home-collections');
+    ctx.win.setContentSize(1440, 900); await ctx.wait(600);
+    await shot('09b-home-collections-1440');
+    ctx.win.setContentSize(1280, 800); await ctx.wait(600);
+
+    // ── 11. A collection card: audition, Find more (on demand), open ─────
+    await clickOn('Kicks row', () => [...document.querySelectorAll('.cols > .col')].find(e => e.dataset.col === 'Kicks').querySelector('.c-row'));
+    const colPlaying = await ctx.waitFor(async () => {
+        const { player } = await import('./js/audio/engine.js');
+        const r = document.querySelector('.cols .c-row.playing');
+        return r && player.sound && { row: r.querySelector('.nm').textContent, player: player.sound.name, view: document.querySelector('.main.brief-on') ? 'brief' : 'other' };
+    }, 8000, 'collection row playing');
+    check('a collection card auditions its sounds in place', colPlaying.player.startsWith(colPlaying.row) && colPlaying.view === 'brief', colPlaying);
+    await stopPlayer();
+    const moreBefore = asked.more.length;
+    const rainCount0 = (await ctx.exec(() => window.sv.collections.list())).find(c => c.name === 'Rain').count;
+    await clickOn('Find more', () => [...document.querySelectorAll('.cols > .col')].find(e => e.dataset.col === 'Rain').querySelector('.find'));
+    const sheet = await ctx.waitFor(() => document.querySelector('.rv.open') && document.activeElement && document.activeElement.classList.contains('rv-list') && { title: document.querySelector('.rv-head h3').textContent, rows: document.querySelectorAll('.rv .rr').length, label: document.querySelector('.rv-tools span').textContent, go: document.querySelector('.rv .rv-foot .btn.primary').textContent }, 10000, 'find more sheet').catch(() => null);
+    check('"Find more" asks for that collection only, and the sounds come in the review sheet', !!sheet && sheet.title === 'Rain' && sheet.rows > 0 && sheet.label === 'Suggested additions' && sheet.go === `Add ${sheet.rows} sound${sheet.rows === 1 ? '' : 's'} to Rain` && (!counting || (asked.more.length === moreBefore + 1 && asked.more[asked.more.length - 1] === 'Rain')), { sheet, more: asked.more });
+    // the sheet's waveforms load as they come into view: wait for the visible ones before the picture
+    await ctx.waitFor(() => [...document.querySelectorAll('.rv .rr')].filter(r => { const b = r.getBoundingClientRect(); return b.bottom < innerHeight - 60; }).every(r => r.querySelector('.du').textContent), 10000, 'sheet waveforms').catch(() => null);
+    await shot('10-find-more');
+    let added = 0;
+    if (sheet) {
+        await T.key(ctx, 'Delete');                                  // keep all but the first
+        await T.key(ctx, 'Enter', ['control']);
+        const after = await until(n => window.sv.collections.list().then(l => { const c = l.find(x => x.name === 'Rain'); return c && c.count > n && c.count; }), [rainCount0], 8000, 'sounds added').catch(() => null);
+        added = after ? after - rainCount0 : 0;
+        const countNow = () => { const c = [...document.querySelectorAll('.cols > .col')].find(e => e.dataset.col === 'Rain'); return c && c.querySelector('.c-count').textContent; };
+        const cardCount = await until(want => { const c = [...document.querySelectorAll('.cols > .col')].find(e => e.dataset.col === 'Rain'); return c && c.querySelector('.c-count').textContent === want && want; }, [`${rainCount0 + added} sounds`], 4000, 'card count').catch(() => ctx.exec(countNow));
+        const toastAdd = await ctx.exec(() => [...document.querySelectorAll('.toast')].map(t => t.textContent).find(t => /to Rain/.test(t)) || null);
+        check('confirming adds what was kept, the card and a toast say so', added === sheet.rows - 1 && cardCount === `${rainCount0 + added} sounds` && !!toastAdd, { added, cardCount, toastAdd });
+    }
+    await ctx.wait(400);
+    const rainPos = await center(() => { const c = [...document.querySelectorAll('.cols > .col')].find(e => e.dataset.col === 'Rain'); return c && c.querySelector('.c-count'); });
+    await T.click(ctx, rainPos.x, rainPos.y);
+    const opened2 = await ctx.waitFor(() => !document.querySelector('.main.brief-on') && document.querySelector('.crumbs h1') && { title: document.querySelector('.crumbs h1').textContent, active: !!document.querySelector('.node.active[data-col="Rain"]') }, 8000, 'Rain opened from its card');
+    check('a click on a collection card opens it', opened2.title.endsWith('Rain') && opened2.active, opened2);
+
+    // ── 12. Housekeeping: no renderer errors along the way ──────────────
     const errors = ctx.report.console.filter(m => m.level === 3 || m.level === 'error').map(m => m.message);
     check('no renderer errors', errors.length === 0, errors.slice(0, 5));
+    ctx.log('suggestion requests:', asked.suggest, 'more:', JSON.stringify(asked.more));
     ctx.log('brief scenario took', Math.round((Date.now() - t0) / 1000), 's');
     done();
 };

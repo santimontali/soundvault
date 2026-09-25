@@ -1,16 +1,16 @@
 // App controller: owns the current view, wires list ⇄ player ⇄ panels,
 // global keyboard shortcuts, drops and live updates from the main process.
 import { h, icon, count, stripExt, debounce, isEditableTarget, clamp } from './util.js';
-import { state, bus, activeVault, modeAccent, setView } from './store.js';
+import { state, bus, activeVault, setView } from './store.js';
 import { player, decode } from './audio/engine.js';
 import { peaksFor, dropPeaks } from './audio/peaks.js';
 import { list } from './ui/list.js';
 import { selection, position as positionSelToolbar } from './ui/selection.js';
-import { renderHeader, refreshHeader, sortButton, actionBtn, iconAction, setBanner, renderCollectBar, setEmpty, renderResonance } from './ui/panel.js';
-import { focusSearch, setSearchText, effectiveScope } from './ui/titlebar.js';
+import { renderHeader, refreshHeader, sortButton, actionBtn, iconAction, setBanner, renderCollectBar, setEmpty, renderResonance, setLoading } from './ui/panel.js';
+import { focusSearch, setSearchText, effectiveScope, afterMotion, isMoving } from './ui/titlebar.js';
 import { revealFolder, menuForVaults } from './ui/sidebar.js';
 import { toast, isDialogOpen, pickDialog } from './ui/overlays.js';
-import { initBrief, showBrief, refreshBrief } from './ui/brief.js';
+import { initBrief, showBrief, refreshBrief, openSuggestions } from './ui/brief.js';
 import { refreshColors } from './theme.js';
 import * as A from './actions.js';
 import { dragFiles, dragRegion, prerenderRegion, regionChannels } from './drag.js';
@@ -28,6 +28,11 @@ export async function setSettings(patch) {
 const persistLastState = debounce(() => sv.settings.set({ lastState: { mode: state.mode, folder: state.view.kind === 'folder' ? state.view.folder : (state.lastFolder || ''), collection: state.lastCollection || null } }), 400);
 
 // ── mode ───────────────────────────────────────────────────────────────
+// A mode switch gives the brand morph the frames to itself: colors and the
+// sidebar change at once (cheap), the content area shows a calm stand-in, and
+// the view's data is requested and drawn only once the morph is over
+// (afterMotion). The views below follow that rule for any load started while
+// the mark moves, so a click during the morph cannot stutter it either.
 export async function setMode(mode, { restore = true } = {}) {
     if (mode !== 'vault' && mode !== 'sounds') return;
     const changed = state.mode !== mode;
@@ -43,6 +48,35 @@ export async function setMode(mode, { restore = true } = {}) {
     persistLastState();
 }
 
+/** Enter Sound mode from a view that needs it (locate, a folder from the tree). */
+function enterSounds() {
+    if (state.mode === 'sounds') return;
+    state.mode = 'sounds';
+    selection.clear();
+    refreshColors();
+    bus.emit('mode', 'sounds');
+}
+
+/**
+ * A folder's sounds. Packed on the wire (a long list is cheap to receive) and
+ * rebuilt here; the last one is kept, so going back to it (a mode round trip)
+ * costs one tiny request while the library is unchanged (main's version).
+ */
+let lastList = null;                                  // { key, v, items }
+async function folderItems(rel) {
+    const key = `${rel}\0${state.view.recursive}\0${state.view.sort}`;
+    const known = lastList && lastList.key === key ? lastList.v : undefined;
+    const res = await sv.library.listPacked({ folder: rel, recursive: state.view.recursive, sort: state.view.sort, known });
+    if (res.same && lastList && lastList.key === key) return lastList.items;
+    const paths = res.n ? res.paths.split('\0') : [], out = new Array(res.n);
+    for (let i = 0; i < res.n; i++) {
+        const p = paths[i];
+        out[i] = { path: p, name: p.slice(Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/')) + 1), dir: res.dirs[res.dir[i]], size: res.size[i], mtime: res.mtime[i] };
+    }
+    lastList = { key, v: res.v, items: out };
+    return out;
+}
+
 // ── views ──────────────────────────────────────────────────────────────
 export async function openFolder(rel, { keepScroll = false, cursorPath } = {}) {
     const seq = ++loadSeq;
@@ -51,21 +85,24 @@ export async function openFolder(rel, { keepScroll = false, cursorPath } = {}) {
     if (!keepScroll) setSearchText('');
     renderResonance(null);
     setBanner('missing', null);
-    const items = await sv.library.list({ folder: rel, recursive: state.view.recursive, sort: state.view.sort });
-    if (seq !== loadSeq) return;
-    list.setItems(items, { baseDir: rel, keepScroll, cursorPath });
     const parts = rel ? rel.split('/') : [];
-    renderHeader({
+    const header = n => renderHeader({
         crumbs: [{ label: 'Library', onClick: () => openFolder('') }, ...parts.slice(0, -1).map((p, i) => ({ label: p, onClick: () => openFolder(parts.slice(0, i + 1).join('/')) }))],
         title: parts.length ? parts[parts.length - 1] : 'All sounds',
-        countText: count(items.length, 'sound'),
+        countText: n === null ? '' : count(n, 'sound'),
         actions: [sortButton(), actionBtn('import', 'Import', () => A.importDialog(rel), 'Copy WAV files into this folder')],
     });
+    if (isMoving()) { header(null); setLoading(true); await afterMotion(); if (seq !== loadSeq) return; }
+    const items = await folderItems(rel);
+    if (seq !== loadSeq) return;
+    list.setItems(items, { baseDir: rel, keepScroll, cursorPath });
+    header(items.length);
     setEmpty(!state.library.exists ? libraryMissingEmpty() : {
         icon: 'folder', title: rel ? 'This folder has no sounds' : 'Your library is empty',
         text: 'Drop WAV files or whole folders here, or import them. Files are copied: originals stay where they are, and nothing is ever overwritten.',
         actions: [h('button.btn.primary', { onclick: () => A.importDialog(rel) }, icon('import'), 'Import sounds'), !rel ? h('button.btn', { onclick: () => bus.emit('settings:choose-library') }, icon('folder'), 'Choose another folder') : null],
     });
+    setLoading(false);
     persistLastState();
 }
 
@@ -75,28 +112,33 @@ export async function openCollection(name, { keepScroll = false } = {}) {
     try { const m = JSON.parse(localStorage.getItem('sv.lastCollectionByVault') || '{}'); m[state.vaults.activeVaultId] = name; localStorage.setItem('sv.lastCollectionByVault', JSON.stringify(m)); } catch (e) {}
     setView({ kind: 'collection', collection: name, folder: '', query: '', scope: state.view.scope === 'collection' ? 'collection' : 'auto' });
     if (!keepScroll) setSearchText('');
+    const header = n => {
+        renderHeader({
+            crumbs: [{ label: activeVault()?.name || 'Vault', onClick: () => showVaultHome() }],
+            title: name,
+            countText: n === null ? '' : count(n, 'sound'),
+            actions: [
+                iconAction('collection-plus', collectTarget === name ? 'Collecting into this collection' : 'Collect into this collection', () => setCollectTarget(collectTarget === name ? null : name), 'C'),
+                iconAction('more', 'Collection options', e => A.collectionMenu({ name, x: e.currentTarget.getBoundingClientRect().left, y: e.currentTarget.getBoundingClientRect().bottom + 4 })),
+            ],
+        });
+        const c = state.collections.find(x => x.name === name);
+        if (c && c.color) document.querySelector('.crumbs h1')?.prepend(h('span.dot', { style: { background: c.color, display: 'inline-block', marginRight: '8px', verticalAlign: '2px' } }));
+    };
+    if (isMoving()) { header(null); renderResonance(null); setBanner('missing', null); setLoading(true); await afterMotion(); if (seq !== loadSeq) return; }
     const res = await sv.collections.sounds(name);
     if (seq !== loadSeq) return;
     list.setItems(res.sounds, { baseDir: '', keepScroll });
-    const c = state.collections.find(x => x.name === name);
-    renderHeader({
-        crumbs: [{ label: activeVault()?.name || 'Vault', onClick: () => showVaultHome() }],
-        title: name,
-        countText: count(res.sounds.length, 'sound'),
-        actions: [
-            iconAction('collection-plus', collectTarget === name ? 'Collecting into this collection' : 'Collect into this collection', () => setCollectTarget(collectTarget === name ? null : name), 'C'),
-            iconAction('more', 'Collection options', e => A.collectionMenu({ name, x: e.currentTarget.getBoundingClientRect().left, y: e.currentTarget.getBoundingClientRect().bottom + 4 })),
-        ],
-    });
-    if (c && c.color) document.querySelector('.crumbs h1')?.prepend(h('span.dot', { style: { background: c.color, display: 'inline-block', marginRight: '8px', verticalAlign: '2px' } }));
+    header(res.sounds.length);
     setBanner('missing', res.missing.length ? h('div.banner.warn', {}, icon('warn'), h('span.grow', { text: `${count(res.missing.length, 'sound')} in this collection can’t be found (moved or deleted outside SoundVault).` }),
         h('button.btn.sm', { text: 'Remove missing', onclick: async () => { await sv.collections.removeItems(name, res.missing); await A.refreshCollections(); openCollection(name, { keepScroll: true }); toast('Removed missing sounds'); } })) : null);
     setEmpty({ icon: 'collection', title: 'This collection is empty', text: 'Browse your library in Sound mode and press C, drag sounds onto the collection in the sidebar, or use Echo to find sounds that belong here.', actions: [h('button.btn', { onclick: () => { setCollectTarget(name); setMode('sounds'); } }, icon('collection-plus'), 'Collect from the library')] });
+    setLoading(false);
     persistLastState();
     loadResonance(name);
 }
 
-/** The vault's home is its Brief (it is also where the app reopens next time). */
+/** The vault's home: its collections, and the Brief's suggestions when asked for (it is also where the app reopens next time). */
 function showVaultHome() {
     ++loadSeq;
     state.lastCollection = null;
@@ -105,6 +147,7 @@ function showVaultHome() {
     list.setItems([]);
     renderResonance(null);
     setBanner('missing', null);
+    setLoading(false);
     showBrief();
     persistLastState();
 }
@@ -142,6 +185,11 @@ export async function runSearch({ q, weights = undefined } = {}) {
     const prevKind = state.view.kind;
     if (weights === undefined && query !== state.view.query) state.view.weights = null;
     setView({ kind: 'search', query, scopeUsed: scope, prevKind });
+    const clear = () => actionBtn('x', 'Clear', () => { setSearchText(''); runSearch({ q: '' }); });
+    if (isMoving()) {
+        renderHeader({ crumbs: [{ label: ai ? 'Describe' : 'Search', onClick: () => {} }], title: `“${query}”`, countText: '', actions: [clear()] });
+        setLoading(true); await afterMotion(); if (seq !== loadSeq) return;
+    }
     const opts = { q: query, scope, folder: state.lastFolder || '', collection: state.lastCollection || state.view.collection, limit: 2000 };
     let items = [], words = [], total = 0, note = '';
     const t0 = performance.now();
@@ -168,10 +216,11 @@ export async function runSearch({ q, weights = undefined } = {}) {
         crumbs: [{ label: ai ? 'Describe' : 'Search', onClick: () => {} }],
         title: `“${query}”`,
         countText: `${total > items.length || items.length >= (ai ? 500 : 2000) ? `best ${items.length.toLocaleString('en-US')} of ${total > items.length ? total.toLocaleString('en-US') : items.length.toLocaleString('en-US') + '+'}` : count(items.length, 'result')} ${where}${note ? ' · ' + note : ''} · ${ms} ms`,
-        actions: [actionBtn('x', 'Clear', () => { setSearchText(''); runSearch({ q: '' }); })],
+        actions: [clear()],
     });
     renderResonance(null);
     setBanner('missing', null);
+    setLoading(false);
     setEmpty({ icon: 'search', title: `No sounds match “${query}”`,
         text: ai ? 'Try describing the sound differently (“short metallic hit”, “distant thunder”), or widen the scope.' : state.engine.ready && state.engine.vectors ? 'Nothing in the file names matches. Describe finds sounds by how they sound.' : 'Nothing in the file names matches. Check the spelling or widen the scope.',
         actions: [!ai && state.engine.ready && state.engine.vectors ? h('button.btn.primary', { onclick: () => toggleAI(true) }, icon('resonance'), 'Try Describe') : null, scope !== 'library' ? h('button.btn', { onclick: () => { setView({ scope: 'library' }); runSearch({ q: query }); } }, icon('library'), 'Search entire library') : null] });
@@ -273,7 +322,7 @@ async function saveSelection() {
 // ── locate a sound in its library folder ───────────────────────────────
 export async function locate(item) {
     if (!item || item.external) return;
-    if (state.mode !== 'sounds') { state.mode = 'sounds'; refreshColors(); bus.emit('mode', 'sounds'); }
+    enterSounds();
     const dir = item.dir || '';
     revealFolder(dir);
     await openFolder(dir, { cursorPath: item.path });
@@ -389,11 +438,12 @@ export function wireApp() {
         refreshHeader();
     });
     try { if (localStorage.getItem('sv.sidebar') === '0') document.getElementById('app').classList.add('sidebar-collapsed'); } catch (e) {}
-    bus.on('nav:folder', rel => { if (state.mode !== 'sounds') { state.mode = 'sounds'; refreshColors(); bus.emit('mode', 'sounds'); } openFolder(rel); });
+    bus.on('nav:folder', rel => { enterSounds(); openFolder(rel); });
     bus.on('nav:collection', name => openCollection(name));
-    bus.on('nav:brief', () => {
+    bus.on('nav:brief', opts => {
         if (state.view.query) { setSearchText(''); setView({ query: '' }); bus.emit('search:words', []); }
         state.lastCollection = null;
+        if (opts && opts.suggest) openSuggestions();
         if (state.mode !== 'vault') setMode('vault'); else showVaultHome();
     });
     bus.on('view:sort', sort => { setView({ sort }); setSettings({ sort }); reloadView(false); });

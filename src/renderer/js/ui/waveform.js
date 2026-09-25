@@ -1,25 +1,32 @@
 // Waveform rendering: mirrored filled peak envelope with an RMS core.
 // Canvases are drawn once per (data, size, color), playback progress is a
 // clip-path on a second, accent-colored canvas, so nothing redraws per frame.
+// A played canvas remembers the accent it was drawn with: when the accent
+// changes only the visible ones are re-tinted at once, the others (fully
+// clipped until they play) when they next show progress.
 import { amp } from '../audio/peaks.js';
+import { hexToRgb } from '../util.js';
 
-let palette = null;
-export function refreshPalette() {
-    const cs = getComputedStyle(document.documentElement);
-    const v = n => cs.getPropertyValue(n).trim();
-    const rgb = v('--accent-rgb') || '200, 247, 109';
-    palette = {
-        wave: v('--wave'), rms: v('--wave-rms'), dim: v('--wave-dim'),
-        accentPeak: `rgba(${rgb}, .5)`, accentRms: v('--accent'),
-    };
-    return palette;
+let palette = null, neutrals = null, version = 0;
+/** New accent (theme.js). No style read: the neutral wave colors are constants, read once. */
+export function setPalette(accent) {
+    if (!neutrals) {
+        const cs = getComputedStyle(document.documentElement);
+        neutrals = { wave: cs.getPropertyValue('--wave').trim(), rms: cs.getPropertyValue('--wave-rms').trim(), dim: cs.getPropertyValue('--wave-dim').trim() };
+    }
+    const { r, g, b } = hexToRgb(accent);
+    palette = { ...neutrals, accentPeak: `rgba(${r}, ${g}, ${b}, .5)`, accentRms: accent };
+    version++;
 }
-export const colors = () => palette || refreshPalette();
+export const colors = () => { if (!palette) setPalette('#c8f76d'); return palette; };
 
-/** Ensure the canvas backing store matches its CSS size × DPR. Returns [w, h] in CSS px or null. */
-export function fitCanvas(cv) {
+/**
+ * Ensure the canvas backing store matches its CSS size × DPR. Returns [w, h] in CSS px or null.
+ * `size` ([w, h], already measured) spares the layout read when many canvases are drawn in a row.
+ */
+export function fitCanvas(cv, size = null) {
     const dpr = window.devicePixelRatio || 1;
-    const w = cv.clientWidth, h = cv.clientHeight;
+    const w = size ? size[0] : cv.clientWidth, h = size ? size[1] : cv.clientHeight;
     if (!w || !h) return null;
     const W = Math.round(w * dpr), H = Math.round(h * dpr);
     if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
@@ -37,9 +44,10 @@ export function fitCanvas(cv) {
  *   o.normalize  scale quiet files up (max +18 dB), default true
  *   o.envelope   optional fn(frac) → gain 0..1 (fades preview)
  *   o.gain       linear display gain (editor gain preview)
+ *   o.size       the canvas's CSS size when already known ([w, h])
  */
 export function drawWave(cv, data, o = {}) {
-    const fit = fitCanvas(cv);
+    const fit = fitCanvas(cv, o.size);
     if (!fit) return false;
     const [w, h, c] = fit;
     c.clearRect(0, 0, w, h);
@@ -84,7 +92,18 @@ export function drawWave(cv, data, o = {}) {
 export function drawPair(base, played, data, o = {}) {
     const pal = colors();
     drawWave(base, data, { ...o, peak: pal.wave, rms: pal.rms });
-    if (played) drawWave(played, data, { ...o, peak: pal.accentPeak, rms: pal.accentRms });
+    if (played) drawPlayed(played, data, o);
+}
+
+/** The accent copy alone. */
+export function drawPlayed(played, data, o = {}) {
+    const pal = colors();
+    if (drawWave(played, data, { ...o, peak: pal.accentPeak, rms: pal.accentRms })) played._tint = version;
+}
+
+/** Re-tint a played canvas drawn with an older accent (cheap no-op when current or never drawn). */
+export function retint(played, data, o = {}) {
+    if (played && played._tint !== undefined && played._tint !== version) drawPlayed(played, data, o);
 }
 
 /** Set progress (0..1) on a played canvas via clip-path, no redraw. */

@@ -1,13 +1,14 @@
 // Auditionable sounds outside the virtual list (Brief cards, reference tiles,
 // the review sheet): lazy mini waveforms, play/pause state, playback progress.
 //  • Peaks are requested only when a waveform scrolls into view.
-//  • Canvases are drawn once per size; progress is a clip-path, as in the list.
+//  • Canvases are drawn once per size (hiding and showing a page redraws
+//    nothing); progress is a clip-path, as in the list.
 //  • One rAF loop runs only while something plays.
 import { h, setIcon, formatDuration } from '../util.js';
 import { bus } from '../store.js';
 import { player } from '../audio/engine.js';
 import { peaksFor, requestPeaks } from '../audio/peaks.js';
-import { drawPair, setProgress } from './waveform.js';
+import { drawPair, setProgress, retint } from './waveform.js';
 
 const waves = new Set();            // live .mw elements
 let current = [];                   // .mw elements of the sound that is playing
@@ -24,10 +25,9 @@ const io = new IntersectionObserver(entries => {
 
 const ro = new ResizeObserver(entries => {
     for (const e of entries) {
-        const el = e.target;
-        if (el._pk === undefined || !el.isConnected) continue;
-        const size = el.clientWidth + 'x' + el.clientHeight;
-        if (size !== el._size) draw(el);
+        const el = e.target, w = Math.round(e.contentRect.width), h = Math.round(e.contentRect.height);
+        if (el._pk === undefined || !el.isConnected || !w || !h) continue;   // hidden: keep the pixels
+        if (w + 'x' + h !== el._size) draw(el, [w, h]);
     }
 });
 
@@ -37,6 +37,9 @@ const ro = new ResizeObserver(entries => {
  */
 export function miniWave(item, onPeaks = null) {
     const el = h('span.mw', { 'aria-hidden': 'true' }, h('canvas'), h('canvas.played'));
+    // Small canvases stay on the CPU: painted with the page instead of one GPU layer
+    // each (hundreds of them made every frame's compositing update slow).
+    for (const cv of el.children) cv.getContext('2d', { willReadFrequently: true });
     el._item = item;
     el._onPeaks = onPeaks;
     waves.add(el);
@@ -56,16 +59,30 @@ function load(el) {
     requestPeaks(it).then(d => paint(el, d));
 }
 
+// Peaks arrive in batches: their waves are drawn together on the next frame,
+// every size read first (one layout), so a batch never forces a layout per canvas.
+const queued = new Set();
+let flushing = 0;
 function paint(el, pk) {
     el._pk = pk;
     if (el._onPeaks) { try { el._onPeaks(pk); } catch (e) { console.warn('[audition]', e); } }
-    if (el.isConnected) draw(el);
+    queued.add(el);
+    if (!flushing) flushing = requestAnimationFrame(flush);
 }
 
-function draw(el) {
+function flush() {
+    flushing = 0;
+    const els = [...queued].filter(el => el.isConnected);
+    queued.clear();
+    const sizes = els.map(el => [el.clientWidth, el.clientHeight]);
+    els.forEach((el, i) => draw(el, sizes[i]));
+}
+
+function draw(el, size) {
+    if (!size[0] || !size[1]) return;        // hidden: drawn once it shows (the size observer sees it)
     const [base, played] = el.children;
-    drawPair(base, played, el._pk);
-    el._size = el.clientWidth + 'x' + el.clientHeight;
+    drawPair(base, played, el._pk, { size });
+    el._size = size[0] + 'x' + size[1];
     if (el._item.path === currentPath) progress();
     else setProgress(played, 0);
 }
@@ -79,9 +96,9 @@ export function sweep() {
     current = current.filter(el => el.isConnected);
 }
 
-/** Redraw everything already drawn (accent color changed). */
-export function redrawAll() {
-    for (const el of waves) if (el._pk !== undefined && el.isConnected) draw(el);
+/** The accent changed: the playing sound's copies re-tint now, the others when they play. */
+function retintCurrent() {
+    for (const el of current) if (el._pk !== undefined && el.isConnected) retint(el.children[1], el._pk);
 }
 
 /** Play `item`, or pause / resume it when it is already the current sound. */
@@ -124,6 +141,7 @@ function onState() {
         for (const el of current) setProgress(el.children[1], 0);
         currentPath = path;
         current = path ? [...waves].filter(el => el._item.path === path && el.isConnected) : [];
+        retintCurrent();
     }
     progress();
     if (raf || !(player.playing || player.loading)) return;
@@ -135,4 +153,4 @@ function onState() {
     raf = requestAnimationFrame(tick);
 }
 player.on('state', onState);
-bus.on('accent', redrawAll);
+bus.on('accent', retintCurrent);

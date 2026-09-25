@@ -321,7 +321,7 @@ export async function addBriefRefs(items) {
     const n = Math.min(add.length, room), v = activeVault();
     const where = v ? `the ${v.name} Brief` : 'the Brief';
     toast(n === 1 ? `Added “${stripExt(add[0].name)}” to ${where}` : `Added ${plural(n, 'reference')} to ${where}`,
-        { action: state.view.kind === 'brief' ? undefined : { label: 'Open Brief', onClick: () => bus.emit('nav:brief') } });
+        { action: state.view.kind === 'brief' ? undefined : { label: 'Open Brief', onClick: () => bus.emit('nav:brief', { suggest: true }) } });
 }
 
 // ── row context menu ────────────────────────────────────────────────────

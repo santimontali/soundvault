@@ -219,9 +219,28 @@ ipcMain.handle('library:status', () => libraryStatus());
 ipcMain.handle('library:tree', async () => { if (library.scanning) await library.scanning; return library.tree(); });
 ipcMain.handle('library:list', async (_e, opts = {}) => {
     if (library.scanning) await library.scanning;
+    const packed = !!(opts && opts.packed);
+    // The renderer still holds this list (same library version): nothing to send.
+    if (packed && opts.known === library.version) return { same: true, v: library.version };
     const list = library.list({ folder: str(opts.folder), recursive: opts.recursive !== false, sort: str(opts.sort) || 'name' });
-    return list.map(pub);
+    return packed ? packList(list) : list.map(pub);
 });
+/**
+ * A long list packed as one string plus typed arrays (the renderer rebuilds the
+ * entries; the name is the path's last segment). A 70k library as objects kept
+ * the renderer busy ~0.4 s just receiving them; packed it takes ~20 ms.
+ */
+function packList(list) {
+    const n = list.length, dirs = [], at = new Map(), paths = new Array(n);
+    const dir = new Uint32Array(n), size = new Float64Array(n), mtime = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+        const e = list[i];
+        let k = at.get(e.dir);
+        if (k === undefined) { k = dirs.length; dirs.push(e.dir); at.set(e.dir, k); }
+        paths[i] = e.path; dir[i] = k; size[i] = e.size || 0; mtime[i] = e.mtime || 0;
+    }
+    return { n, paths: paths.join('\0'), dirs, dir, size, mtime, v: library.version };
+}
 /**
  * File-name search. Spanish queries also search their English translation
  * ("pasos grava" → footsteps gravel): libraries are named in English.
@@ -363,6 +382,18 @@ ipcMain.handle('collections:remove', (_e, name) => vaults.deleteCollection(str(n
 ipcMain.handle('collections:set-color', (_e, name, color) => vaults.setCollectionColor(str(name), str(color)));
 ipcMain.handle('collections:add', (_e, name, paths) => vaults.addToCollection(str(name), strArr(paths)));
 ipcMain.handle('collections:remove-items', (_e, name, paths) => vaults.removeFromCollection(str(name), strArr(paths)));
+// The first few sounds of every collection, for the vault's home. Library entries
+// only (no disk access), and no wait for a scan: a card fills in on the next refresh.
+ipcMain.handle('collections:preview', (_e, n) => {
+    const k = Math.max(1, Math.min(8, n | 0 || 3));
+    const out = {};
+    for (const c of vaults.collections()) {
+        const paths = vaults.collectionPaths(c.name) || [], sounds = [];
+        for (let i = 0; i < paths.length && i < 200 && sounds.length < k; i++) { const e = library.get(paths[i]); if (e) sounds.push(pub(e)); }
+        out[c.name] = sounds;
+    }
+    return out;
+});
 ipcMain.handle('collections:sounds', async (_e, name) => {
     if (library.scanning) await library.scanning;
     const paths = vaults.collectionPaths(str(name)) || [];
@@ -564,12 +595,16 @@ ipcMain.handle('brief:suggest', async (_e, opts = {}) => {
     const cards = open.slice(0, max).map(c => ({ ...c, candidates: c.candidates.map(x => { const e = library.get(x.path); return e ? { ...pub(e), score: x.score } : null; }).filter(Boolean) }));
     return { cards, more: (res.more || 0) + open.length - cards.length, unmatched: res.unmatched || [], ms: res.ms };
 });
-ipcMain.handle('brief:more', async () => {
+// More for existing collections: sounds that resonate with what one holds (opts.name),
+// or with each of the first eight. Sounds already anywhere in the vault are left out.
+ipcMain.handle('brief:more', async (_e, opts = {}) => {
     const inVault = new Set(vaults.vaultPaths().map(P.key));
+    const one = opts && typeof opts.name === 'string' ? opts.name : null;
+    const cols = vaults.collections().filter(c => c.count > 0 && (!one || c.name === one));
     const out = [];
-    for (const c of vaults.collections().filter(c => c.count > 0).slice(0, 8)) {
-        const res = await engine.suggest(vaults.collectionPaths(c.name) || [], 16);
-        const suggestions = res.filter(r => !inVault.has(P.key(r.path))).map(r => { const e = library.get(r.path); return e ? { ...pub(e), score: r.score } : null; }).filter(Boolean).slice(0, 12);
+    for (const c of one ? cols : cols.slice(0, 8)) {
+        const res = await engine.suggest(vaults.collectionPaths(c.name) || [], one ? 24 : 16);
+        const suggestions = res.filter(r => !inVault.has(P.key(r.path))).map(r => { const e = library.get(r.path); return e ? { ...pub(e), score: r.score } : null; }).filter(Boolean).slice(0, one ? 16 : 12);
         if (suggestions.length) out.push({ name: c.name, color: c.color, count: c.count, suggestions });
     }
     return { collections: out };

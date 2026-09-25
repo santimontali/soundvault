@@ -3,7 +3,7 @@ import { h, icon, setIcon, formatClock, stripExt, clamp } from '../util.js';
 import { state, bus } from '../store.js';
 import { player, setVolume, getVolume } from '../audio/engine.js';
 import { peaksFor, requestPeaks } from '../audio/peaks.js';
-import { drawPair, setProgress } from './waveform.js';
+import { drawPair, setProgress, retint } from './waveform.js';
 import { relDir } from './list.js';
 
 let els = {}, drawnFor = null, raf = null;
@@ -57,6 +57,7 @@ export function mountPlayerBar(el) {
 
     player.on('state', onState);
     bus.on('settings', renderToggles);
+    bus.on('accent', () => { const pk = player.sound && peaksFor(player.sound.path); if (pk !== undefined) retint(els.played, pk); });
     new ResizeObserver(() => { drawnFor = null; drawScrub(); }).observe(track);
     renderToggles();
     onState();

@@ -22,17 +22,16 @@ export const state = {
         sort: 'name',
         recursive: true,
     },
-    accent: '#c8f76d',
+    accent: '#c8f76d',       // interface accent in effect (theme.js keeps it current)
 };
 
 export function activeVault() {
     return state.vaults.vaults.find(v => v.id === state.vaults.activeVaultId) || state.vaults.vaults[0] || null;
 }
 
-/** Accent in effect: the vault's color in Vault mode, the global accent in Sound mode. */
+/** Accent in effect: derived from the vault's color in Vault mode, the global accent in Sound mode. */
 export function modeAccent() {
-    const v = activeVault();
-    return state.mode === 'vault' && v && v.color ? v.color : (state.settings?.accentColor || '#c8f76d');
+    return state.accent;
 }
 
 export function setView(patch) {

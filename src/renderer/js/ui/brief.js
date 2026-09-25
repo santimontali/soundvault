@@ -1,11 +1,18 @@
-// Vault Brief: the home of a vault. The project described with words,
-// reference sounds and images; Resonance suggests collections from the
-// user's own library, each created in one click or reviewed first.
-//  • Every edit is saved at once and the suggestions refresh (debounced,
-//    stale answers dropped); while waiting the cards shimmer, never a spinner.
+// Vault Brief: the home of a vault. Its collections, each with a few sounds to
+// audition, opening on click and growing on demand ("Find more"); and, only
+// when asked for ("Suggest collections"), the brief: the project described with
+// words, reference sounds and images, from which Resonance suggests collections
+// from the user's own library, each created in one click or reviewed first.
+//  • Nothing is suggested unless asked. The suggestions stay open for the
+//    session; the brief is stored per vault, so closing them loses nothing.
+//  • While open, every edit is saved at once and the suggestions refresh
+//    (debounced, stale answers dropped); while waiting the cards shimmer, never a spinner.
 //  • Images: dropped, pasted (Ctrl+V) or picked; shrunk and encoded here. They
 //    add their colors (the palette) and, when the image model is installed, the
 //    concepts it recognises (chips that pin or go away like words).
+//  • Many collections stay cheap: one small request for their first sounds,
+//    waveforms drawn when they scroll into view, cards off screen not laid out.
+//    A mode switch shows stand-in cards until the brand morph is over.
 import { h, icon, count, stripExt, debounce, throttleRaf, isEditableTarget } from '../util.js';
 import { state, bus, activeVault } from '../store.js';
 import { player } from '../audio/engine.js';
@@ -14,13 +21,15 @@ import { refreshColors } from '../theme.js';
 import { dragFiles } from '../drag.js';
 import { relDir } from './list.js';
 import * as A from '../actions.js';
-import { setBriefCount, markCollection, collectionNode } from './sidebar.js';
+import { markCollection, collectionNode } from './sidebar.js';
+import { afterMotion, isMoving } from './titlebar.js';
 import { miniWave, durationOf, audition, paintPlaying, sweep } from './audition.js';
 import { openReview, closeReview } from './brief-review.js';
 import { prepareImage, pixelsFromDataUrl, bytesFromDataUrl, isImageFile } from '../brief-image.js';
 
 const sv = window.sv;
-const ROWS = 4;                                  // candidates shown on a card
+const ROWS = 4;                                  // candidates shown on a suggestion card
+const COL_ROWS = 3;                              // sounds shown on a collection card
 const MAX_WORDS = 40, MAX_REFS = 24, MAX_IMAGES = 12;
 const FIRST_MAX = 6, MORE_MAX = 12;              // suggestions requested (3 per row)
 const EXAMPLES = ['rainy harbour at night', 'retro arcade UI', 'forest dawn'];
@@ -30,12 +39,14 @@ const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const B = {
     root: null, els: {}, box: null, sugg: null,
     visible: false, vaultId: null,
-    state: null,                                  // BriefState from main
+    open: false,                                  // the suggestions are shown (asked for)
+    state: null,                                  // BriefState from main (loaded when the suggestions open)
     mode: null,                                   // 'empty' | 'box' (what the brief section shows)
     cards: [], more: 0, unmatched: [], status: 'idle', max: FIRST_MAX,
     pending: false, timer: null,
-    seq: 0, updSeq: 0, loadSeq: 0, moreSeq: 0,
-    moreCols: [],
+    seq: 0, updSeq: 0, loadSeq: 0, briefSeq: 0, colSeq: 0,
+    colsSig: null,                                // what the collection grid shows (null: stale)
+    toTop: false,                                 // show the brief from the top next time (asked for from elsewhere)
     busy: new Set(),                              // card keys being created
     shots: [],                                    // images being prepared [{ id, name, url }]
     analysing: new Set(),                         // image ids the model is reading now
@@ -45,11 +56,14 @@ const B = {
     quietUntil: 0,
 };
 let tmpId = 0;
+const openFor = new Set();                        // vaults whose suggestions were opened this session
 
 /** Collections changed elsewhere (sidebar, drag and drop): what the vault holds is excluded from suggestions. */
-const collectionsChanged = debounce(() => { if (B.visible) { scheduleSuggest(0); loadMore(); } }, 600);
+const collectionsChanged = debounce(() => { if (B.visible && B.open) scheduleSuggest(0); }, 600);
 /** The Brief's own changes to collections refresh explicitly; skip the echo of their events. */
 const quiet = () => { B.quietUntil = Date.now() + 2500; };
+/** The grid follows the collections (a burst of changes syncs once). */
+const colsSoon = debounce(() => { if (B.visible) syncCollections(); }, 120);
 
 // ── keys and small helpers ─────────────────────────────────────────────
 const wordKey = w => 'w:' + String(w).toLowerCase();
@@ -94,53 +108,73 @@ function tintFor(card) {
 export function initBrief() {
     engineWas = { ready: state.engine.ready, indexing: state.engine.indexing, model: state.engine.imageModel === 'ready' };
     bus.on('view', v => { if (v.kind !== 'brief') hide(); });
-    bus.on('collections', () => { if (!B.visible) return; paintHeaderFacts(); if (Date.now() > B.quietUntil) collectionsChanged(); });
+    bus.on('collections', () => {
+        if (!B.visible) { B.colsSig = null; return; }
+        paintHeaderFacts();
+        colsSoon();
+        if (Date.now() > B.quietUntil) collectionsChanged();
+    });
     bus.on('vaults', () => { if (B.visible) { paintHeaderFacts(); paintPalette(); } });
     bus.on('sidebar:toggle', () => { if (B.visible && !B.editingDesc) renderHeader(); });
     bus.on('engine', onEngine);
-    bus.on('brief:changed', st => {
-        if (B.visible && st && st.vaultId === B.vaultId) { adopt(st); scheduleSuggest(); } else countSoon();
-    });
-    bus.on('vault:switched', () => { closeReview({ restoreFocus: false }); if (!B.visible) { setBriefCount(null); countSoon(); } });
+    bus.on('brief:changed', st => { if (B.visible && st && st.vaultId === B.vaultId) { adopt(st); scheduleSuggest(); } });
+    bus.on('vault:switched', () => closeReview({ restoreFocus: false }));
     player.on('state', () => { if (B.visible) paintPlaying(B.root); });
     document.addEventListener('paste', onPaste);
     window.addEventListener('resize', throttleRaf(fitStrip));
-    countSoon();
 }
 
-/** Show the Brief of the active vault (the vault's home). */
+/**
+ * Show the home of the active vault. The header comes at once; during a mode
+ * switch the page waits for the brand morph behind stand-in cards (however
+ * many collections it holds, showing them would take the morph's frames).
+ */
 export async function showBrief() {
     mount();
     B.els.main.classList.add('brief-on');
     B.visible = true;
     const vid = state.vaults.activeVaultId;
     if (vid !== B.vaultId) reset(vid);
+    B.open = openFor.has(vid);
     renderHeader();
+    paintOpen();
+    if (B.toTop) { B.els.scroll.scrollTop = 0; B.toTop = false; }
     const seq = ++B.loadSeq;
-    let st = null;
-    try { st = await sv.brief.get(); } catch (e) { console.warn('[brief]', e); }
-    if (seq !== B.loadSeq || !B.visible || !st || st.vaultId !== B.vaultId) return;
-    B.state = st;
-    renderHeader();
-    renderBrief();
-    renderSugg();
-    runSuggest();
-    loadMore();
-    analyseOlderImages();
+    if (state.collections.length && B.colsSig !== colsSig()) B.root.classList.add('cols-loading');
+    const moving = isMoving();
+    B.root.classList.toggle('moving', moving);
+    if (moving) {
+        await afterMotion();
+        if (seq !== B.loadSeq || !B.visible) return;
+        B.root.classList.remove('moving');
+    }
+    await syncCollections();
+    if (seq !== B.loadSeq || !B.visible) return;
+    if (B.open) loadBrief();
+}
+
+/** Open the suggestions with the brief in view (e.g. "Open Brief" after adding a reference); shown with the home when it is not. */
+export function openSuggestions() {
+    openFor.add(state.vaults.activeVaultId);
+    B.toTop = true;
+    if (B.visible && B.vaultId === state.vaults.activeVaultId) { setOpen(true); B.els.scroll.scrollTop = 0; B.toTop = false; }
 }
 
 /** Library or brief changed underneath (files moved, rescans): refresh in place. */
 export async function refreshBrief() {
     if (!B.visible) return;
+    syncCollections();
+    if (!B.open) return;
     const vid = B.vaultId;
     const st = await sv.brief.get().catch(() => null);
-    if (st && sameVault(vid)) { adopt(st); scheduleSuggest(); loadMore(); }
+    if (st && sameVault(vid)) { adopt(st); scheduleSuggest(); }
 }
 
 function hide() {
     if (!B.visible) return;
     B.visible = false;
     B.els.main.classList.remove('brief-on');
+    B.root.classList.remove('moving');
     closeReview({ restoreFocus: false });
 }
 
@@ -148,15 +182,61 @@ function reset(vid) {
     B.vaultId = vid;
     B.state = null; B.mode = null;
     B.cards = []; B.more = 0; B.unmatched = []; B.status = 'idle'; B.max = FIRST_MAX;
-    B.moreCols = []; B.shots = []; B.busy.clear(); B.analysing.clear();
-    B.seq++; B.updSeq++; B.moreSeq++;
+    B.shots = []; B.busy.clear(); B.analysing.clear();
+    B.seq++; B.updSeq++; B.briefSeq++; B.colSeq++;
+    B.colsSig = null;
     clearTimeout(B.timer); B.timer = null; B.pending = false;
     B.els.secBrief.replaceChildren();
     B.sugg.cards.replaceChildren();
-    B.els.secMore.replaceChildren();
+    B.els.cols.replaceChildren();
     B.els.scroll.scrollTop = 0;
     closeReview({ restoreFocus: false });
     sweep();
+}
+
+// ── suggestions: shown only when asked for ─────────────────────────────
+function setOpen(on) {
+    if (on === B.open) return;
+    B.open = on;
+    if (on) openFor.add(B.vaultId); else openFor.delete(B.vaultId);
+    paintOpen(!reduced());
+    if (on) { B.els.scroll.scrollTo({ top: 0, behavior: reduced() ? 'auto' : 'smooth' }); loadBrief(); }
+    else {
+        B.seq++; B.briefSeq++;                     // answers still on their way are dropped
+        clearTimeout(B.timer); B.timer = null; B.pending = false;
+        closeReview({ restoreFocus: false });
+    }
+}
+
+/** The panel and the header's toggle follow B.open. */
+function paintOpen(anim = false) {
+    B.root.classList.toggle('open', B.open);
+    const t = B.els.head.querySelector('.suggest-toggle');
+    if (t) paintToggle(t);
+    if (anim && B.open) { B.els.suggest.classList.remove('in'); void B.els.suggest.offsetWidth; B.els.suggest.classList.add('in'); }
+    if (B.visible) paintCols();                   // the empty vault offers the brief only while it is closed
+}
+
+function paintToggle(t) {
+    t.classList.toggle('on', B.open);
+    t.setAttribute('aria-expanded', String(B.open));
+    t.replaceChildren(icon('resonance'), B.open ? 'Hide suggestions' : 'Suggest collections');
+    t.dataset.tip = B.open ? 'The brief stays saved with the vault' : 'Describe the project and get collections from your library';
+}
+
+/** The brief of this vault, then its suggestions. */
+async function loadBrief() {
+    const seq = ++B.briefSeq, vid = B.vaultId;
+    let st = null;
+    try { st = await sv.brief.get(); } catch (e) { console.warn('[brief]', e); }
+    if (seq !== B.briefSeq || !B.visible || !B.open || !st || !sameVault(vid) || st.vaultId !== B.vaultId) return;
+    const prev = B.state;
+    B.state = st;
+    if (!B.editingDesc && (!prev || prev.name !== st.name || prev.description !== st.description)) renderHeader();
+    renderBrief();
+    renderSugg();
+    runSuggest();
+    analyseOlderImages();
 }
 
 // ── DOM skeleton and delegated events ──────────────────────────────────
@@ -166,22 +246,30 @@ function mount() {
     const head = h('header.bhead');
     const secBrief = h('section.sec', { 'aria-label': 'Brief' });
     const secSugg = h('section.sec', { 'aria-label': 'Suggested collections' });
-    const secMore = h('section.sec', { 'aria-label': 'More for your collections' });
-    const scroll = h('div.bscroll', {}, secBrief, secSugg, secMore);
+    const suggest = h('div.suggest', { id: 'bv-suggest' }, secBrief, secSugg);
+    const cols = h('div.cols', { role: 'list', 'aria-label': 'Collections' });
+    const colsEmpty = h('div.cols-empty');
+    const colSkel = h('div.col-skel', { 'aria-hidden': 'true' }, ...[0, 1, 2, 3, 4, 5].map(i => h('div.sk-col', {},
+        h('i', { style: { width: [42, 55, 36, 48, 30, 51][i] + '%', height: '9px' } }),
+        ...[0, 1, 2].map(k => h('i.sk-ln', { style: { width: [86, 72, 80, 64, 90, 76][(i + k) % 6] + '%' } })))));
+    const secCols = h('section.sec.cols-sec', { 'aria-label': 'Collections' }, h('div.sec-head', {}, h('h2', { text: 'Collections' })), cols, colsEmpty, colSkel);
+    const scroll = h('div.bscroll', {}, suggest, secCols);
     const file = h('input', { type: 'file', accept: 'image/*,.wav', multiple: true, hidden: true, tabindex: '-1', 'aria-hidden': 'true' });
     file.addEventListener('change', () => { const f = [...file.files]; file.value = ''; if (f.length) addFiles(f); });
     B.root = h('div.bv', {}, head, scroll, file);
     main.appendChild(B.root);
-    B.els = { main, head, scroll, secBrief, secSugg, secMore, file };
+    B.els = { main, head, scroll, suggest, secBrief, secSugg, secCols, cols, colsEmpty, file };
     buildSugg();
 
     const root = B.root;
     // Sounds anywhere in the Brief: click / Enter / Space audition, right-click
     // opens the usual sound menu, dragging goes to a DAW or a collection.
+    // A click elsewhere on a collection card opens it.
     root.addEventListener('click', e => {
         const aud = e.target.closest('.aud');
-        if (!aud || !aud._item || e.target.closest('button:not(.pb)')) return;
-        audition(aud._item);
+        if (aud && aud._item && !e.target.closest('button:not(.pb)')) { audition(aud._item); return; }
+        const col = e.target.closest('.col');
+        if (col && !aud && !e.target.closest('button')) bus.emit('nav:collection', col.dataset.col);
     });
     root.addEventListener('keydown', e => {
         const t = e.target;
@@ -201,19 +289,39 @@ function mount() {
         e.preventDefault();
         dragFiles([aud._item]);
     });
-    // Drops: images from Explorer, library sounds (as references), text (as words).
-    let depth = 0;
-    const accepts = e => { const t = [...((e.dataTransfer && e.dataTransfer.types) || [])]; return t.includes('Files') || t.includes('text/plain'); };
+    // Drops. With the suggestions open: images from Explorer, library sounds (as
+    // references), text (as words) go to the brief. Files dropped on a collection
+    // card go into that collection (as on its sidebar node).
+    let depth = 0, overCol = null;
+    const types = e => [...((e.dataTransfer && e.dataTransfer.types) || [])];
+    const accepts = e => B.open ? types(e).includes('Files') || types(e).includes('text/plain') : types(e).includes('Files');
     const zone = () => B.els.secBrief.firstElementChild;
-    root.addEventListener('dragenter', e => { if (!accepts(e)) return; e.preventDefault(); depth++; zone() && zone().classList.add('over'); });
-    root.addEventListener('dragover', e => { if (!accepts(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
-    root.addEventListener('dragleave', e => { if (!accepts(e)) return; depth = Math.max(0, depth - 1); if (!depth && zone()) zone().classList.remove('over'); });
+    const colAt = e => (e.target.closest ? e.target.closest('.col') : null);
+    const markCol = c => { if (overCol === c) return; if (overCol) overCol.classList.remove('drop-target'); overCol = c; if (c) c.classList.add('drop-target'); };
+    root.addEventListener('dragenter', e => { if (!accepts(e)) return; e.preventDefault(); depth++; if (B.open && zone()) zone().classList.add('over'); });
+    root.addEventListener('dragover', e => {
+        if (!accepts(e)) return;
+        e.preventDefault();
+        const c = types(e).includes('Files') ? colAt(e) : null;
+        markCol(c);
+        if (B.open && zone()) zone().classList.toggle('over', !c);
+        e.dataTransfer.dropEffect = c || B.open ? 'copy' : 'none';
+    });
+    root.addEventListener('dragleave', e => { if (!accepts(e)) return; depth = Math.max(0, depth - 1); if (!depth) { markCol(null); if (zone()) zone().classList.remove('over'); } });
     root.addEventListener('drop', e => {
         if (!accepts(e)) return;
         e.preventDefault();
         depth = 0;
+        const c = overCol;
+        markCol(null);
         if (zone()) zone().classList.remove('over');
         const files = [...e.dataTransfer.files];
+        if (c && files.length) {
+            const paths = files.map(f => sv.pathForFile(f)).filter(Boolean);
+            if (paths.length) bus.emit('drop', { target: { kind: 'collection', name: c.dataset.col }, paths, source: 'tree' });
+            return;
+        }
+        if (!B.open) return;
         if (files.length) { addFiles(files); return; }
         const txt = e.dataTransfer.getData('text/plain');
         if (txt && txt.trim()) addWords(txt);
@@ -230,19 +338,23 @@ function renderHeader() {
     const desc = h('button.desc' + (line ? '' : '.empty'), { 'aria-label': line ? `Description: ${line}. Click to edit` : 'Add a one-line description', title: line.length > 90 ? line : null },
         h('span.dt', { text: line || 'Add a one-line description' }), icon('pencil', 'sm'));
     desc.addEventListener('click', () => editDescription(desc, full));
+    const toggle = h('button.btn.suggest-toggle', { 'aria-controls': 'bv-suggest', onclick: () => setOpen(!B.open) });
+    paintToggle(toggle);
     fill(B.els.head,
         sidebarShown() ? null : h('button.icon-btn.sm.sb-show', { 'data-tip': 'Show sidebar', 'data-kbd': 'Ctrl+B', 'aria-label': 'Show sidebar', onclick: () => bus.emit('sidebar:toggle') }, icon('sidebar')),
-        h('div.id', {}, h('div.l1', {}, h('span.vdot'), h('h1', { text: name, title: name }), h('span.count', { text: count(state.collections.length, 'collection') })), desc),
+        h('div.id', {}, h('div.l1', {}, h('span.vdot', { style: { background: v && v.color ? v.color : 'var(--mode-color)' } }), h('h1', { text: name, title: name }), h('span.count', { text: count(state.collections.length, 'collection') })), desc),
         h('div.head-actions', {},
+            toggle,
             h('button.btn', { onclick: () => A.newCollection() }, icon('plus'), 'New collection'),
             h('button.icon-btn', { 'aria-label': 'Vault options', 'data-tip': 'Vault options', onclick: e => headMenu(e.currentTarget) }, icon('more'))));
 }
 
-/** Name and collection count only (safe while the description is being edited). */
+/** Name, color and collection count only (safe while the description is being edited). */
 function paintHeaderFacts() {
     const v = activeVault();
-    const h1 = B.els.head.querySelector('h1'), c = B.els.head.querySelector('.count');
+    const h1 = B.els.head.querySelector('h1'), c = B.els.head.querySelector('.count'), dot = B.els.head.querySelector('.vdot');
     if (h1 && v) { h1.textContent = v.name; h1.title = v.name; }
+    if (dot && v && v.color) dot.style.background = v.color;
     if (c) c.textContent = count(state.collections.length, 'collection');
 }
 
@@ -261,11 +373,13 @@ function editDescription(btn, full) {
         B.editingDesc = false;
         const val = inp.value.replace(/\s+/g, ' ').trim();
         const vid = B.vaultId;
-        if (save && val !== full.trim() && B.state) {
-            B.state = { ...B.state, description: val };
+        if (save && val !== full.trim()) {
+            if (B.state) B.state = { ...B.state, description: val };
+            const v = activeVault();
+            if (v) v.description = val;           // shown at once; the vault list reloads below
             renderHeader();
             const st = await sv.brief.update({ description: val }).catch(() => null);
-            if (st && sameVault(vid)) adopt(st);
+            if (st && sameVault(vid) && B.state) adopt(st);
             quiet();
             await A.refreshCollections();
             scheduleSuggest();                    // the description tints the suggestions a little
@@ -280,13 +394,13 @@ function editDescription(btn, full) {
 }
 
 function headMenu(anchor) {
-    const st = B.state;
+    const st = B.open ? B.state : null;           // the brief's own actions live with the open suggestions
     const dismissed = st ? st.dismissed.length : 0;
     showMenu(anchor, [
         { label: 'Edit vault…', icon: 'pencil', onClick: () => A.vaultHandlers.edit() },
         dismissed ? { label: `Restore dismissed suggestions (${dismissed})`, icon: 'undo', onClick: () => restoreDismissed() } : null,
-        'sep',
-        { label: 'Clear brief…', icon: 'trash', danger: true, disabled: isEmpty(st), onClick: () => clearBrief() },
+        st ? 'sep' : null,
+        st ? { label: 'Clear brief…', icon: 'trash', danger: true, disabled: isEmpty(st), onClick: () => clearBrief() } : null,
     ]);
 }
 
@@ -592,7 +706,7 @@ function adopt(st, { anim = false } = {}) {
  * per session.
  */
 async function analyseOlderImages() {
-    if (B.analysingRun || !B.state || B.state.imageModel !== 'ready' || typeof sv.brief.analyzeImage !== 'function') return;
+    if (B.analysingRun || !B.open || !B.state || B.state.imageModel !== 'ready' || typeof sv.brief.analyzeImage !== 'function') return;
     B.analysingRun = true;
     try {
         for (;;) {
@@ -824,6 +938,7 @@ function useImageColors() {
 
 // ── suggestions ────────────────────────────────────────────────────────
 function scheduleSuggest(delay = 300) {
+    if (!B.open) return;                          // never in the background
     clearTimeout(B.timer);
     B.pending = true;
     paintPending();
@@ -834,11 +949,10 @@ async function runSuggest() {
     clearTimeout(B.timer);
     B.timer = null;
     const seq = ++B.seq, vid = B.vaultId;
-    if (!B.state) { B.pending = false; return; }
+    if (!B.state || !B.open) { B.pending = false; return; }
     if (!hasQueries(B.state)) {
         Object.assign(B, { pending: false, status: 'empty', cards: [], more: 0, unmatched: [] });
         renderSugg({ animate: true });
-        publishCount();
         return;
     }
     B.pending = true;
@@ -855,7 +969,6 @@ async function runSuggest() {
     else Object.assign(B, { status: 'ready', cards: res.cards || [], more: res.more || 0, unmatched: openUnmatched(res.unmatched || []) });
     renderSugg({ animate: true });
     if (B.box) updateBox();                       // image concepts without matches turn quiet
-    publishCount();
 }
 
 /** Brief items with no strong matches, leaving out the ones already turned into a collection or dismissed. */
@@ -875,21 +988,6 @@ function openUnmatched(titles) {
     });
 }
 
-function publishCount() {
-    setBriefCount(B.status === 'ready' || B.status === 'empty' ? B.cards.length : null);
-}
-
-/** The sidebar count while the Brief is not shown (boot, vault switch, a reference added elsewhere). */
-const countSoon = debounce(async () => {
-    if (B.visible || state.mode !== 'vault' || !state.engine.ready) return;
-    const vid = state.vaults.activeVaultId;
-    const st = await sv.brief.get().catch(() => null);
-    if (!st || B.visible || vid !== state.vaults.activeVaultId) return;
-    if (!hasQueries(st)) { setBriefCount(0); return; }
-    const res = await sv.brief.suggest({ max: FIRST_MAX }).catch(() => null);
-    if (res && !B.visible && vid === state.vaults.activeVaultId) setBriefCount(res.cards && !res.notReady && !res.error ? res.cards.length : null);
-}, 900);
-
 let engineWas = { ready: false, indexing: false, model: false };
 function onEngine(st) {
     const becameReady = st.ready && !engineWas.ready;
@@ -897,10 +995,10 @@ function onEngine(st) {
     const startedIndexing = !engineWas.indexing && st.indexing;
     const model = st.imageModel === 'ready', modelChanged = model !== engineWas.model;
     engineWas = { ready: st.ready, indexing: st.indexing, model };
+    if (!B.visible || !B.open) return;            // nothing runs for suggestions nobody asked for
     // The brief state carries the image model status too: read it again (older images get analysed).
-    if (becameReady || modelChanged) { if (B.visible) refreshBrief(); else countSoon(); return; }
-    if (doneIndexing) { if (B.visible) { scheduleSuggest(0); loadMore(); } else countSoon(); return; }
-    if (!B.visible) return;
+    if (becameReady || modelChanged) { refreshBrief(); return; }
+    if (doneIndexing) { scheduleSuggest(0); return; }
     // While a library is analysed for the first time, suggestions grow with it.
     if (st.indexing && hasQueries(B.state) && !B.pending && Date.now() - (B.lastRun || 0) > 20000) scheduleSuggest(0);
     else if (startedIndexing) renderSugg();
@@ -1059,15 +1157,15 @@ function reasonChip(r) {
     return h('span.wc' + (pinned ? '.pinned' : ''), { 'data-tip': tip }, mark, h('span.l', { text: r.label }));
 }
 
-/** A candidate row: rank, name, mini waveform, duration (+ an optional trailing control). */
-function soundRow(it, i, extra = null) {
+/** A sound row: rank (candidates) or a quiet play glyph (a collection's sounds), name, mini waveform, duration. */
+function soundRow(it, i, ranked = true) {
     const du = h('span.du');
     const name = stripExt(it.name);
-    const row = h('div.c-row.aud', { role: 'button', tabindex: '0', draggable: 'true', title: relDir(it.dir || '', '') || 'Library root', 'aria-label': `Play ${name}` },
-        h('span.pb', { 'aria-hidden': 'true' }, h('span.rank', { text: String(i + 1) }), icon('play', 'play'), icon('pause', 'pause'), h('span.eq', {}, h('i'), h('i'), h('i'))),
+    const row = h('div.c-row.aud' + (ranked ? '' : '.plain'), { role: 'button', tabindex: '0', draggable: 'true', title: relDir(it.dir || '', '') || 'Library root', 'aria-label': `Play ${name}` },
+        h('span.pb', { 'aria-hidden': 'true' }, ranked ? h('span.rank', { text: String(i + 1) }) : null, icon('play', 'play'), icon('pause', 'pause'), h('span.eq', {}, h('i'), h('i'), h('i'))),
         h('span.nm', { text: name }),
         miniWave(it, pk => { du.textContent = durationOf(pk); }),
-        du, extra);
+        du);
     row._item = it;
     return row;
 }
@@ -1156,15 +1254,14 @@ async function createFromCard(card, chosen = null) {
     markCollection(name, 'arriving', false);
     markCollection(name, 'landed', true);
     setTimeout(() => markCollection(name, 'landed', false), 1900);
+    landCol(name);
     syncCards(B.cards, B.visible && !reduced());
-    publishCount();
     B.busy.delete(key);
     toast(`Created “${name}” with ${count(res.added, 'sound')}`, { actions: [
         { label: 'Open', onClick: () => bus.emit('nav:collection', name) },
         { label: 'Undo', onClick: () => undoCreate(vid, name, key) },
     ] });
     scheduleSuggest();
-    loadMore();
 }
 
 async function undoCreate(vid, name, key) {
@@ -1174,7 +1271,7 @@ async function undoCreate(vid, name, key) {
     const st = await sv.brief.update({ created: { [key]: null } }).catch(() => null);
     await A.refreshCollections();
     bus.emit('collection:deleted', name);
-    if (st && sameVault(vid)) { adopt(st); scheduleSuggest(0); loadMore(); } else countSoon();
+    if (st && sameVault(vid)) { adopt(st); scheduleSuggest(0); }
 }
 
 function dismiss(card) {
@@ -1182,7 +1279,6 @@ function dismiss(card) {
     const vid = B.vaultId, key = card.key;
     B.cards = B.cards.filter(c => c.key !== key);
     syncCards(B.cards, B.visible && !reduced());
-    publishCount();
     change({ dismissed: [...B.state.dismissed, key] });
     toast(`Dismissed “${cap(card.title)}”`, { icon: 'info', action: { label: 'Undo', onClick: () => {
         if (sameVault(vid)) change({ dismissed: B.state.dismissed.filter(k => k !== key) });
@@ -1191,7 +1287,7 @@ function dismiss(card) {
 
 const onScreen = el => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight && r.width > 0; };
 
-/** The card (or a More tile) folds into its sidebar node. */
+/** A suggestion card folds into its sidebar node. */
 function fly(fromEl, toEl, col, withSnapshot = true) {
     return new Promise(resolve => {
         const a = fromEl.getBoundingClientRect(), b = toEl.getBoundingClientRect();
@@ -1224,100 +1320,137 @@ function fly(fromEl, toEl, col, withSnapshot = true) {
     });
 }
 
-// ── More for your collections ──────────────────────────────────────────
-async function loadMore() {
-    const seq = ++B.moreSeq, vid = B.vaultId;
-    let res = null;
-    try { res = await sv.brief.more(); } catch (e) { res = null; }
-    if (seq !== B.moreSeq || !sameVault(vid)) return;
-    B.moreCols = ((res && res.collections) || []).filter(c => c.suggestions && c.suggestions.length);
-    renderMore();
-}
+// ── Collections: the vault's own, a few sounds each ────────────────────
+const colsSig = () => state.vaults.activeVaultId + '|' + state.collections.map(c => `${c.name}\u0001${c.color}\u0001${c.count}`).join('\u0002');
+const colSig = (c, sounds) => [c.color, c.count, sounds.map(s => s.path).join('|')].join('/');
+let landing = null;                               // created from a card: it lands in the grid too
 
-function renderMore() {
-    const sec = B.els.secMore;
-    if (!B.moreCols.length) { sec.replaceChildren(); sweep(); return; }
-    sec.replaceChildren(
-        h('div.sec-head', {}, h('h2', { text: 'More for your collections' }), h('span.sub', { text: 'Sounds from your library that resonate with what they already hold' })),
-        h('div.more', {}, ...B.moreCols.map(moreTile)));
+/** Bring the grid in line with the vault's collections: keyed, unchanged cards (and their waveforms) stay. */
+async function syncCollections() {
+    const seq = ++B.colSeq, vid = B.vaultId, sig = colsSig();
+    let pre = null;
+    try { pre = await sv.collections.preview(COL_ROWS); } catch (e) { console.warn('[brief] preview', e); }
+    if (seq !== B.colSeq || !sameVault(vid) || !B.visible) return;
+    const grid = B.els.cols;
+    const live = new Map([...grid.children].map(el => [el.dataset.col, el]));
+    const names = new Set(state.collections.map(c => c.name));
+    for (const [k, el] of live) if (!names.has(k)) el.remove();
+    let at = grid.firstElementChild;
+    for (const c of state.collections) {
+        const sounds = (pre && pre[c.name]) || [];
+        let el = live.get(c.name);
+        if (!el) el = colCard(c, sounds);
+        else if (el._sig !== colSig(c, sounds)) fillCol(el, c, sounds);
+        else el._col = c;
+        if (at !== el) grid.insertBefore(el, at); else at = at.nextElementSibling;
+        if (landing === c.name) land(el);
+    }
     sweep();
-    paintPlaying(sec);
+    paintPlaying(grid);
+    B.colsSig = sig;
+    B.root.classList.remove('cols-loading');
+    paintCols();
 }
 
-function moreTile(col) {
-    const el = h('div.mc', { role: 'group', 'aria-label': `More for ${col.name}` });
-    el._col = col;
-    fillMore(el);
+function colCard(c, sounds) {
+    const el = h('article.col', { role: 'listitem' });
+    el.dataset.col = c.name;
+    fillCol(el, c, sounds);
     return el;
 }
 
-function fillMore(el) {
-    const col = el._col, n = col.suggestions.length;
-    const add = it => h('button.icon-btn.sm.add', { 'aria-label': `Add ${stripExt(it.name)} to ${col.name}`, 'data-tip': `Add to ${col.name}`, onclick: e => { e.stopPropagation(); addToMore(el, [it]); } }, icon('plus', 'sm'));
-    el.replaceChildren(
-        h('div.mc-head', {}, h('span.col-color' + (col.color ? '' : '.none'), { style: col.color ? { background: col.color } : null }), h('span.mc-name', { text: col.name, title: col.name }), h('span.mc-sub', {}, h('b', { text: '+' + n }), ' that resonate')),
-        h('div.c-rows', {}, ...col.suggestions.slice(0, 3).map((it, i) => soundRow(it, i, add(it)))),
-        h('div.c-foot', {},
-            h('button.btn.primary', { 'data-tip': `Adds all ${n} to ${col.name}`, onclick: () => addToMore(el, col.suggestions.slice(), true) }, n > 1 ? `Add all ${n}` : 'Add it'),
-            h('button.btn', { 'data-tip': `Go through all ${n}`, onclick: e => reviewMore(el, e.currentTarget) }, 'Review')));
-    if (el.isConnected) { sweep(); paintPlaying(el); }     // a new tile is swept once it is in the page
+function fillCol(el, c, sounds) {
+    el.style.setProperty('--tint', c.color || 'transparent');
+    el.setAttribute('aria-label', `${c.name}, ${count(c.count, 'sound')}`);
+    fill(el,
+        h('header.c-head', {}, h('span.c-color' + (c.color ? '' : '.none')),
+            h('h3', {}, h('button.cname', { text: c.name, title: c.name, 'aria-label': `Open ${c.name}` })),
+            h('span.c-count', { text: count(c.count, 'sound') })),
+        sounds.length ? h('div.c-rows', {}, ...sounds.map((it, i) => soundRow(it, i, false)))
+            : h('div.col-none', { text: c.count ? 'Its sounds are not in the library right now' : 'No sounds yet. Drop some here, or collect them while browsing.' }),
+        c.count ? h('footer.c-foot', {}, h('button.btn.sm.ghost.find', { 'data-tip': 'Sounds from your library that resonate with this collection', onclick: e => findMore(el._col, e.currentTarget) }, icon('resonance', 'sm'), 'Find more')) : null);
+    el.querySelector('.cname').addEventListener('click', () => bus.emit('nav:collection', el._col.name));
+    el._col = c;
+    el._sig = colSig(c, sounds);
+    if (el.isConnected) { sweep(); paintPlaying(el); }
 }
 
-function reviewMore(el, opener) {
-    const col = el._col;
+/** No collections yet: a calm offer, never a nag (smaller while the suggestions are open). */
+function paintCols() {
+    const none = !state.collections.length;
+    B.els.secCols.classList.toggle('none', none);
+    B.els.cols.classList.toggle('hidden', none);
+    B.els.colsEmpty.classList.toggle('hidden', !none);
+    if (!none) { B.els.colsEmpty.replaceChildren(); return; }
+    const create = cls => h('button.btn' + cls, { onclick: () => A.newCollection() }, icon('plus'), 'New collection');
+    if (B.open) fill(B.els.colsEmpty, h('p', { text: 'None yet. Create one from a suggestion above, or start one yourself.' }), create('.sm'));
+    else fill(B.els.colsEmpty,
+        icon('collection', 'art'),
+        h('h2', { text: 'No collections yet' }),
+        h('p', { text: 'Collections gather sounds from anywhere in your library. Start one yourself, or describe the project and Resonance suggests a few from your sounds.' }),
+        h('div.actions', {}, create('.primary'), h('button.btn', { onclick: () => setOpen(true) }, icon('resonance'), 'Start from a brief')));
+    B.els.colsEmpty.classList.toggle('compact', B.open);
+}
+
+/** A collection just created from a suggestion lights up where it lands in the grid. */
+function landCol(name) {
+    landing = name;
+    const el = [...B.els.cols.children].find(e => e.dataset.col === name);
+    if (el) land(el);
+}
+function land(el) {
+    landing = null;
+    if (reduced()) return;
+    el.classList.remove('landed'); void el.offsetWidth; el.classList.add('landed');
+    setTimeout(() => el.classList.remove('landed'), 1900);
+}
+
+/** More for one collection, on demand: sounds that resonate with it, gone through in the review sheet. */
+async function findMore(c, btn) {
+    if (!c || btn.classList.contains('busy')) return;
+    if (!state.engine.ready) { toast('Resonance is still starting…', { icon: 'info' }); return; }
+    if (!state.engine.vectors) { toast('Find more works once your sounds are analysed', { icon: 'info', action: { label: 'Details', onClick: () => bus.emit('settings:open', 'catalog') } }); return; }
+    const vid = B.vaultId, mark = btn.querySelector('.i');
+    btn.classList.add('busy');
+    if (mark) mark.classList.add('listening');
+    let res = null;
+    try { res = await sv.brief.more({ name: c.name }); } catch (e) { res = null; }
+    btn.classList.remove('busy');
+    if (mark) mark.classList.remove('listening');
+    if (!sameVault(vid) || !B.visible) return;
+    const col = res && (res.collections || []).find(x => x.name === c.name);
+    if (!col || !col.suggestions.length) { toast(`Nothing new resonates with “${c.name}” yet`, { icon: 'info' }); return; }
     openReview({
         title: col.name, color: col.color || null, items: col.suggestions,
         note: `Sounds from your library that resonate with the ${count(col.count, 'sound')} already in this collection.`,
         listLabel: 'Suggested additions', noun: 'sound',
         confirm: n => (n ? `Add ${count(n, 'sound')} to ${col.name}` : 'Add to collection'),
-        onConfirm: items => addToMore(el, items, items.length > 1),
-        opener,
+        onConfirm: items => addMore(col, items),
+        opener: btn,
     });
 }
 
-/** Add suggestions to an existing collection (one row, the reviewed ones, or all). */
-async function addToMore(el, items, flyIt = false) {
-    const col = el._col, vid = B.vaultId;
-    if (!items.length) return;
-    const paths = items.map(i => i.path);
+/** Add the reviewed sounds to their collection. */
+async function addMore(col, items) {
+    const vid = B.vaultId, paths = items.map(i => i.path);
+    if (!paths.length) return;
     quiet();
     const n = await sv.collections.add(col.name, paths).catch(() => 0);
     await A.refreshCollections();
     if (!sameVault(vid)) return;
-    const node = collectionNode(col.name);
-    col.suggestions = col.suggestions.filter(s => !paths.includes(s.path));
-    col.count += n;
-    if (!col.suggestions.length) {
-        if (flyIt && node && el.isConnected && B.visible && sidebarShown() && !reduced() && onScreen(el)) await fly(el, node, { name: col.name, color: col.color, count: '+' + n }, false);
-        removeMoreTile(el);
-    } else fillMore(el);
-    if (node) { markCollection(col.name, 'bump', true); setTimeout(() => markCollection(col.name, 'bump', false), 700); }
+    if (collectionNode(col.name)) { markCollection(col.name, 'bump', true); setTimeout(() => markCollection(col.name, 'bump', false), 700); }
     const one = items.length === 1;
     const msg = !n ? (one ? `Already in ${col.name}` : `All already in ${col.name}`) : one ? `Added “${stripExt(items[0].name)}” to ${col.name}` : `Added ${count(n, 'sound')} to ${col.name}`;
     toast(msg, n ? { actions: [
         { label: 'Open', onClick: () => bus.emit('nav:collection', col.name) },
-        { label: 'Undo', onClick: async () => { if (vid !== state.vaults.activeVaultId) return; quiet(); await sv.collections.removeItems(col.name, paths); await A.refreshCollections(); if (B.visible) { loadMore(); scheduleSuggest(); } } },
+        { label: 'Undo', onClick: async () => { if (vid !== state.vaults.activeVaultId) return; quiet(); await sv.collections.removeItems(col.name, paths); await A.refreshCollections(); scheduleSuggest(); } },
     ] } : { icon: 'info' });
     scheduleSuggest();                       // those sounds now belong to the vault
 }
 
-function removeMoreTile(el) {
-    const grid = el.parentElement;
-    B.moreCols = B.moreCols.filter(c => c !== el._col);
-    if (!grid || !B.moreCols.length) { renderMore(); return; }
-    const others = [...grid.children].filter(x => x !== el);
-    const first = new Map(others.map(x => [x, x.getBoundingClientRect()]));
-    el.remove();
-    if (reduced()) return;
-    for (const x of others) {
-        const r0 = first.get(x), r1 = x.getBoundingClientRect();
-        if (r0.left !== r1.left || r0.top !== r1.top) x.animate([{ transform: `translate(${r0.left - r1.left}px, ${r0.top - r1.top}px)` }, { transform: 'none' }], { duration: 380, easing: 'cubic-bezier(.2,.8,.2,1)' });
-    }
-}
-
 // ── paste: images become moodboard items, text becomes words ───────────
 function onPaste(e) {
-    if (!B.visible || !B.state || isDialogOpen()) return;
+    if (!B.visible || !B.open || !B.state || isDialogOpen()) return;
     const t = e.target;
     const inWords = !!(t && t.classList && t.classList.contains('words-in'));
     if (isEditableTarget(t) && !inWords) return;

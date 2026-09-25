@@ -1,6 +1,7 @@
 /* ═══ Vault Brief: the vault's home ═══════════════════════════════════
-   The project described with words, reference sounds and images, and the
-   collections Resonance suggests from the user's own library.
+   The vault's collections and, only when asked for, the brief (the project
+   described with words, reference sounds and images) with the collections
+   Resonance suggests from the user's own library.
    Design reference: docs/design/vault-brief.html                        */
 
 /* The Brief replaces the list panel while it is shown */
@@ -13,7 +14,7 @@
 .bhead .sb-show { margin: 0 -6px 0 -12px; align-self: flex-start; margin-top: 3px; }
 .bhead .id { flex: 1; min-width: 0; }
 .bhead .l1 { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.bhead .vdot { width: 10px; height: 10px; border-radius: 4px; background: var(--mode-color); flex-shrink: 0; transition: background var(--t-slow); }
+.bhead .vdot { width: 10px; height: 10px; border-radius: 4px; background: var(--mode-color); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); flex-shrink: 0; transition: background var(--t-slow); }
 .bhead h1 { font: 600 var(--fs-xl)/26px var(--font-display); color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -.1px; min-width: 0; }
 .bhead .count { color: var(--fg-3); font-size: var(--fs-sm); white-space: nowrap; margin-left: 2px; font-variant-numeric: tabular-nums; }
 .bhead .desc { display: inline-flex; align-items: center; gap: 8px; max-width: min(760px, 100%); height: 24px; margin: 2px 0 0 14px; padding: 0 6px; border-radius: var(--r); color: var(--fg-2); cursor: text; text-align: left; }
@@ -25,6 +26,9 @@
 .bhead .desc.editing { display: flex; background: var(--bg-2); box-shadow: inset 0 0 0 1px var(--accent-line); width: min(760px, 100%); cursor: default; }
 .bhead .desc input { flex: 1; min-width: 0; height: 100%; background: none; border: 0; color: var(--fg-1); }
 
+.bhead .suggest-toggle .i { color: var(--accent); }
+.bhead .suggest-toggle.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--fg-1); }
+
 .bscroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 20px var(--bv-pad) 40px; }
 .bv .sec + .sec { margin-top: 28px; }
 .bv .sec:empty { display: none; }
@@ -32,6 +36,60 @@
 .sec-head h2 { font: 600 var(--fs-lg)/1.2 var(--font-display); color: var(--fg-1); display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .sec-head h2 .i { color: var(--accent); }
 .sec-head .sub { color: var(--fg-3); font-size: var(--fs-sm); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Suggestions: on demand, above the collections ──────────────────── */
+.bv .suggest { display: none; }
+.bv.open .suggest { display: block; padding-bottom: 28px; margin-bottom: 26px; border-bottom: 1px solid var(--line); }
+.bv .suggest.in { animation: bf-in .38s var(--ease) both; }
+
+/* ── Collections: the vault's own, a few sounds each ────────────────── */
+.cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.col {
+  --tint: transparent; position: relative; display: flex; flex-direction: column; min-width: 0; padding: 12px 12px 10px 14px;
+  border-radius: var(--r-lg); border: 1px solid var(--line); cursor: pointer;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 7%, var(--bg-2)) 0, var(--bg-2) 96px);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.col:hover { border-color: var(--line-2); }
+.col .c-color.none { display: block; background: var(--bg-4); }
+.col h3 { display: flex; min-width: 0; }
+.col .cname { font: 600 14px/20px var(--font-display); color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; min-width: 0; border-radius: var(--r-sm); }
+.col .cname:hover { text-decoration: underline; text-decoration-color: var(--line-3); text-underline-offset: 3px; }
+.col .c-rows { margin: 8px -6px 0; min-height: 98px; }
+.col-none { margin-top: 8px; min-height: 98px; display: grid; place-items: center; padding: 0 18px; text-align: center; font-size: var(--fs-sm); line-height: 1.45; color: var(--fg-3); border: 1px dashed var(--line-2); border-radius: var(--r-md); }
+.col .c-foot { padding-top: 8px; }
+.col .find { margin-left: -8px; color: var(--fg-3); }
+.col .find .i { color: var(--fg-3); transition: color var(--t-fast); }
+.col .find:hover:not(:disabled) { color: var(--fg-1); background: var(--bg-3); }
+.col .find:hover .i, .col .find.busy .i { color: var(--accent); }
+.col .find.busy { cursor: default; }
+.col.drop-target { border-color: var(--accent-line); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.col.landed { animation: col-landed 1.8s var(--ease); }
+@keyframes col-landed { 0% { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft-2); } 60% { border-color: var(--line-2); box-shadow: 0 0 0 3px transparent; } }
+/* a collection's sounds: a quiet play glyph instead of a rank */
+.c-row.plain .pb { color: var(--fg-4); }
+.c-row.plain:not(.playing) .pb .play { display: block; }
+
+/* no collections yet: a calm offer (a single line while the suggestions are open) */
+.bv:not(.open) .cols-sec.none .sec-head { display: none; }
+.cols-empty { display: grid; justify-items: center; text-align: center; gap: 10px; padding: 56px 24px 40px; }
+.cols-empty .art { width: 52px; height: 52px; color: var(--fg-4); stroke-width: 1.2; margin-bottom: 4px; }
+.cols-empty h2 { font: 600 var(--fs-xl)/1.25 var(--font-display); color: var(--fg-1); }
+.cols-empty p { max-width: 470px; color: var(--fg-2); line-height: 1.55; }
+.cols-empty .actions { display: flex; gap: 8px; margin-top: 8px; }
+.cols-empty.compact { display: flex; align-items: center; gap: 14px; padding: 2px 0; text-align: left; }
+.cols-empty.compact p { max-width: none; color: var(--fg-3); font-size: var(--fs-sm); }
+
+/* stand-in cards while the grid loads or a mode switch runs (the real page, however long,
+   comes in once the mark has settled; same size as the real cards, one sweep on the compositor) */
+.col-skel { display: none; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.bv.cols-loading .col-skel, .bv.moving .cols-sec:not(.none) .col-skel { display: grid; }
+.bv.cols-loading .cols, .bv.cols-loading .cols-empty, .bv.moving .cols, .bv.moving .suggest { display: none !important; }
+.sk-col { position: relative; overflow: hidden; height: 168px; padding: 16px 16px 14px; display: grid; align-content: start; gap: 16px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--bg-2); }
+.sk-col i { display: block; height: 8px; border-radius: 4px; background: var(--bg-3); }
+.sk-col .sk-ln { height: 7px; background: rgba(255, 255, 255, .035); }
+.sk-col i:first-child + .sk-ln { margin-top: 6px; }
+.bv.cols-loading .sk-col::after, .bv.moving .sk-col::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 60%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .028) 50%, transparent); animation: sk-sweep 1.6s var(--ease) infinite; }
 
 /* ── Brief box (filled) ─────────────────────────────────────────────── */
 .brief { position: relative; background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px 16px 16px; }
@@ -58,7 +116,7 @@
 @keyframes tile-in { from { opacity: 0; transform: translateY(6px) scale(.97); } }
 .tile.out { animation: tile-out .2s ease-in forwards; pointer-events: none; }
 @keyframes tile-out { to { opacity: 0; transform: scale(.94); } }
-.media { position: relative; height: 116px; border-radius: var(--r-md); overflow: hidden; background: var(--bg-3); }
+.media { position: relative; height: 116px; border-radius: var(--r-md); overflow: hidden; background: var(--bg-3); contain: size layout; }
 .media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; transition: filter .6s var(--ease), transform .6s var(--ease); }
 .media::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07); pointer-events: none; }
 .tile .rm, .tile .tpin { position: absolute; top: 6px; right: 6px; z-index: 3; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: rgba(8, 8, 10, .62); opacity: 0; transition: opacity var(--t-fast), background var(--t-fast); }
@@ -205,8 +263,12 @@
 .wc .src.s .i { width: 9px; height: 9px; stroke-width: 1.8; }
 .wc .pin { width: 10px; height: 10px; color: var(--accent); margin: 0 -1px 0 -2px; --pin-fill: currentColor; }
 .wc.pinned { border-color: var(--accent-line); color: var(--fg-1); }
-.c-rows { margin: 10px -6px 0; display: grid; gap: 1px; }
-.c-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(48px, 76px) 38px; align-items: center; gap: 8px; height: 32px; padding: 0 6px; border-radius: var(--r); cursor: pointer; position: relative; }
+/* Rows are relayout boundaries (fixed height, size and layout containment, in a plain
+   block: a grid's or flexbox's items never are), so a waveform or a duration arriving
+   relayouts its row, never the page. With 150 collections each one cost a full layout. */
+.c-rows { margin: 10px -6px 0; }
+.c-row + .c-row { margin-top: 1px; }
+.c-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(48px, 76px) 38px; align-items: center; gap: 8px; height: 32px; padding: 0 6px; border-radius: var(--r); cursor: pointer; position: relative; contain: size layout; }
 .c-row:hover { background: rgba(255, 255, 255, .035); }
 .c-row .pb { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: var(--fg-3); transition: background var(--t-fast), color var(--t-fast); }
 .c-row .pb .i { width: 10px; height: 10px; display: none; }
@@ -242,25 +304,11 @@
 .cards-foot .show-more { margin-left: auto; }
 .cards-empty .unmatched { justify-content: center; margin-top: 4px; }
 
-/* mini waveform: base canvas + accent "played" copy clipped by progress */
-.mw { position: relative; display: block; height: 20px; min-width: 0; }
+/* mini waveform: base canvas + accent "played" copy clipped by progress. Its size never
+   depends on its canvases (they are sized on first draw, many in one go). */
+.mw { position: relative; display: block; height: 20px; min-width: 0; contain: size layout; }
 .mw canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .mw canvas.played { clip-path: inset(0 100% 0 0); }
-
-/* ── More for your collections ─────────────────────────────────────── */
-.bv .more { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
-.mc { display: flex; flex-direction: column; min-width: 0; padding: 12px 12px 10px 14px; border-radius: var(--r-lg); background: var(--bg-2); border: 1px solid var(--line); transition: border-color var(--t-fast); }
-.mc:hover { border-color: var(--line-2); }
-.mc-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.mc-name { font-weight: 600; font-size: var(--fs-md); color: var(--fg-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.mc-sub { margin-left: auto; padding-left: 6px; font-size: var(--fs-sm); color: var(--fg-3); white-space: nowrap; }
-.mc-sub b { color: var(--fg-1); font-weight: 600; font-variant-numeric: tabular-nums; }
-.mc .c-rows { margin-top: 8px; }
-.mc .c-row { grid-template-columns: 22px minmax(0, 1fr) minmax(40px, 64px) 38px 24px; height: 30px; }
-.mc .c-row .add { width: 24px; height: 24px; opacity: 0; }
-.mc .c-row:hover .add, .mc .c-row:focus-within .add, .mc .c-row .add:focus-visible { opacity: 1; }
-.mc .c-row .add:hover { background: var(--accent); color: var(--accent-ink); }
-.mc .c-foot { padding-top: 8px; }
 
 /* ── Review sheet (the Echo drawer pattern, built for the keyboard) ──── */
 .rv-scrim { position: fixed; left: 0; right: 0; top: var(--titlebar-h); bottom: var(--player-h); z-index: 39; background: rgba(6, 6, 8, .5); opacity: 0; pointer-events: none; transition: opacity var(--t-slow) var(--ease); }
@@ -279,7 +327,7 @@
 .rv-tools .btn { text-transform: none; letter-spacing: 0; font-weight: 500; }
 .rv-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 10px; outline: none; }
 .rv-list:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-line); }
-.rr { display: grid; grid-template-columns: 18px 26px minmax(0, 1fr) minmax(70px, 110px) 42px; align-items: center; gap: 10px; height: 48px; padding: 0 8px 0 10px; border-radius: var(--r-md); cursor: pointer; position: relative; }
+.rr { display: grid; grid-template-columns: 18px 26px minmax(0, 1fr) minmax(70px, 110px) 42px; align-items: center; gap: 10px; height: 48px; padding: 0 8px 0 10px; border-radius: var(--r-md); cursor: pointer; position: relative; contain: size layout; }
 .rr:hover { background: rgba(255, 255, 255, .025); }
 .rr.cursor { background: rgba(255, 255, 255, .045); box-shadow: inset 2px 0 0 var(--fg-3); }
 .rr.playing { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
@@ -311,8 +359,6 @@
 
 /* ── Sidebar: the Brief node and collections arriving from it ───────── */
 .node.brief-node { gap: 8px; margin: 4px 6px 0; padding-left: 10px; }
-.brief-node .cnt { min-width: 18px; height: 16px; padding: 0 5px; border-radius: 8px; display: inline-grid; place-items: center; font-size: 10.5px; }
-.brief-node:not(.active) .cnt:not(:empty) { background: var(--bg-4); color: var(--fg-2); }
 .node.arriving { visibility: hidden; }
 .node.landed { animation: landed 1.8s var(--ease); }
 @keyframes landed { 0% { background: var(--accent-soft-2); box-shadow: inset 0 0 0 1px var(--accent-line); } 60% { background: var(--accent-soft); box-shadow: inset 0 0 0 1px transparent; } 100% { background: transparent; } }
@@ -323,7 +369,6 @@
 @media (max-width: 1360px) {
   .bv { --bv-pad: 24px; }
   .c-row { grid-template-columns: 22px minmax(0, 1fr) 56px 36px; }
-  .mc .c-row { grid-template-columns: 22px minmax(0, 1fr) 48px 36px 24px; }
 }
 @media (max-width: 1100px) {
   .cards, .ghost-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }

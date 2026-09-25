@@ -12,11 +12,14 @@
 }
 .titlebar > * { -webkit-app-region: no-drag; }
 .titlebar .drag-space { -webkit-app-region: drag; flex: 1; align-self: stretch; }
-.brand { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 8px 0 6px; border-radius: var(--r); cursor: pointer; width: calc(var(--sidebar-w) - var(--s3) - 6px); flex-shrink: 0; }
+/* The left block keeps the search lined up with the content; in it only the brand is a
+   button (hugging the mark and the word), the rest drags the window. */
+.titlebar .tb-left { -webkit-app-region: drag; display: flex; align-items: center; align-self: stretch; width: calc(var(--sidebar-w) - var(--s3) - 6px); flex-shrink: 0; }
+.brand { -webkit-app-region: no-drag; display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px 0 6px; border-radius: var(--r); cursor: pointer; flex-shrink: 0; }
 .brand:hover { background: rgba(255, 255, 255, .03); }
 .brand .mark { width: 22px; height: 22px; flex-shrink: 0; overflow: visible; }
 .brand .word-wrap { display: flex; flex-direction: column; gap: 3px; overflow: hidden; height: 20px; justify-content: center; }
-.brand .word { font: 700 12.5px/15px var(--font); letter-spacing: 3px; color: var(--mode-color); text-transform: uppercase; transition: color var(--t-slow); }
+.brand .word { align-self: flex-start; font: 700 12.5px/15px var(--font); letter-spacing: 3px; color: var(--mode-color); text-transform: uppercase; transition: color var(--t-slow); }
 .brand .word.out { animation: word-out .16s cubic-bezier(.55, 0, 1, .45) forwards; }
 .brand .word.in { animation: word-in .32s var(--ease-spring) forwards; }
 @keyframes word-out { to { transform: translateY(-110%); opacity: 0; } }
@@ -113,7 +116,7 @@
   background: var(--bg-1); border: 1px solid var(--line); cursor: pointer; min-width: 0;
 }
 .vault-switch:hover { border-color: var(--line-3); }
-.vault-switch .dot { width: 10px; height: 10px; border-radius: 4px; }
+.vault-switch .dot { width: 10px; height: 10px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
 .vault-switch .vs-name { font-weight: 600; flex: 1; min-width: 0; }
 .vault-switch .vs-sub { font-size: var(--fs-xs); color: var(--fg-3); }
 .col-color { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(255, 255, 255, .12); cursor: pointer; }

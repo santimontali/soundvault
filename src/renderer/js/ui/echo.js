@@ -50,6 +50,7 @@ function mount() {
     listEl.addEventListener('keydown', onKey);
     S.el.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeEcho(); } });
     player.on('state', paintPlaying);
+    bus.on('accent', () => { if (S.open) renderQuery(); });          // the query wave is drawn in the accent
 }
 
 const cur = () => S.chain[S.chain.length - 1]?.query || null;

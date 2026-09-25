@@ -1,6 +1,6 @@
 // Main panel chrome: header (breadcrumbs, count, sort, actions), banners
 // (collect target, missing files, library missing), empty states, drop zone,
-// and the Resonance suggestions strip for collections.
+// the loading stand-in and the Resonance suggestions strip for collections.
 import { h, icon, count, stripExt } from '../util.js';
 import { state, bus, activeVault } from '../store.js';
 import { showMenu } from './overlays.js';
@@ -12,6 +12,10 @@ let lastHeader = null;
 /** Re-render the header (e.g. after the sidebar is shown/hidden). */
 export function refreshHeader() { if (lastHeader) renderHeader(lastHeader); }
 
+// Stand-in rows: the list's own grid and row height, so the real rows take their place without a jump.
+const NAME_W = [44, 31, 52, 38, 27, 47, 35], SUB_W = [24, 17, 30, 21, 14], DUR_W = [34, 28, 38, 30];
+const skelRow = i => h('div.sk-row', {}, h('i.sk-pb'), h('div.sk-meta', {}, h('i', { style: { width: NAME_W[i % 7] + '%' } }), h('i.sub', { style: { width: SUB_W[i % 5] + '%' } })), h('i.sk-wf'), h('i.sk-du', { style: { width: DUR_W[i % 4] + 'px' } }));
+
 export function mountPanel(main) {
     const crumbs = h('div.crumbs');
     const actions = h('div.head-actions');
@@ -20,10 +24,11 @@ export function mountPanel(main) {
     const listEl = h('div.list', { 'aria-label': 'Sounds' });
     const empty = h('div.list-empty.hidden');
     const drop = h('div.dropzone', {}, h('div.t'), h('div.s'));
-    const wrap = h('div', { style: { position: 'relative', flex: '1', minHeight: '0', display: 'flex', flexDirection: 'column' } }, listEl, empty, drop);
+    const skel = h('div.skel', { 'aria-hidden': 'true' }, ...Array.from({ length: 18 }, (_, i) => skelRow(i)));
+    const wrap = h('div', { style: { position: 'relative', flex: '1', minHeight: '0', display: 'flex', flexDirection: 'column' } }, listEl, empty, drop, skel);
     const reso = h('div.resonance.hidden', {}, h('div.rs-head', {}, icon('resonance'), h('span.rs-t', { text: 'Resonance' }), h('span.muted.rs-c'), icon('chev-d', 'sm chev')), h('div.rs-list'));
     main.append(head, banners, wrap, reso);
-    els = { crumbs, actions, head, banners, listEl, empty, drop, wrap, reso };
+    els = { main, crumbs, actions, head, banners, listEl, empty, drop, wrap, reso };
     reso.querySelector('.rs-head').addEventListener('click', () => { reso.classList.toggle('open'); try { localStorage.setItem('sv.resoOpen', reso.classList.contains('open') ? '1' : '0'); } catch (e) {} });
     try { if (localStorage.getItem('sv.resoOpen') !== '0') reso.classList.add('open'); } catch (e) { reso.classList.add('open'); }
     wireDropZone(wrap);
@@ -40,7 +45,8 @@ export function renderHeader({ crumbs = [], title = '', countText = '', actions 
     for (const c of crumbs) {
         els.crumbs.append(h('span.crumb', { text: c.label, onclick: c.onClick }), h('span.sep', { text: '›' }));
     }
-    els.crumbs.append(h('h1', { text: title, title }), countText ? h('span.count', { text: countText }) : null);
+    els.crumbs.append(h('h1', { text: title, title }));
+    if (countText) els.crumbs.append(h('span.count', { text: countText }));
     lastHeader = { crumbs, title, countText, actions };
     els.actions.replaceChildren(...actions.filter(Boolean));
 }
@@ -77,6 +83,10 @@ export function renderCollectBar(target) {
         h('button.btn.sm', { text: 'Change', onclick: () => bus.emit('collect:pick') }),
         h('button.icon-btn.sm', { 'aria-label': 'Stop collecting', 'data-tip': 'Stop collecting', onclick: () => bus.emit('collect:clear') }, icon('x', 'sm'))));
 }
+
+// ── loading ─────────────────────────────────────────────────────────────
+/** While a view's sounds load after a mode switch: the header in place, stand-in rows below. */
+export function setLoading(on) { els.main.classList.toggle('loading', !!on); }
 
 // ── empty states ────────────────────────────────────────────────────────
 let emptyContent = null;

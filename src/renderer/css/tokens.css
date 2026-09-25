@@ -17,8 +17,10 @@
   --fg-3: #8a8893;   /* ≥4.5:1 on every surface (AA) */
   --fg-4: #5c5b64;
 
-  /* accent: the user's app accent (interactive states). --mode-color: identity
-     color of the current mode (vault color in Vault mode, accent in Sound mode). */
+  /* accent: the interactive color. The user's accent in Sound mode; in Vault mode a
+     tint of the vault's color that reads on this dark UI and stays apart from
+     --danger (theme.js). --mode-color: identity color of the current mode (the
+     vault's hue in Vault mode, the accent in Sound mode). */
   --mode-color: #c8f76d;
   --accent: #c8f76d;
   --accent-rgb: 200, 247, 109;

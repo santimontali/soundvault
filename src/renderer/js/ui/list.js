@@ -9,7 +9,7 @@
 import { h, icon, setIcon, formatDuration, formatFormat, stripExt, clamp, Emitter, isEditableTarget } from '../util.js';
 import { player } from '../audio/engine.js';
 import { peaksFor, requestPeaks } from '../audio/peaks.js';
-import { drawPair, setProgress, fitCanvas } from './waveform.js';
+import { drawPair, setProgress, fitCanvas, retint } from './waveform.js';
 import { selection } from './selection.js';
 import { isDialogOpen } from './overlays.js';
 
@@ -81,7 +81,8 @@ class SoundList extends Emitter {
     setItems(items, opts = {}) {
         const prevCursorPath = this.current()?.path || null;
         this.items = items || [];
-        this.index = new Map(this.items.map((it, i) => [it.path, i]));
+        this.index = new Map();                   // a plain loop: a 70k library indexes in a third of the time
+        for (let i = 0; i < this.items.length; i++) this.index.set(this.items[i].path, i);
         this.opts = { baseDir: '', query: '', showScore: false, ...opts };
         this.multi = opts.keepScroll ? new Set([...this.multi].filter(p => this.index.has(p))) : new Set();
         const want = opts.cursorPath !== undefined ? opts.cursorPath : (opts.keepScroll ? prevCursorPath : null);
@@ -162,6 +163,8 @@ class SoundList extends Emitter {
     refreshIndex(i) { const r = this.pool.find(x => x.idx === i); if (r) this._bind(r, i, true); }
     refreshPath(path) { const i = this.index.get(path); if (i !== undefined) this.refreshIndex(i); }
     refreshAll() { this.render(true); }
+    /** The accent changed: only the playing row shows its accent copy, the others re-tint when they play. */
+    retint() { for (const r of this.pool) if (r.idx >= 0 && player.isCurrent(r.path) && peaksFor(r.path) !== undefined) retint(r.refs.played, peaksFor(r.path)); }
 
     _bind(r, i, keepCanvas = false) {
         const it = this.items[i];
@@ -213,6 +216,7 @@ class SoundList extends Emitter {
         setIcon(r.refs.pbtn.firstChild, isCur && player.playing ? 'pause' : 'play');
         r.refs.pbtn.setAttribute('aria-label', isCur && player.playing ? 'Pause' : 'Play');
         if (!isCur) { setProgress(r.refs.played, 0); r.refs.ph.style.transform = 'translateX(-10px)'; }
+        else if (peaksFor(r.path) !== undefined) retint(r.refs.played, peaksFor(r.path));
     }
 
     _paintSelection(r, pk) {
@@ -468,7 +472,7 @@ class SoundList extends Emitter {
     }
 
     _onKey(e) {
-        if (!this.el || isEditableTarget(e.target) || isDialogOpen() || e.defaultPrevented) return;
+        if (!this.el || isEditableTarget(e.target) || isDialogOpen() || e.defaultPrevented || this.el.closest('.loading')) return;   // hidden behind the stand-in
         if (e.target.closest && e.target.closest('#editor, .echo')) return;
         const n = this.items.length;
         const k = e.key;

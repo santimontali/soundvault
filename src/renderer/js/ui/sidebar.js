@@ -10,7 +10,6 @@ try { expanded = new Set(JSON.parse(localStorage.getItem(EXPANDED_KEY) || '[]'))
 const saveExpanded = () => { try { localStorage.setItem(EXPANDED_KEY, JSON.stringify([...expanded].slice(-400))); } catch (e) {} };
 
 let root = null, tree = null;
-let briefCount = null;                  // open suggestions on the Brief (null: not known yet)
 const marks = new Map();                // collection name -> classes kept across re-renders
 
 export function mountSidebar(el) {
@@ -98,8 +97,8 @@ function renderVault() {
         icon('chev-d', 'sm'));
     sw.addEventListener('click', () => bus.emit('vault:menu', sw));
     sw.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); bus.emit('vault:menu', sw); } });
-    // The Brief: the vault's home, above its collections
-    const brief = h('div.node.brief-node', { role: 'button', tabindex: '0', dataset: { kind: 'brief' } }, icon('board', 'ico'), h('span.name', { text: 'Brief' }), h('span.cnt'));
+    // The Brief: the vault's home (its collections; suggestions only when asked for)
+    const brief = h('div.node.brief-node', { role: 'button', tabindex: '0', 'aria-label': 'Brief', dataset: { kind: 'brief' } }, icon('board', 'ico'), h('span.name', { text: 'Brief' }));
     brief.addEventListener('click', () => bus.emit('nav:brief'));
     brief.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); bus.emit('nav:brief'); } });
     root.append(sw, brief,
@@ -124,19 +123,6 @@ function renderVault() {
         scroll.appendChild(el);
     }
     root.appendChild(scroll);
-    paintBriefCount();
-}
-
-/** Number of open suggestions shown next to the Brief (null or 0 hides it). */
-export function setBriefCount(n) {
-    briefCount = Number.isFinite(n) && n > 0 ? n : null;
-    paintBriefCount();
-}
-function paintBriefCount() {
-    const node = root && root.querySelector('.brief-node');
-    if (!node) return;
-    node.querySelector('.cnt').textContent = briefCount ? String(briefCount) : '';
-    node.setAttribute('aria-label', briefCount ? `Brief, ${count(briefCount, 'suggestion')}` : 'Brief');
 }
 
 /** The sidebar node of a collection (vault mode), or null. */

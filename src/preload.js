@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('sv', {
         status: () => invoke('library:status'),
         tree: () => invoke('library:tree'),
         list: opts => invoke('library:list', opts),
+        /** Same list packed ({n, paths: '\0'-joined, dirs, dir, size, mtime}): cheap to receive when long. */
+        listPacked: opts => invoke('library:list', { ...(opts || {}), packed: true }),
         search: opts => invoke('library:search', opts),
         resolve: paths => invoke('library:resolve', paths),
         rescan: () => invoke('library:rescan'),
@@ -74,7 +76,7 @@ contextBridge.exposeInMainWorld('sv', {
         removeImage: id => invoke('brief:remove-image', id),
         analyzeImage: (id, pixels) => invoke('brief:analyze-image', id, pixels),
         suggest: opts => invoke('brief:suggest', opts || {}),
-        more: () => invoke('brief:more'),
+        more: opts => invoke('brief:more', opts || {}),
         create: o => invoke('brief:create', o),
     },
     collections: {
@@ -86,6 +88,7 @@ contextBridge.exposeInMainWorld('sv', {
         add: (name, paths) => invoke('collections:add', name, paths),
         removeItems: (name, paths) => invoke('collections:remove-items', name, paths),
         sounds: name => invoke('collections:sounds', name),
+        preview: n => invoke('collections:preview', n),
         onChanged: subscribe('collections:changed'),
     },
     engine: {

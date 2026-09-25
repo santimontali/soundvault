@@ -1,17 +1,31 @@
 // Titlebar: brand (mode switch), search (scope + AI + word weights), engine status.
+// The brand's hitbox hugs the mark and the word; the rest of the titlebar drags the window.
 import { h, icon, debounce, count, clamp } from '../util.js';
 import { state, bus } from '../store.js';
 import { createMark, setMarkMode } from './logo.js';
 import { showMenu } from './overlays.js';
 
 let els = {};
+// The morph (layout.css): bars .46 s after up to .06 s of delay, the word swap
+// ends at .48 s. Heavy work waits for it (afterMotion), so it never stutters.
+const MORPH_MS = 540;
+let shownMode = null, motionEnd = 0;
+
+/** Resolves once the brand morph has had its frames (at once when nothing is moving). */
+export function afterMotion() {
+    const left = motionEnd - performance.now();
+    return left > 0 ? new Promise(r => setTimeout(r, left)) : Promise.resolve();
+}
+export const isMoving = () => motionEnd > performance.now();
 
 export function mountTitlebar(el) {
+    shownMode = state.mode;
     const mark = createMark(state.mode);
     const word = h('span.word', { text: state.mode === 'sounds' ? 'Sound' : 'Vault' });
     const underline = h('span.underline');
+    const wrap = h('span.word-wrap', {}, word, underline);
     const brand = h('div.brand', { role: 'button', tabindex: '0', 'data-tip': 'Switch mode', 'data-kbd': 'Ctrl+Tab', 'aria-label': 'Switch between Vault and Sound mode' },
-        mark, h('span.word-wrap', {}, word, underline));
+        mark, wrap);
     brand.addEventListener('click', () => bus.emit('mode:toggle'));
     brand.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); bus.emit('mode:toggle'); } });
     brand.addEventListener('mouseenter', () => { if (mark.classList.contains('sound')) mark.classList.add('alive'); });
@@ -30,7 +44,7 @@ export function mountTitlebar(el) {
     const gear = h('button.icon-btn', { 'data-tip': 'Settings', 'data-kbd': 'Ctrl+,', 'aria-label': 'Settings' }, icon('gear'));
     gear.addEventListener('click', () => bus.emit('settings:open'));
 
-    el.append(brand, box, h('div.drag-space'), h('div.tb-right', {}, pill, gear));
+    el.append(h('div.tb-left', {}, brand), box, h('div.drag-space'), h('div.tb-right', {}, pill, gear));
     els = { mark, word, underline, brand, input, scope, ai, words, clear, box, pill };
 
     const fire = debounce(() => bus.emit('search:run', { q: input.value, weights: null }), 160);
@@ -53,6 +67,8 @@ export function mountTitlebar(el) {
     });
 
     bus.on('mode', mode => {
+        if (mode !== shownMode && !matchMedia('(prefers-reduced-motion: reduce)').matches) motionEnd = performance.now() + MORPH_MS;
+        shownMode = mode;
         setMarkMode(mark, mode);
         swapWord(mode === 'sounds' ? 'Sound' : 'Vault');
         brand.setAttribute('data-tip', mode === 'sounds' ? 'Switch to Vault mode' : 'Switch to Sound mode');
@@ -64,7 +80,15 @@ export function mountTitlebar(el) {
     bus.on('search:words', renderWords);
     renderSearchChrome();
     renderStatus();
-    requestAnimationFrame(() => { underline.style.width = word.offsetWidth - 3 + 'px'; });
+    requestAnimationFrame(() => {
+        // The word area fits the longer word, so the hitbox stays put across modes.
+        const cur = word.textContent;
+        let widest = 0;
+        for (const t of ['Vault', 'Sound']) { word.textContent = t; widest = Math.max(widest, word.offsetWidth); }
+        word.textContent = cur;
+        wrap.style.width = widest + 'px';
+        underline.style.width = word.offsetWidth - 3 + 'px';
+    });
 }
 
 function clearSearch() {

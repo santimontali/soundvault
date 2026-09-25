@@ -103,13 +103,6 @@ export function hexToRgb(hex) {
     return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
-/** Readable ink (near-black or near-white) for text on top of an accent color. */
-export function inkFor(hex) {
-    const { r, g, b } = hexToRgb(hex);
-    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-    return lum > 0.55 ? '#11140b' : '#f6f6f2';
-}
-
 export function isEditableTarget(t) {
     return !!(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)));
 }
