@@ -148,7 +148,9 @@ function ensureTokenizer() {
 }
 
 (async () => {
-    for (const f of [UCS, path.join(HF, 'onnx', 'text_model_int8.onnx'), path.join(HF, 'tokenizer.json')]) {
+    // the download's own tokenizer.json is needed only until the converted copy exists
+    const tokenizer = fs.existsSync(path.join(TOK_DIR, 'tokenizer.json')) ? [] : [path.join(HF, 'tokenizer.json')];
+    for (const f of [UCS, path.join(HF, 'onnx', 'text_model_int8.onnx'), ...tokenizer]) {
         if (!fs.existsSync(f)) { console.error('[vocab] missing ' + path.relative(ROOT, f) + ' (see DISTRIBUTION.md)'); process.exit(1); }
     }
     ensureTokenizer();
