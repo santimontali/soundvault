@@ -95,7 +95,7 @@
         "to": "models/",
         "filter": [
           "Xenova/**",
-          "siglip2/{vision_model.onnx,concepts.json,concepts.f16,preprocessor_config.json}"
+          "siglip2/{vision_model.onnx,concepts.json,concepts.f16,terms.q8,preprocessor_config.json}"
         ]
       }
     ],

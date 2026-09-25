@@ -122,7 +122,7 @@ test('the image model ships prepared and alone (never the raw downloads or the t
     const models = b.extraResources.find(r => r.from === 'build-assets/models/');
     assert.ok(models && Array.isArray(models.filter), 'models are copied through an explicit filter');
     const f = models.filter.join(' ');
-    assert.match(f, /siglip2\/\{vision_model\.onnx,concepts\.json,concepts\.f16/);
+    assert.match(f, /siglip2\/\{vision_model\.onnx,concepts\.json,concepts\.f16,terms\.q8/);
     assert.doesNotMatch(f, /onnx-community|text_model_int8|\*\*\/\*/, 'raw SigLIP downloads or a catch-all would add ~400 MB');
     for (const k of ['prepack', 'predist']) assert.match(pkg.scripts[k], /prepare-image-model\.js --if-needed/);
     assert.match(read('src/engine/engine-host.js'), /resourcesPath, 'models', 'siglip2'\)/);

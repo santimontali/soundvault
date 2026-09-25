@@ -167,7 +167,7 @@ async function check(file) {
         console.log(`[image-model] patch embedding dequantized (${n} weights, zero point ${zp}, scale ${sc.toExponential(3)}) → ${path.relative(ROOT, OUT)} (${(model.length / 1e6).toFixed(1)} MB) in ${Date.now() - t0} ms`);
         console.log('[image-model] check:', JSON.stringify(await check(OUT)));
     }
-    const vocab = ['concepts.json', 'concepts.f16'].map(f => path.join(OUT_DIR, f));
+    const vocab = ['concepts.json', 'concepts.f16', 'terms.q8'].map(f => path.join(OUT_DIR, f));
     if (ifNeeded && !vocab.every(f => fs.existsSync(f))) {
         console.error('[image-model] the image vocabulary is missing: node scripts/run-electron-node.js scripts/build-image-vocabulary.js (see DISTRIBUTION.md)');
         process.exit(1);

@@ -75,6 +75,7 @@ const IMG = path.join(RES, 'models', 'siglip2');
 const vision = mb(path.join(IMG, 'vision_model.onnx'));
 ok(vision > 80 && vision < 120, `image model bundled (${vision.toFixed(0)} MB)`);
 ok(exists(path.join(IMG, 'concepts.json')) && mb(path.join(IMG, 'concepts.f16')) > 1, 'image vocabulary bundled');
+ok(mb(path.join(IMG, 'terms.q8')) > 5, `visual terms bundled (${mb(path.join(IMG, 'terms.q8')).toFixed(1)} MB)`);
 ok(!exists(path.join(RES, 'models', 'onnx-community')), 'raw image model downloads not shipped');
 
 // ── locales trimmed ────────────────────────────────────────────────────────

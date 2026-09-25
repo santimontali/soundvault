@@ -10,12 +10,20 @@
  * distinctive UCS synonyms ("tiger", "lion", "cheetah" for wild cats): the app
  * matches them against file names.
  *
+ * Visual terms: every UCS synonym (~10k words: "tiger", "sneakers", "glacier")
+ * embedded on its own ("this is a photo of / an illustration of …"), each
+ * linked to the subcategories that list it. A picture is matched against
+ * these concrete words, which a picture shows far better than a category
+ * name, and the words lead back to UCS. Stored as int8 rows with a float
+ * scale each (terms.q8: N float32 scales, then N x 768 int8).
+ *
  *   node scripts/run-electron-node.js scripts/build-image-vocabulary.js
  *
  * In:  build-assets/vocab-build/UCS v8.2.1 Full List.xlsx (public domain, universalcategorysystem.com)
  *      build-assets/vocab-build/siglip2-base-patch16-224-ONNX/onnx/text_model_int8.onnx
  *      (build-assets/vocab-build/siglip2-tokenizer/ is derived from its tokenizer on the first run)
  * Out: build-assets/models/siglip2/concepts.json + concepts.f16 (N × 768 float16, row per concept)
+ *      + terms.q8 (the visual terms). About 30 min: the terms are most of it.
  */
 const fs = require('fs');
 const path = require('path');
@@ -105,6 +113,20 @@ const GENERIC_SYN = new Set(['atmos', 'atmosphere', 'ambience', 'ambiance', 'bac
 let synUse = new Map();
 const synonymsOf = u => [...new Set(u.synonyms.map(x => x.toLowerCase()))]
     .filter(x => x.length >= 4 && /^[a-z][a-z-]*$/.test(x) && !GENERIC_SYN.has(x) && (synUse.get(x) || 0) <= 2).slice(0, 40);
+// Every synonym a picture might show, linked to the subcategories (indices) that list it.
+const TERM_TEMPLATES = ['this is a photo of {}.', 'this is an illustration of {}.'];
+function termsOf(ucs) {
+    const m = new Map();
+    ucs.forEach((u, i) => {
+        for (const x of u.synonyms) {
+            const t = x.trim().toLowerCase();
+            if (t.length < 3 || GENERIC_SYN.has(t) || !/^[a-z][a-z' -]*$/.test(t)) continue;
+            if (!m.has(t)) m.set(t, new Set());
+            m.get(t).add(i);
+        }
+    });
+    return [...m].map(([t, cats]) => [t, [...cats]]);
+}
 function phrasings(u) {
     const label = u.label || labelOf(u);
     const out = [label, `${words(u.sub)} ${words(u.cat)}`];
@@ -185,11 +207,37 @@ function ensureTokenizer() {
         else h = sign | (exp << 10) | ((man + 0x1000) >> 13);
         f16.writeUInt16LE(h & 0xffff, i * 2);
     }
+    // Visual terms, batched (each term: both templates, averaged), int8 with a scale per row.
+    const terms = termsOf(ucs);
+    const q8 = Buffer.alloc(terms.length * 4 + terms.length * DIM);
+    const t1 = Date.now(), B = 32, row = new Float32Array(DIM);
+    for (let i = 0; i < terms.length; i += B) {
+        const chunk = terms.slice(i, i + B);
+        const out = await embed(chunk.flatMap(([t]) => TERM_TEMPLATES.map(tp => tp.replace('{}', t))));
+        chunk.forEach((_, j) => {
+            row.fill(0);
+            for (let k = 0; k < TERM_TEMPLATES.length; k++) {
+                const o = (j * TERM_TEMPLATES.length + k) * DIM;
+                let s = 0; for (let d = 0; d < DIM; d++) s += out[o + d] * out[o + d];
+                const n = 1 / Math.sqrt(s || 1); for (let d = 0; d < DIM; d++) row[d] += out[o + d] * n;
+            }
+            let s = 0, mx = 0; for (let d = 0; d < DIM; d++) s += row[d] * row[d];
+            const n = 1 / Math.sqrt(s || 1); for (let d = 0; d < DIM; d++) { row[d] *= n; mx = Math.max(mx, Math.abs(row[d])); }
+            const scale = mx / 127 || 1;
+            q8.writeFloatLE(scale, (i + j) * 4);
+            const base = terms.length * 4 + (i + j) * DIM;
+            for (let d = 0; d < DIM; d++) q8.writeInt8(Math.round(row[d] / scale), base + d);
+        });
+        if ((i / B) % 40 === 39) console.log(`[vocab] terms ${Math.min(i + B, terms.length)}/${terms.length} (${((Date.now() - t1) / 1000).toFixed(0)} s)`);
+    }
     fs.mkdirSync(OUT_DIR, { recursive: true });
-    fs.writeFileSync(path.join(OUT_DIR, 'concepts.f16'), f16);
-    fs.writeFileSync(path.join(OUT_DIR, 'concepts.json'), JSON.stringify({
-        v: 2, dim: DIM, count: items.length, model: 'google/siglip2-base-patch16-224', source: 'UCS v8.2.1 (public domain)',
+    const write = (name, data) => { const f = path.join(OUT_DIR, name); fs.writeFileSync(f + '.tmp', data); fs.renameSync(f + '.tmp', f); };
+    write('concepts.f16', f16);
+    write('terms.q8', q8);
+    write('concepts.json', JSON.stringify({
+        v: 3, dim: DIM, count: items.length, model: 'google/siglip2-base-patch16-224', source: 'UCS v8.2.1 (public domain)',
         template: 'this is a photo of {}.', items,
+        terms: { count: terms.length, templates: TERM_TEMPLATES, list: terms },
     }));
-    console.log(`[vocab] ${items.length} concepts embedded in ${((Date.now() - t0) / 1000).toFixed(1)} s → ${path.relative(ROOT, OUT_DIR)}`);
+    console.log(`[vocab] ${items.length} concepts and ${terms.length} visual terms embedded in ${((Date.now() - t0) / 1000).toFixed(1)} s → ${path.relative(ROOT, OUT_DIR)}`);
 })().catch(e => { console.error('[vocab] failed:', e); process.exit(1); });
