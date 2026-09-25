@@ -46,8 +46,14 @@ if (userData.toLowerCase().includes(path.join('appdata', 'roaming', 'soundvault'
 fs.mkdirSync(out, { recursive: true });
 fs.mkdirSync(userData, { recursive: true });
 app.setPath('userData', userData);
+// Renders (selection previews, drags) stay in the isolated folder too: the default
+// is the user's Documents\SoundVault Renders, whose staging folder the app empties
+// on quit (a test run must never delete a running app's previews).
 const cfgPath = path.join(userData, 'soundvault-config.json');
-if (!fs.existsSync(cfgPath)) fs.writeFileSync(cfgPath, JSON.stringify({ libraryPath: lib }, null, 2));
+const cfg = fs.existsSync(cfgPath) ? JSON.parse(fs.readFileSync(cfgPath, 'utf8')) : { libraryPath: lib };
+if (!cfg.rendersDir) { cfg.rendersDir = path.join(userData, 'renders'); fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2)); }
+const docs = app.getPath('documents').toLowerCase();
+if (path.resolve(cfg.rendersDir).toLowerCase().startsWith(docs)) { console.error('[harness] refusing to run: renders would be written to', cfg.rendersDir); process.exit(2); }
 
 // Force the app window hidden (unless --show) without touching src/main.js:
 // intercept `require('electron')` from src/ and hand back a patched BrowserWindow.

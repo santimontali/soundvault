@@ -25,7 +25,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
     build(lib, { families: 4 });
     fs.mkdirSync(ud, { recursive: true });
-    fs.writeFileSync(path.join(ud, 'soundvault-config.json'), JSON.stringify({ libraryPath: lib }));
+    // renders stay in the temp folder (the default, Documents\SoundVault Renders, has its staging emptied on quit)
+    fs.writeFileSync(path.join(ud, 'soundvault-config.json'), JSON.stringify({ libraryPath: lib, rendersDir: path.join(ud, 'renders') }));
     const t0 = Date.now();
     const child = spawn(exe, [`--user-data-dir=${ud}`, `--remote-debugging-port=${port}`, '--remote-allow-origins=*'], { stdio: 'ignore' });
     let exitedAt = null;
