@@ -5,7 +5,7 @@ import { state, bus, activeVault, setView } from './store.js';
 import { player, decode } from './audio/engine.js';
 import { peaksFor, dropPeaks } from './audio/peaks.js';
 import { list } from './ui/list.js';
-import { selection, position as positionSelToolbar } from './ui/selection.js';
+import { selection, selectionFades, position as positionSelToolbar } from './ui/selection.js';
 import { renderHeader, refreshHeader, sortButton, actionBtn, iconAction, setBanner, renderCollectBar, setEmpty, renderResonance, setLoading } from './ui/panel.js';
 import { focusSearch, setSearchText, effectiveScope, afterMotion, isMoving } from './ui/titlebar.js';
 import { revealFolder, menuForVaults } from './ui/sidebar.js';
@@ -119,7 +119,7 @@ export async function openCollection(name, { keepScroll = false } = {}) {
             countText: n === null ? '' : count(n, 'sound'),
             actions: [
                 iconAction('collection-plus', collectTarget === name ? 'Collecting into this collection' : 'Collect into this collection', () => setCollectTarget(collectTarget === name ? null : name), 'C'),
-                iconAction('more', 'Collection options', e => A.collectionMenu({ name, x: e.currentTarget.getBoundingClientRect().left, y: e.currentTarget.getBoundingClientRect().bottom + 4 })),
+                iconAction('more', 'Collection options', e => A.collectionMenu({ name, anchor: e.currentTarget })),
             ],
         });
         const c = state.collections.find(x => x.name === name);
@@ -263,7 +263,7 @@ function togglePlay() {
 function playSelection(s) {
     const item = list.get(s.path) || (player.sound && player.sound.path === s.path ? player.sound : { path: s.path, name: s.path.split(/[\\/]/).pop() });
     if (player.isCurrent(s.path) && player.segment && player.segment.start === s.start && player.segment.end === s.end && player.playing) { player.pause(); return; }
-    player.play(item, { start: s.start, end: s.end, fades: { in: s.fadeIn, out: s.fadeOut } });
+    player.play(item, { start: s.start, end: s.end, fades: selectionFades(s) });     // curves included: what plays is what renders
 }
 
 function stepList(delta, play = true) {

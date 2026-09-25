@@ -28,6 +28,7 @@ import { fadeGlyph } from './fade-glyph.js';
 
 const MIN_H = 230, DEF_H = 330;
 const TOP_BAND = 22;                  // px: fade squares live in the top band of the stage
+const EDGE_IN = 10, EDGE_OUT = 3;     // px: a crop edge's hit area, into the kept audio / outward
 const CURVE_TOP = 22, CURVE_BOT = 4;  // px: vertical extent of the drawn fade curves
 const SNAP_MIN = 0.001, SNAP_MAX = 0.010;
 const EXPORT_DEBOUNCE = 250;
@@ -65,7 +66,7 @@ export async function openEditorFor(item, sel) {
     const mem = S.memory.get(item.path);
     const restored = mem && sameRegion(mem.region, region);
     S.item = item; S.region = region; S.detached = false;
-    S.edit = restored ? mem.edit : D.createEdit(region.end - region.start, { fadeIn: sel.fadeIn || 0, fadeOut: sel.fadeOut || 0 });
+    S.edit = restored ? mem.edit : D.selectionEdit(sel);          // the selection's fades, curves included
     S.hist = restored ? mem.hist : { undo: [], redo: [] };
     S.view = { start: 0, end: S.edit.duration }; S.cursor = null; S.help = false;
     S.buf = S.rbuf = S.chans = S.ix = S.miniCols = null;
@@ -328,8 +329,10 @@ function hitTest(x, y) {
             return di <= dO ? { kind: 'fadeIn' } : { kind: 'fadeOut' };
         }
     }
-    const dcs = Math.abs(x - xcs), dce = Math.abs(x - xce);
-    if (Math.min(dcs, dce) <= 6) return dcs <= dce ? { kind: 'cropStart' } : { kind: 'cropEnd' };
+    // crop edges: the hit area reaches into the kept audio (10 px), barely outward (3 px),
+    // so a handle at the end of the track is grabbed from inside, far from the window's edge
+    const onS = x >= xcs - EDGE_OUT && x <= xcs + EDGE_IN, onE = x >= xce - EDGE_IN && x <= xce + EDGE_OUT;
+    if (onS || onE) return onS && (!onE || Math.abs(x - xcs) <= Math.abs(x - xce)) ? { kind: 'cropStart' } : { kind: 'cropEnd' };
     const v = vOf(x, W);
     if (x > xcs && x < xfi && xfi - xcs >= 4) {
         const cy = curveY(D.envelopeAt(e, v), H);
@@ -676,7 +679,10 @@ function applyRegion(region, edit) {
 
 function syncListSelection(region, edit) {
     const fl = D.fadeLengths(edit);
-    const patch = { start: region.start, end: region.end, fadeIn: edit.reverse ? fl.fadeOut : fl.fadeIn, fadeOut: edit.reverse ? fl.fadeIn : fl.fadeOut };
+    const fin = { fadeIn: fl.fadeIn, fadeInShape: edit.fadeInShape, fadeInTension: edit.fadeInTension };
+    const fout = { fadeIn: fl.fadeOut, fadeInShape: edit.fadeOutShape, fadeInTension: edit.fadeOutTension };
+    const [a, b] = edit.reverse ? [fout, fin] : [fin, fout];                     // the list plays forward
+    const patch = { start: region.start, end: region.end, fadeIn: a.fadeIn, fadeInShape: a.fadeInShape, fadeInTension: a.fadeInTension, fadeOut: b.fadeIn, fadeOutShape: b.fadeInShape, fadeOutTension: b.fadeInTension };
     S.internalSel = true;
     try {
         const cur = selection.get();

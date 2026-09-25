@@ -8,9 +8,15 @@
   contain: layout paint;
 }
 .row:hover { background: rgba(255, 255, 255, .02); }
-.row.cursor { background: rgba(255, 255, 255, .035); box-shadow: inset 2px 0 0 var(--fg-3); }
+.row.cursor { background: rgba(255, 255, 255, .045); }
 .row.multi { background: var(--accent-soft); }
-.row.playing { background: linear-gradient(90deg, var(--accent-soft) 0%, rgba(var(--accent-rgb), .04) 45%, transparent 75%); box-shadow: inset 2px 0 0 var(--accent); }
+/* Playing: the accent lives in the play button, the name and the waveform's progress;
+   the row only takes a faint, even tint of it (the same in every list of the app). */
+.row.playing { background: rgba(var(--accent-rgb), .055); }
+.row.playing.cursor { background: rgba(var(--accent-rgb), .08); }
+.row.playing.multi { background: rgba(var(--accent-rgb), .15); }
+.row.playing .nm { color: var(--accent); }
+.row.playing .nm mark { text-decoration: underline; text-underline-offset: 2px; }
 .row.missing { opacity: .5; }
 .row.bad .dur { color: var(--warn); }
 .row.bad .pbtn { opacity: .5; }
@@ -48,14 +54,21 @@
   position: absolute; top: 0; bottom: 0; background: var(--accent-soft-2); pointer-events: none;
   border-left: 1px solid var(--accent-line); border-right: 1px solid var(--accent-line);
 }
-/* Edge grips resize; the top band (12 px) belongs to the fade dots, so the two never compete. */
-.wf .sel .h { position: absolute; top: 12px; bottom: 0; width: 9px; pointer-events: auto; cursor: ew-resize; }
+/* Zones of a selection, never ambiguous: the top band (12 px) belongs to the fade dots,
+   the edge grips resize below it, a fade's curve bends (ns-resize), the rest of the
+   body moves the selection (grab), outside draws a new one (text). */
+.wf .sel .h { position: absolute; top: 12px; bottom: 0; width: 9px; pointer-events: auto; cursor: col-resize; }
 .wf .sel .h.l { left: -5px; } .wf .sel .h.r { right: -5px; }
 .wf .sel .h::after { content: ""; position: absolute; left: 3px; top: 22%; bottom: 30%; width: 3px; border-radius: 2px; background: var(--accent); opacity: .85; }
-/* Fades: gain line + a veil over what the fade removes (the waveform stays readable under it) */
+/* Fades: the gain curve (the exact law the audio gets) + a veil over what the fade
+   removes; the curve's dark casing keeps it readable over the colored progress. */
 .wf .sel .fades { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .wf .sel .fades .veil { fill: rgba(6, 6, 8, .62); }
-.wf .sel .fades .fl { stroke: var(--accent); stroke-width: 1.25; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.wf .sel .fades .fl, .wf .sel .fades .fc { fill: none; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.wf .sel .fades .fc { stroke: rgba(6, 6, 8, .72); stroke-width: 3.5; }
+.wf .sel .fades .fl { stroke: var(--accent); stroke-width: 1.25; }
+.wf .sel .fades.hot-in .fl.in, .wf .sel .fades.hot-out .fl.out { stroke-width: 2.25; }
+.wf .sel .fades.hot-in .fc.in, .wf .sel .fades.hot-out .fc.out { stroke-width: 4.5; }
 .wf .sel .fades.no-in .in, .wf .sel .fades.no-out .out { display: none; }
 /* Fade dots on the top corners (hollow until there is a fade); the hit area is wider than the dot */
 .wf .sel .fk { position: absolute; top: -2px; width: 16px; height: 14px; margin-left: -8px; pointer-events: auto; cursor: ew-resize; z-index: 2; }
@@ -75,6 +88,8 @@
 }
 .wf .sel .ftag.out { transform: translateX(calc(-100% - 6px)); }
 .wf .sel .ftag.show { opacity: 1; }
+.wf .sel .ftag.curve { display: flex; align-items: center; gap: 6px; padding: 2px 7px 2px 5px; }
+.wf .sel .ftag .fade-glyph { color: var(--accent); }
 .wf .loading { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--wave-dim); }
 
 /* Floating selection toolbar */

@@ -115,7 +115,9 @@
   display: flex; align-items: center; gap: 8px; margin: 8px 8px 4px; padding: 8px 10px; border-radius: var(--r-md);
   background: var(--bg-1); border: 1px solid var(--line); cursor: pointer; min-width: 0;
 }
-.vault-switch:hover { border-color: var(--line-3); }
+.vault-switch:hover, .vault-switch[aria-expanded="true"] { border-color: var(--line-3); }
+.vault-switch > .i { transition: transform var(--t) var(--ease); }
+.vault-switch[aria-expanded="true"] > .i { transform: rotate(180deg); }
 .vault-switch .dot { width: 10px; height: 10px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
 .vault-switch .vs-name { font-weight: 600; flex: 1; min-width: 0; }
 .vault-switch .vs-sub { font-size: var(--fs-xs); color: var(--fg-3); }

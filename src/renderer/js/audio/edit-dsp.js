@@ -211,6 +211,99 @@ export function trimToCrop(e, region) {
     return { region: next, edit: normalizeEdit({ ...e, duration: D, cropStart: 0, cropEnd: D, fadeInEnd: fadeIn, fadeOutStart: D - fadeOut }) };
 }
 
+// ── list selections (quick trim in Sound mode) ─────────────────────────
+/**
+ * A list selection's fades as an edit of the selected region: the editor's own
+ * model, so a selection draws, plays and renders exactly like the editor would.
+ * s: { start, end, fadeIn, fadeOut (seconds), fadeInShape, fadeInTension,
+ * fadeOutShape, fadeOutTension }; missing shapes are linear.
+ */
+export function selectionEdit(s) {
+    return createEdit(Math.max(0, num(s.end, 0) - num(s.start, 0)), {
+        fadeIn: Math.max(0, num(s.fadeIn, 0)), fadeOut: Math.max(0, num(s.fadeOut, 0)),
+        fadeInShape: s.fadeInShape, fadeInTension: s.fadeInTension, fadeOutShape: s.fadeOutShape, fadeOutTension: s.fadeOutTension,
+    });
+}
+
+/**
+ * One fade's own gain at visual time v: the fade-in rises over [cropStart, fadeInEnd],
+ * the fade-out falls over [fadeOutStart, cropEnd], 1 anywhere else. Fades never
+ * overlap (normalizeEdit), so fadeAt(in) × fadeAt(out) is envelopeAt inside the crop.
+ */
+export function fadeAt(e, side, v) {
+    if (side === 'in') {
+        const L = e.fadeInEnd - e.cropStart;
+        return L > 0 && v < e.fadeInEnd ? fadeGain((v - e.cropStart) / L, e.fadeInShape, e.fadeInTension) : 1;
+    }
+    const L = e.cropEnd - e.fadeOutStart;
+    return L > 0 && v > e.fadeOutStart ? fadeGain((e.cropEnd - v) / L, e.fadeOutShape, e.fadeOutTension) : 1;
+}
+
+/**
+ * A list selection rendered: its region with the fades, sample for sample what
+ * renderEdit gives for selectionEdit(s) (no gain, pitch or reverse), only faster:
+ * the region is copied and just the fade samples are computed.
+ * src: { channels: Float32Array[], sampleRate } of the whole file.
+ */
+export function renderSelection(src, s) {
+    const e = selectionEdit(s), sr = src.sampleRate, n = src.channels.length ? src.channels[0].length : 0;
+    const a = clamp(Math.round(num(s.start, 0) * sr), 0, n), b = clamp(Math.round((num(s.start, 0) + e.duration) * sr), a, n);
+    const len = b - a, FI = (e.fadeInEnd - e.cropStart) * sr, FO = (e.cropEnd - e.fadeOutStart) * sr;
+    const out = src.channels.map(c => c.slice(a, b));
+    const env = k => {
+        let g = 1;
+        if (FI > 0 && k < FI) g = fadeGain(k / FI, e.fadeInShape, e.fadeInTension);
+        const back = len - 1 - k;
+        if (FO > 0 && back < FO) g = Math.min(g, fadeGain(back / FO, e.fadeOutShape, e.fadeOutTension));
+        return g;
+    };
+    const kIn = Math.min(len, Math.ceil(FI)), kOut = Math.max(kIn, Math.floor(len - 1 - FO));
+    for (let k = 0; k < kIn; k++) { const g = env(k); for (const d of out) d[k] *= g; }
+    for (let k = kOut; k < len; k++) { const g = env(k); for (const d of out) d[k] *= g; }
+    return { channels: out, sampleRate: sr, frames: len };
+}
+
+/** n evenly spaced samples of one fade from visual time `from` to `to` (for Web Audio's setValueCurveAtTime). */
+export function fadeCurve(e, side, from, to, n) {
+    const out = new Float32Array(Math.max(2, n | 0));
+    const m = out.length - 1;
+    for (let i = 0; i <= m; i++) out[i] = fadeAt(e, side, from + (to - from) * i / m);
+    return out;
+}
+
+/**
+ * The tension that makes a fade pass through gain `g` at relative position `t`
+ * (0..1 from the silent edge): how a curve dragged by the pointer follows it.
+ * fadeGain is monotonic in the tension for every shape, so a bisection finds it;
+ * beyond the model's range the result is clamped to ±1. Returns null where the
+ * tension does not move the curve (an S-curve's middle).
+ */
+export function tensionThrough(shape, t, g) {
+    t = clamp(num(t, 0.5), 1e-4, 1 - 1e-4);
+    g = clamp(num(g, 0.5), 1e-6, 1 - 1e-6);
+    const f = k => fadeGain(t, shape, k);
+    let lo = -1, hi = 1;
+    const flo = f(lo), fhi = f(hi);
+    if (Math.abs(flo - fhi) < 1e-9) return null;
+    const falling = flo > fhi;                           // gain falls as the tension rises (the usual case)
+    if (falling ? g >= flo : g <= flo) return lo;
+    if (falling ? g <= fhi : g >= fhi) return hi;
+    for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2;
+        if ((f(mid) > g) === falling) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+}
+
+/** Words for a fade's curve (readouts): "Linear", "Fast start 40%", "Slow start 25%", "S-curve, sharper 30%", "Equal power". */
+export function describeFade(shape, tension) {
+    const k = clamp(num(tension, 0), -1, 1), pct = Math.round(Math.abs(k) * 100);
+    if (shape === 'scurve') return pct < 3 ? 'S-curve' : `S-curve, ${k > 0 ? 'sharper' : 'softer'} ${pct}%`;
+    const bend = pct < 3 ? '' : k < 0 ? `fast start ${pct}%` : `slow start ${pct}%`;
+    if (shape === 'equal') return bend ? `Equal power, ${bend}` : 'Equal power';
+    return bend ? bend.charAt(0).toUpperCase() + bend.slice(1) : 'Linear';
+}
+
 // ── hashing (export de-dup keys) ────────────────────────────────────────
 /** Deterministic 64-bit FNV-1a (two 32-bit lanes) of any JSON-able value → 16 hex chars. */
 export function hashKey(value) {

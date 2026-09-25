@@ -6,6 +6,7 @@
 import { hexToRgb, stripExt, formatDuration } from './util.js';
 import { decode, decodeNative } from './audio/engine.js';
 import { peaksFor, amp } from './audio/peaks.js';
+import { selectionEdit, renderSelection } from './audio/edit-dsp.js';
 import { modeAccent } from './store.js';
 
 export function ghostIcon({ data = null, color = modeAccent(), count = 1, badge = false } = {}) {
@@ -50,31 +51,26 @@ export function dragFiles(items) {
 let pre = { key: null, promise: null, path: null };
 
 export function regionKey(sound, s) {
-    return [sound.path, sound.mtime || 0, s.start.toFixed(4), s.end.toFixed(4), (s.fadeIn || 0).toFixed(4), (s.fadeOut || 0).toFixed(4)].join('|');
+    const e = selectionEdit(s), f = v => v.toFixed(4);
+    return [sound.path, sound.mtime || 0, f(s.start), f(s.end), f(e.fadeInEnd), e.fadeInShape, f(e.fadeInTension), f(e.cropEnd - e.fadeOutStart), e.fadeOutShape, f(e.fadeOutTension)].join('|');
 }
 
 /**
- * Slice + linear fades (same curve as playback). Renders use the file's
- * NATIVE sample rate (96/192 kHz libraries must not be downsampled on
- * export); `opts.preview` uses the 48 kHz playback decode instead (Echo).
+ * Slice + fades with their curves: the editor's render (edit-dsp), the same law
+ * playback uses. Renders use the file's NATIVE sample rate (96/192 kHz libraries
+ * must not be downsampled on export); `opts.preview` uses the 48 kHz playback
+ * decode instead (Echo).
  */
 export async function regionChannels(sound, s, opts = {}) {
     const pk = peaksFor(sound.path);
     const buf = opts.preview || !(pk && pk.sampleRate) ? await decode(sound.path) : await decodeNative(sound.path, pk.sampleRate);
     if (!buf) return null;
     const sr = buf.sampleRate;
-    const a = Math.max(0, Math.floor(s.start * sr)), b = Math.min(buf.length, Math.ceil(s.end * sr));
-    const len = b - a;
-    if (len < 2) return null;
-    const fi = Math.min(len, Math.round((s.fadeIn || 0) * sr)), fo = Math.min(len, Math.round((s.fadeOut || 0) * sr));
-    const channels = [];
-    for (let c = 0; c < buf.numberOfChannels; c++) {
-        const d = buf.getChannelData(c).slice(a, b);
-        for (let i = 0; i < fi; i++) d[i] *= i / fi;
-        for (let i = 0; i < fo; i++) d[len - 1 - i] *= i / fo;
-        channels.push(d);
-    }
-    return { channels, sampleRate: sr, duration: len / sr };
+    const chans = [];
+    for (let c = 0; c < buf.numberOfChannels; c++) chans.push(buf.getChannelData(c));
+    const r = renderSelection({ channels: chans, sampleRate: sr }, s);
+    if (r.frames < 2) return null;
+    return { channels: r.channels, sampleRate: sr, duration: r.frames / sr };
 }
 
 export function prerenderRegion(sound, s) {

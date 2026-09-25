@@ -219,6 +219,8 @@ module.exports = async (ctx) => {
         return row && player.sound && { row: row.querySelector('.nm').textContent, player: player.sound.name };
     }, 8000, 'card row playing');
     check('clicking a card row auditions it (playing state on the row)', playing && playing.player.startsWith(playing.row), playing);
+    const look = await ctx.exec(() => { const r = document.querySelector('.cards .c-row.playing'); if (!r) return null; const acc = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); const hex = [1, 3, 5].map(i => parseInt(acc.slice(i, i + 2), 16)).join(', '); return { shadow: getComputedStyle(r).boxShadow, name: getComputedStyle(r.querySelector('.nm')).color, accent: `rgb(${hex})` }; });
+    check('the playing row carries the accent in its control and name, with no side stripe', !!look && look.shadow === 'none' && look.name === look.accent, look);
     await ctx.wait(300);
     await shot('03-suggestions');
     ctx.win.setContentSize(1440, 900); await ctx.wait(600);

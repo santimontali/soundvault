@@ -29,6 +29,14 @@
   --accent-soft-2: rgba(var(--accent-rgb), .2);
   --accent-line: rgba(var(--accent-rgb), .42);
 
+  /* well: a surface set a touch below the page (cards on the vault home), a
+     hairline edge and a soft shadow under its top edge; nothing lifts toward you */
+  --well: #111114;
+  --well-hover: #131316;
+  --well-line: rgba(255, 255, 255, .05);
+  --well-line-hover: rgba(255, 255, 255, .085);
+  --well-shade: inset 0 1px 3px rgba(0, 0, 0, .45), inset 0 0 1px rgba(0, 0, 0, .35);
+
   --danger: #ff6b6b;
   --danger-soft: rgba(255, 107, 107, .12);
   --warn: #f5c56b;
@@ -103,6 +111,9 @@ a { color: var(--accent); text-decoration: none; }
 @keyframes rz-ring { 0% { opacity: 0; transform: scaleX(.9); } 18% { opacity: .95; } 70%, 100% { opacity: 0; transform: scaleX(1.1); } }
 h4 .i.h4i { width: 14px; height: 14px; margin-right: 7px; vertical-align: -2px; color: var(--accent); }
 
+/* a drag in progress keeps its cursor wherever the pointer goes */
+html.hold-cursor, html.hold-cursor * { cursor: var(--hold-cursor) !important; }
+
 .tnum { font-variant-numeric: tabular-nums; }
 .muted { color: var(--fg-3); }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -140,6 +151,8 @@ h4 .i.h4i { width: 14px; height: 14px; margin-right: 7px; vertical-align: -2px; 
 .icon-btn:active:not(:disabled) { background: var(--bg-4); }
 .icon-btn.on { color: var(--accent); }
 .icon-btn.sm { width: 24px; height: 24px; }
+/* a button whose menu is open (the same button closes it) */
+.btn[aria-expanded="true"], .icon-btn[aria-expanded="true"], .chip[aria-expanded="true"] { background: var(--bg-3); color: var(--fg-1); }
 
 .input {
   height: 30px; width: 100%; padding: 0 10px; border-radius: var(--r);

@@ -23,6 +23,25 @@ module.exports = async (ctx) => {
     C.check('the selected row was scrolled into view', rb && rb.top >= lb1.top - 1 && rb.bottom <= lb1.bottom + 1, { row: rb, list: lb1 });
     await ctx.shot('layout-01-drawer-open');
 
+    // the time axis keeps clear of the window's edges (Windows resizes there): the crop
+    // handles sit inside the track and their hit areas reach inward, not outward
+    const edges = async () => ctx.exec(() => {
+        const E = window.__sv.E, g = E.geometry(), y = g.height / 2;
+        const box = s => document.querySelector(s).getBoundingClientRect();
+        const kind = x => (E.hit(x, y) || {}).kind;
+        return { left: g.left, right: innerWidth - (g.left + g.width), ruler: [box('#editor .ed-ruler').left, innerWidth - box('#editor .ed-ruler').right], mini: [box('#editor .ed-mini').left, innerWidth - box('#editor .ed-mini').right],
+            endIn: kind(g.cropEnd - 9), endOut: kind(g.cropEnd + 4), startIn: kind(g.cropStart + 9), startOut: kind(g.cropStart - 4) };
+    });
+    const e1 = await edges();
+    C.check('the track ends 20 px before the window edge; the crop end is grabbed from 9 px inside, not 4 px outside', e1.right >= 18 && e1.ruler[1] >= 18 && e1.mini[1] >= 18 && e1.endIn === 'cropEnd' && e1.endOut !== 'cropEnd' && e1.startIn === 'cropStart', e1);
+    await ctx.exec(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, bubbles: true })); return true; });
+    await ctx.wait(600);
+    const e2 = await edges();
+    C.check('with the sidebar hidden the track starts 12 px inside the window, the crop start reaches inward', e2.left >= 11 && e2.ruler[0] >= 11 && e2.mini[0] >= 11 && e2.startIn === 'cropStart' && e2.startOut !== 'cropStart', e2);
+    await H.shotEditor(ctx, 'layout-01b-edges-no-sidebar', true);
+    await ctx.exec(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, bubbles: true })); return true; });
+    await ctx.wait(600);
+
     // resize from the top edge: taller, clamped, persisted
     const edTop = await ctx.exec(() => document.getElementById('editor').getBoundingClientRect().top);
     await H.T.drag(ctx, 640, edTop + 1, 640, edTop - 90, { steps: 8 });
@@ -56,6 +75,8 @@ module.exports = async (ctx) => {
     ctx.win.setSize(980, 760); await ctx.wait(500);
     const narrow = await ctx.exec(() => { const f = document.querySelector('#editor .ed-foot'), hd = document.querySelector('#editor .ed-head'); return { foot: [f.scrollWidth, f.clientWidth], head: [hd.scrollWidth, hd.clientWidth], save: getComputedStyle(document.querySelector('#editor .ed-save-t')).display }; });
     C.check('narrow window: header and footer fit (container query hides labels)', narrow.foot[0] <= narrow.foot[1] + 1 && narrow.head[0] <= narrow.head[1] + 1 && narrow.save === 'none', narrow);
+    const e3 = await edges();
+    C.check('narrow window: the crop end still sits clear of the window edge', e3.right >= 18 && e3.endIn === 'cropEnd', e3);
     await ctx.shot('layout-02-narrow');
     ctx.win.setSize(1280, 800); await ctx.wait(400);
 

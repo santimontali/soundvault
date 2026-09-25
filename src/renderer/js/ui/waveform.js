@@ -106,9 +106,19 @@ export function retint(played, data, o = {}) {
     if (played && played._tint !== undefined && played._tint !== version) drawPlayed(played, data, o);
 }
 
-/** Set progress (0..1) on a played canvas via clip-path, no redraw. */
-export function setProgress(played, frac) {
+/**
+ * Set progress (0..1) on a played canvas via clip-path, no redraw. `from` (0..1)
+ * is where the colored part starts: a selection that plays colors only itself,
+ * the rest of the file stays neutral.
+ */
+export function setProgress(played, frac, from = 0) {
     if (!played) return;
-    const pct = Math.max(0, Math.min(1, frac)) * 100;
-    played.style.clipPath = `inset(0 ${100 - pct}% 0 0)`;
+    const a = Math.max(0, Math.min(1, from)) * 100;
+    const pct = Math.max(a, Math.min(100, frac * 100));
+    played.style.clipPath = `inset(0 ${100 - pct}% 0 ${a}%)`;
+}
+
+/** Where a player's colored progress starts in its file (0..1): the playing selection's start, or 0. */
+export function progressFrom(player, fileDuration) {
+    return player.segment && fileDuration > 0 ? player.segment.start / fileDuration : 0;
 }

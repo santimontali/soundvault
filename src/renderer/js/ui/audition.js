@@ -8,7 +8,7 @@ import { h, setIcon, formatDuration } from '../util.js';
 import { bus } from '../store.js';
 import { player } from '../audio/engine.js';
 import { peaksFor, requestPeaks } from '../audio/peaks.js';
-import { drawPair, setProgress, retint } from './waveform.js';
+import { drawPair, setProgress, progressFrom, retint } from './waveform.js';
 
 const waves = new Set();            // live .mw elements
 let current = [];                   // .mw elements of the sound that is playing
@@ -131,8 +131,8 @@ function progress() {
     const pk = peaksFor(player.sound.path);
     const d = (pk && pk.duration) || player.fileDuration || player.duration;
     if (!(d > 0)) return;
-    const f = player.position() / d;
-    for (const el of current) if (el.isConnected) setProgress(el.children[1], f);
+    const f = player.position() / d, from = progressFrom(player, d);
+    for (const el of current) if (el.isConnected) setProgress(el.children[1], f, from);
 }
 
 function onState() {

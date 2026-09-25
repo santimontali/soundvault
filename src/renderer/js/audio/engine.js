@@ -7,9 +7,24 @@
 // Every play() takes a token; async continuations from stale requests are
 // dropped, so fast clicking across rows can never play the wrong sound.
 import { Emitter } from '../util.js';
+import { selectionEdit, fadeCurve } from './edit-dsp.js';
 
 export const SAMPLE_RATE = 48000;
 const CACHE_BUDGET = 384 * 1024 * 1024;
+const FADE_POINTS_PER_S = 8000, FADE_POINTS_MAX = 1 << 17;   // fade automation: 0.125 ms steps (fades up to 16 s)
+
+/**
+ * Automate one fade of a region on `param`: the editor's gain law (edit-dsp), sampled
+ * densely over that fade only, from where playback starts (t0, seconds into the region).
+ */
+function scheduleFade(param, e, side, t0, now) {
+    const a = side === 'in' ? e.cropStart : e.fadeOutStart, b = side === 'in' ? e.fadeInEnd : e.cropEnd;
+    if (!(b - a > 1e-6)) return;                           // no such fade: the gain stays 1
+    const from = Math.max(a, t0);
+    if (b - from < 1e-5) { param.value = side === 'in' ? 1 : 0; return; }
+    const n = Math.max(2, Math.min(FADE_POINTS_MAX, Math.ceil((b - from) * FADE_POINTS_PER_S) + 1));
+    param.setValueCurveAtTime(fadeCurve(e, side, from, b, n), now + (from - t0), b - from);
+}
 
 let ctx = null, master = null, volume = 0.8;
 export function audioCtx() {
@@ -138,9 +153,11 @@ class Player extends Emitter {
         return { sound: this.sound, playing: this.playing, loading: this.loading, mode: this.mode, duration: this.duration, fileDuration: this.fileDuration, segment: this.segment, loop: this.loop };
     }
 
+    _dropGains() { for (const g of this._srcGain || []) g.disconnect(); this._srcGain = null; }
+
     _teardown() {
         if (this._src) { this._src.onended = null; try { this._src.stop(); } catch (e) {} this._src.disconnect(); this._src = null; }
-        if (this._srcGain) { this._srcGain.disconnect(); this._srcGain = null; }
+        this._dropGains();
         if (this._audio) {
             const a = this._audio;
             a.onended = a.onerror = a.onloadedmetadata = null;
@@ -154,7 +171,9 @@ class Player extends Emitter {
      * Play a sound.
      * opts.start/opts.end (seconds in file) → region via buffer backend.
      * opts.buffer → play an already-built AudioBuffer (editor output).
-     * opts.fades {in, out} seconds (buffer only). opts.at → start offset for whole-file playback.
+     * opts.fades (buffer only): a selection's fades { fadeIn, fadeOut (seconds),
+     *   fadeInShape, fadeInTension, fadeOutShape, fadeOutTension }, the editor's model.
+     * opts.at → start offset for whole-file playback.
      */
     async play(sound, opts = {}) {
         const token = ++this._token;
@@ -187,29 +206,23 @@ class Player extends Emitter {
 
     _playBuffer(buf, offset, dur, fades, token, resumeAt = 0) {
         const c = audioCtx();
-        if (this._srcGain) { this._srcGain.disconnect(); this._srcGain = null; }   // pause() keeps it; never stack gains
+        this._dropGains();                                   // pause() keeps them; never stack gains
         const src = c.createBufferSource();
         src.buffer = buf;
-        const g = c.createGain();
-        src.connect(g); g.connect(master);
+        // One gain per fade, in series, each automated only over its own span with the
+        // editor's law (edit-dsp): what plays is what the drag or "Save" renders.
+        const gIn = c.createGain(), gOut = c.createGain();
+        src.connect(gIn); gIn.connect(gOut); gOut.connect(master);
         const now = c.currentTime + 0.005;
-        const fi = fades && fades.in > 0 ? Math.min(fades.in, dur) : 0;
-        const fo = fades && fades.out > 0 ? Math.min(fades.out, dur) : 0;
-        if ((fi || fo) && dur - resumeAt > 0.002) {
-            // Same envelope as the render (fade-in × fade-out), so overlapping
-            // fades sound exactly like the file that gets dragged or saved.
-            const span = dur - resumeAt, n = Math.max(2, Math.min(2048, Math.ceil(span * 200)));
-            const curve = new Float32Array(n);
-            for (let i = 0; i < n; i++) {
-                const t = resumeAt + span * i / (n - 1);
-                curve[i] = (fi ? Math.min(1, t / fi) : 1) * (fo ? Math.min(1, (dur - t) / fo) : 1);
-            }
-            g.gain.setValueCurveAtTime(curve, now, span);
+        const e = fades && ((fades.fadeIn || 0) > 0 || (fades.fadeOut || 0) > 0) ? selectionEdit({ start: 0, end: dur, ...fades }) : null;
+        if (e && dur - resumeAt > 0.002) {
+            scheduleFade(gIn.gain, e, 'in', resumeAt, now);
+            scheduleFade(gOut.gain, e, 'out', resumeAt, now);
         }
         this._buffer = buf; this._bufOffset = offset; this._fades = fades || null;
         this.mode = 'buffer';
         this.duration = dur;
-        if (this.loop && !(fi || fo)) {
+        if (this.loop && !e) {
             src.loop = true; src.loopStart = offset; src.loopEnd = offset + dur;
             src.start(now, offset + resumeAt);
         } else {
@@ -220,7 +233,7 @@ class Player extends Emitter {
             if (this.loop) { this._src = null; this._playBuffer(buf, offset, dur, fades, token, 0); return; }
             this.playing = false; this._pausedAt = 0; this._emit(); this.emit('ended', this.sound);
         };
-        this._src = src; this._srcGain = g;
+        this._src = src; this._srcGain = [gIn, gOut];
         this._startedAt = now; this._offset = resumeAt;
         this.playing = true; this.loading = false;
         this._emit();
@@ -310,7 +323,7 @@ class Player extends Emitter {
             if (this.playing) {
                 const token = this._token;
                 if (this._src) { this._src.onended = null; try { this._src.stop(); } catch (e) {} this._src.disconnect(); this._src = null; }
-                if (this._srcGain) { this._srcGain.disconnect(); this._srcGain = null; }
+                this._dropGains();
                 this._playBuffer(this._buffer, this._bufOffset, this.duration, this._fades, token, rel);
             } else { this._pausedAt = rel; this._emit(); }
         }

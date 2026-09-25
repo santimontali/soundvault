@@ -5,6 +5,7 @@
 .ed {
   container-type: inline-size; container-name: ed;
   --ed-wave: #5b5a64; --ed-rms: #8d8b96; --ed-dim: #26262c; --ed-dim-rms: #34343b;
+  --ed-gl: 12px; --ed-gr: 20px;   /* the time axis keeps clear of the window's edges (Windows resizes there) */
   position: relative; flex: 0 0 auto; height: 330px; min-height: 230px;
   display: flex; flex-direction: column;
   background: var(--bg-2); border-top: 1px solid var(--line-2);
@@ -16,7 +17,7 @@
 @keyframes ed-in { from { opacity: 0; transform: translateY(14px); } }
 
 /* resize grip (top edge) */
-.ed-resize { position: absolute; left: 0; right: 0; top: -5px; height: 9px; cursor: ns-resize; z-index: 6; }
+.ed-resize { position: absolute; left: var(--ed-gl); right: var(--ed-gr); top: -5px; height: 9px; cursor: ns-resize; z-index: 6; }
 .ed-resize::after {
   content: ""; position: absolute; left: 50%; top: 3px; width: 40px; height: 3px; margin-left: -20px;
   border-radius: 2px; background: var(--line-3); opacity: 0; transition: opacity var(--t-fast), background var(--t-fast);
@@ -37,12 +38,17 @@
 .ed-tools .icon-btn.on { color: var(--accent); background: var(--accent-soft); }
 .ed-sep { width: 1px; height: 16px; background: var(--line-2); margin: 0 5px; }
 
+/* The time axis (ruler, stage, overview) is one inset track with gutters on both
+   sides: the crop handles at its ends are never on the window's resize border, and
+   their hit areas reach inward. */
+.ed-ruler, .ed-stage, .ed-mini { margin-left: var(--ed-gl); margin-right: var(--ed-gr); }
+
 /* ruler */
-.ed-ruler { position: relative; height: 22px; flex-shrink: 0; background: var(--bg-1); border-bottom: 1px solid var(--line); cursor: text; }
+.ed-ruler { position: relative; height: 22px; flex-shrink: 0; margin-top: 6px; border-radius: var(--r) var(--r) 0 0; overflow: hidden; background: var(--bg-1); border-bottom: 1px solid var(--line); cursor: text; }
 .ed-ruler canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
 /* stage */
-.ed-stage { position: relative; flex: 1; min-height: 90px; background: var(--bg-0); overflow: hidden; cursor: default; }
+.ed-stage { position: relative; flex: 1; min-height: 64px; background: var(--bg-0); overflow: hidden; cursor: default; }
 .ed-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .ed-played { clip-path: inset(0 100% 0 0); pointer-events: none; }
 .ed-over { pointer-events: none; }
@@ -58,7 +64,7 @@
 .ed.loading .ed-foot, .ed.loading .ed-tools { opacity: .5; pointer-events: none; }
 
 /* overview strip */
-.ed-mini { position: relative; height: 20px; flex-shrink: 0; background: var(--bg-1); border-top: 1px solid var(--line); cursor: pointer; }
+.ed-mini { position: relative; height: 20px; flex-shrink: 0; margin-bottom: 6px; border-radius: 0 0 var(--r) var(--r); overflow: hidden; background: var(--bg-1); border-top: 1px solid var(--line); cursor: pointer; }
 .ed-mini canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 
 /* footer: transport, readouts, gain/pitch, export */

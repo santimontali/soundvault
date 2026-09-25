@@ -1,6 +1,6 @@
 // Dialogs, menus, toasts and tooltips, all keyboard-accessible, no native
 // confirm()/alert(), no innerHTML with user data.
-import { h, icon, clamp } from '../util.js';
+import { h, icon, clamp, fill } from '../util.js';
 
 const layer = () => document.getElementById('layer-overlays');
 let openDialogs = 0;
@@ -32,7 +32,7 @@ export function modal({ title, icon: ic, wide = false, cls = '' }, build) {
             resolve(v);
         };
         const parts = build(close);
-        dlg.append(
+        fill(dlg,                                           // body and footer are optional (a picker has no footer)
             h('div.dlg-head', {}, ic ? icon(ic) : null, h('h3', { text: title }), h('button.icon-btn.sm', { 'aria-label': 'Close', onclick: () => close(undefined) }, icon('x'))),
             parts.body ? h('div.dlg-body', {}, parts.body) : null,
             parts.footer ? h('div.dlg-foot', {}, parts.footer) : null,
@@ -123,8 +123,16 @@ export function pickDialog({ title, items, create = null, placeholder = 'Filter�
 }
 
 // ── Context menu ───────────────────────────────────────────────────────
-let activeMenu = null;
-export function closeMenu() { if (activeMenu) { activeMenu.remove(); activeMenu = null; document.removeEventListener('keydown', menuKeys, true); } }
+// A menu opened from a button belongs to it: the same button closes it again
+// (aria-expanded follows), a press anywhere else closes it.
+let activeMenu = null, activeAnchor = null;
+export function closeMenu() {
+    if (!activeMenu) return;
+    activeMenu.remove(); activeMenu = null;
+    if (activeAnchor) activeAnchor.setAttribute('aria-expanded', 'false');
+    activeAnchor = null;
+    document.removeEventListener('keydown', menuKeys, true);
+}
 function menuKeys(e) {
     if (!activeMenu) return;
     const items = [...activeMenu.querySelectorAll('.mi:not(.disabled)')];
@@ -140,9 +148,12 @@ function menuKeys(e) {
 
 /**
  * items: [{label, icon, kbd, onClick, danger, disabled, checked}] | 'sep' | {header}
- * `at` = {x, y} or an element to anchor below.
+ * `at` = {x, y} or an element to anchor below (a toggle: calling it again for
+ * the same element closes the menu and returns null).
  */
 export function showMenu(at, items) {
+    const anchor = at instanceof Element ? at : null;
+    if (anchor && activeMenu && activeAnchor === anchor) { closeMenu(); return null; }
     closeMenu();
     const m = h('div.menu', { role: 'menu' });
     for (const it of items) {
@@ -163,10 +174,13 @@ export function showMenu(at, items) {
     m.style.left = clamp(x, 8, innerWidth - r.width - 8) + 'px';
     m.style.top = (y + r.height > innerHeight - 8 ? Math.max(8, y - r.height) : y) + 'px';
     activeMenu = m;
+    activeAnchor = anchor;
+    if (anchor) { anchor.setAttribute('aria-haspopup', 'menu'); anchor.setAttribute('aria-expanded', 'true'); }
     document.addEventListener('keydown', menuKeys, true);
     return m;
 }
-document.addEventListener('mousedown', e => { if (activeMenu && !activeMenu.contains(e.target)) closeMenu(); }, true);
+// A press on the menu's own button is left to its click, which closes the menu (toggle).
+document.addEventListener('mousedown', e => { if (activeMenu && !activeMenu.contains(e.target) && !(activeAnchor && activeAnchor.contains(e.target))) closeMenu(); }, true);
 window.addEventListener('blur', closeMenu);
 window.addEventListener('resize', closeMenu);
 

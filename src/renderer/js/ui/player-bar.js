@@ -3,7 +3,7 @@ import { h, icon, setIcon, formatClock, stripExt, clamp } from '../util.js';
 import { state, bus } from '../store.js';
 import { player, setVolume, getVolume } from '../audio/engine.js';
 import { peaksFor, requestPeaks } from '../audio/peaks.js';
-import { drawPair, setProgress, retint } from './waveform.js';
+import { drawPair, setProgress, progressFrom, retint } from './waveform.js';
 import { relDir } from './list.js';
 
 let els = {}, drawnFor = null, raf = null;
@@ -106,7 +106,7 @@ function paint() {
     els.t0.textContent = formatClock(pos, d);
     els.t1.textContent = formatClock(d, d);
     const f = d ? pos / d : 0;
-    setProgress(els.played, f);
+    setProgress(els.played, f, progressFrom(player, d));     // a playing selection colors only itself
     els.head.style.left = clamp(f, 0, 1) * 100 + '%';
 }
 

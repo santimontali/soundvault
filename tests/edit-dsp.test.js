@@ -350,3 +350,91 @@ test('envelopeSamples follow envelopeAt (live preview control signal)', () => {
     assert.strictEqual(M.envelopeMax(e, 0.35, 0.4), 1);
     assert.ok(Math.abs(M.envelopeMax(e, 0.1, 0.2) - M.envelopeAt(e, 0.2)) < 1e-12);
 });
+
+// ── list selections (quick trim): the editor's model, end to end ─────────
+test('a list selection is an edit of its region: same fade laws, fades never overlap', () => {
+    const s = { start: 1.2, end: 2.2, fadeIn: 0.25, fadeOut: 0.4, fadeInShape: 'power', fadeInTension: -0.6, fadeOutShape: 'scurve', fadeOutTension: 0.3 };
+    const e = M.selectionEdit(s);
+    assert.ok(Math.abs(e.duration - 1) < 1e-12 && e.cropStart === 0 && Math.abs(e.cropEnd - 1) < 1e-12);
+    assert.ok(Math.abs(e.fadeInEnd - 0.25) < 1e-12 && Math.abs(e.fadeOutStart - 0.6) < 1e-12);
+    for (let v = 0; v <= 1; v += 0.01) {
+        const want = v < 0.25 ? REF.curve(v / 0.25, 'power', -0.6) : v > 0.6 ? REF.curve((1 - v) / 0.4, 'scurve', 0.3) : 1;
+        assert.ok(Math.abs(M.envelopeAt(e, v) - want) < 1e-9, `v=${v}`);
+        assert.ok(Math.abs(M.fadeAt(e, 'in', v) * M.fadeAt(e, 'out', v) - M.envelopeAt(e, v)) < 1e-12, `in × out at ${v}`);
+    }
+    // lengths that cannot both fit: the fade-out yields, as in the list (fadeOut ≤ length - fadeIn)
+    const over = M.selectionEdit({ start: 0, end: 1, fadeIn: 0.7, fadeOut: 0.6 });
+    assert.ok(Math.abs(over.fadeInEnd - 0.7) < 1e-12 && Math.abs(over.fadeOutStart - 0.7) < 1e-12);
+    // old selections (lengths only) are linear
+    const old = M.selectionEdit({ start: 0, end: 2, fadeIn: 0.5, fadeOut: 0.5 });
+    assert.ok(old.fadeInShape === 'power' && old.fadeInTension === 0 && Math.abs(M.envelopeAt(old, 0.25) - 0.5) < 1e-12);
+});
+
+test('fadeCurve: playback samples of one fade, from any resume point', () => {
+    const e = M.selectionEdit({ start: 0, end: 2, fadeIn: 0.5, fadeOut: 0.8, fadeInShape: 'equal', fadeInTension: 0.2, fadeOutShape: 'power', fadeOutTension: -0.4 });
+    const a = M.fadeCurve(e, 'in', 0, 0.5, 257);
+    assert.strictEqual(a.length, 257);
+    assert.ok(a[0] === 0 && Math.abs(a[256] - 1) < 1e-12);
+    for (let i = 0; i < 257; i += 16) assert.ok(Math.abs(a[i] - REF.curve(i / 256, 'equal', 0.2)) < 1e-6, `in ${i}`);
+    const b = M.fadeCurve(e, 'out', 1.5, 2, 101);                 // resumed inside the fade-out
+    for (let i = 0; i < 101; i += 10) { const v = 1.5 + 0.5 * i / 100; assert.ok(Math.abs(b[i] - REF.curve((2 - v) / 0.8, 'power', -0.4)) < 1e-6, `out ${i}`); }
+    assert.strictEqual(b[100], 0);
+});
+
+test('tensionThrough: the curve passes through the point the pointer holds, clamped to the model', () => {
+    const r = rng(7);
+    for (const shape of M.FADE_SHAPES) {
+        for (let i = 0; i < 300; i++) {
+            const t = 0.05 + r() * 0.9, k0 = r() * 2 - 1, g = REF.curve(t, shape, k0);
+            const k = M.tensionThrough(shape, t, g);
+            if (shape === 'scurve' && Math.abs(t - 0.5) < 1e-6) continue;
+            assert.ok(k !== null && k >= -1 && k <= 1, `${shape} ${t} ${g}`);
+            assert.ok(Math.abs(REF.curve(t, shape, k) - g) < 1e-6, `${shape} t=${t.toFixed(3)} g=${g.toFixed(4)} k=${k} vs ${k0}`);
+        }
+        // beyond what the model can bend: the nearest end of the range
+        assert.strictEqual(M.tensionThrough(shape, 0.3, 0.9999), -1);
+        assert.strictEqual(M.tensionThrough(shape, 0.3, 1e-9), 1);
+    }
+    assert.strictEqual(M.tensionThrough('scurve', 0.5, 0.8), null);   // an S-curve's middle does not move
+    // dragging down bends toward a slow start (positive), up toward a fast start (negative)
+    assert.ok(M.tensionThrough('power', 0.5, 0.2) > 0 && M.tensionThrough('power', 0.5, 0.8) < 0);
+});
+
+test('a selection renders exactly with its curves (and lengths-only selections stay linear)', () => {
+    const sr = 48000, n = sr * 2, x = noise(n, 0.8, 11), y = sine(n, 440, 0.6);
+    const s = { start: 0.5, end: 1.5, fadeIn: 0.2, fadeOut: 0.3, fadeInShape: 'power', fadeInTension: 0.7, fadeOutShape: 'equal', fadeOutTension: -0.3 };
+    const e = M.selectionEdit(s);
+    const out = M.renderEdit({ channels: [x, y], sampleRate: sr, offset: s.start }, e, { resampler: 'linear' });
+    const ref = REF.render([x, y], sr, s.start, e);
+    assert.ok(maxErr(out.channels[0], ref[0]) < 1e-6 && maxErr(out.channels[1], ref[1]) < 1e-6);
+    // the old list render (linear i / fi, lengths on exact samples) is what tension 0 gives
+    const lin = M.renderEdit({ channels: [x], sampleRate: sr, offset: 0.5 }, M.selectionEdit({ start: 0.5, end: 1.5, fadeIn: 0.25, fadeOut: 0.125 }), { resampler: 'linear' }).channels[0];
+    const a = Math.round(0.5 * sr), len = sr, fi = 0.25 * sr, fo = 0.125 * sr;
+    const old = x.slice(a, a + len);
+    for (let i = 0; i < fi; i++) old[i] *= i / fi;
+    for (let i = 0; i < fo; i++) old[len - 1 - i] *= i / fo;
+    assert.ok(maxErr(lin, old) < 1e-6);
+});
+
+test('describeFade names the curve for the readouts', () => {
+    assert.strictEqual(M.describeFade('power', 0), 'Linear');
+    assert.strictEqual(M.describeFade('power', -0.4), 'Fast start 40%');
+    assert.strictEqual(M.describeFade('power', 0.25), 'Slow start 25%');
+    assert.strictEqual(M.describeFade('scurve', 0), 'S-curve');
+    assert.strictEqual(M.describeFade('scurve', 0.5), 'S-curve, sharper 50%');
+    assert.strictEqual(M.describeFade('equal', 0.01), 'Equal power');
+});
+
+test('renderSelection (the list\'s fast path) equals renderEdit sample for sample', () => {
+    const r = rng(23), sr = 44100, n = sr * 3, x = noise(n, 0.9, 5), y = ramp(n);
+    for (let i = 0; i < 60; i++) {
+        const start = r() * 1.5, end = start + 0.001 + r() * 1.4, len = end - start;
+        const fadeIn = r() < 0.2 ? 0 : r() * len * 0.7, fadeOut = r() < 0.2 ? 0 : r() * len;
+        const s = { start, end, fadeIn, fadeOut, fadeInShape: M.FADE_SHAPES[i % 3], fadeInTension: r() * 2 - 1, fadeOutShape: M.FADE_SHAPES[(i + 1) % 3], fadeOutTension: r() * 2 - 1 };
+        const fast = M.renderSelection({ channels: [x, y], sampleRate: sr }, s);
+        const full = M.renderEdit({ channels: [x, y], sampleRate: sr, offset: start }, M.selectionEdit(s), { resampler: 'linear' });
+        assert.strictEqual(fast.frames, full.frames, `frames ${i}`);
+        assert.strictEqual(maxErr(fast.channels[0], full.channels[0]), 0, `L ${i}`);
+        assert.strictEqual(maxErr(fast.channels[1], full.channels[1]), 0, `R ${i}`);
+    }
+});

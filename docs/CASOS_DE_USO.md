@@ -6,9 +6,9 @@ Qué hace la app en cada situación de uso tradicional y cómo quedó verificado
 **Datos reales:** las mediciones "sobre la librería real" se hicieron en solo lectura sobre `D:\Librerias Sonido` (70.331 WAV) y sobre **copias** de la base de datos. La carpeta `%APPDATA%\soundvault` nunca se tocó.
 
 Referencias a tests:
-- `npm test`: 92 tests unitarios.
-- `npm run test:engine`: motor completo en Electron (33 verificaciones) y espectrograma CLAP.
-- `npm run test:e2e`: app completa con carpeta de usuario aislada, pruebas smoke y engine (14 verificaciones), el Brief (49 verificaciones), modos y colores (20 verificaciones: cambio de modo, barra de título, color del vault) y 7 pruebas del editor (134 verificaciones).
+- `npm test`: 98 tests unitarios.
+- `npm run test:engine`: motor completo en Electron (35 verificaciones) y espectrograma CLAP.
+- `npm run test:e2e`: app completa con carpeta de usuario aislada, pruebas smoke y engine (14 verificaciones), el Brief (50 verificaciones), modos y colores (23 verificaciones: cambio de modo, barra de título, color del vault, menús que abren y cierran, diálogos sin textos vacíos), el recorte rápido (18 verificaciones: mover la selección, curvas de fade, lo que suena y lo que se renderiza) y 7 pruebas del editor (137 verificaciones).
 - `node tests/e2e/packaged-smoke.js`: la app ya compilada (8 verificaciones, incluidos el Brief y el modelo de imágenes).
 
 ---
@@ -59,7 +59,7 @@ Referencias a tests:
 | # | Caso | Comportamiento | Estado |
 |---|---|---|---|
 | D1 | Arrastrar sobre la forma de onda para seleccionar y ajustar los bordes | La selección se define sobre la duración real del archivo | ✅ E2E |
-| D5 | Fades a la vista, sin atajos | Un punto en cada esquina superior de la selección: arrastrarlo crea el fade, doble clic lo quita. El fade se dibuja como en un DAW: línea de ganancia y un velo sobre lo que se atenúa, sin tapar la onda. Los tiradores de los bordes ocupan todo el borde menos la franja de los puntos, así redimensionar y hacer fades nunca se pisan. En selecciones muy angostas los puntos se ocultan (queda Shift + borde). Mientras se arrastra, una etiqueta muestra la duración del fade, y al soltar suena la selección con su fade | ✅ E2E `editor-fades` (12 verificaciones con mouse real) |
+| D5 | Fades a la vista, sin atajos | Un punto en cada esquina superior de la selección: arrastrarlo crea el fade, doble clic lo quita. El fade se dibuja como en un DAW: línea de ganancia y un velo sobre lo que se atenúa, sin tapar la onda. Los tiradores de los bordes ocupan todo el borde menos la franja de los puntos, así redimensionar y hacer fades nunca se pisan. En selecciones muy angostas los puntos se ocultan (queda Shift + borde). Mientras se arrastra, una etiqueta muestra la duración del fade, y al soltar suena la selección con su fade Arrastrar el cuerpo de la selección la mueve sin cambiar su largo. La curva de un fade se dobla arrastrando su línea (arriba arranque rápido, abajo arranque lento, de costado su largo) con una lectura en vivo, y doble clic la vuelve lineal: lo que se dibuja es lo que suena y lo que se renderiza. Al reproducir una selección solo ella toma el color | ✅ E2E `editor-fades` (12 verificaciones con mouse real) |
 | D2 | Fades que se solapan | La previsualización usa la misma envolvente que el render (fade-in × fade-out), así que lo que se escucha es lo que se exporta | ✅ (código) |
 | D3 | Seek fuera de la selección durante la reproducción | Se limita al segmento; ya no rompe la reproducción | ✅ |
 | D4 | La selección sale de vista o la lista cambia | La barra de herramientas se reubica o desaparece si el archivo ya no está en la lista | ✅ |

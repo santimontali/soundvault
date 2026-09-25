@@ -1,7 +1,7 @@
 // Main panel chrome: header (breadcrumbs, count, sort, actions), banners
 // (collect target, missing files, library missing), empty states, drop zone,
 // the loading stand-in and the Resonance suggestions strip for collections.
-import { h, icon, count, stripExt } from '../util.js';
+import { h, icon, count, stripExt, fill } from '../util.js';
 import { state, bus, activeVault } from '../store.js';
 import { showMenu } from './overlays.js';
 import { list } from './list.js';
@@ -96,7 +96,7 @@ function renderEmpty() {
     els.empty.classList.toggle('hidden', !show);
     if (!show) return;
     const c = emptyContent;
-    els.empty.replaceChildren(
+    fill(els.empty,
         c.art ? c.art() : icon(c.icon || 'library', 'art'),
         h('h2', { text: c.title }),
         c.text ? h('p', { text: c.text }) : null,

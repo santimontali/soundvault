@@ -31,8 +31,10 @@
   padding: 7px 8px; border-radius: var(--r-md); cursor: pointer; position: relative;
 }
 .echo .er:hover { background: rgba(255, 255, 255, .025); }
-.echo .er.cursor { background: rgba(255, 255, 255, .045); box-shadow: inset 2px 0 0 var(--fg-3); }
-.echo .er.playing { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.echo .er.cursor { background: rgba(255, 255, 255, .05); }
+.echo .er.playing { background: rgba(var(--accent-rgb), .07); }
+.echo .er.playing.cursor { background: rgba(var(--accent-rgb), .1); }
+.echo .er.playing .nm { color: var(--accent); }
 .echo .er .pb { grid-row: 1 / span 2; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--line-2); color: var(--fg-2); }
 .echo .er.playing .pb { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .echo .er .pb .i { width: 11px; height: 11px; }

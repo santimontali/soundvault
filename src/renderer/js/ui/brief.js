@@ -13,7 +13,7 @@
 //  • Many collections stay cheap: one small request for their first sounds,
 //    waveforms drawn when they scroll into view, cards off screen not laid out.
 //    A mode switch shows stand-in cards until the brand morph is over.
-import { h, icon, count, stripExt, debounce, throttleRaf, isEditableTarget } from '../util.js';
+import { h, icon, count, stripExt, debounce, throttleRaf, isEditableTarget, fill } from '../util.js';
 import { state, bus, activeVault } from '../store.js';
 import { player } from '../audio/engine.js';
 import { toast, showMenu, confirmDialog, isDialogOpen } from './overlays.js';
@@ -82,8 +82,6 @@ const svgEl = (tag, attrs = {}) => { const e = document.createElementNS('http://
 const libraryRoot = () => (state.library.root || '').toLowerCase().replace(/[\\/]+$/, '') + '\\';
 const inLibrary = p => !!state.library.root && String(p).toLowerCase().startsWith(libraryRoot());
 const sidebarShown = () => !document.getElementById('app').classList.contains('sidebar-collapsed');
-/** replaceChildren that skips null / false, like h() does. */
-const fill = (el, ...kids) => el.replaceChildren(...kids.filter(k => k !== null && k !== undefined && k !== false));
 
 /** Colors from the images, round-robin so every image contributes (max 6). */
 function palette() {

@@ -43,29 +43,33 @@
 .bv .suggest.in { animation: bf-in .38s var(--ease) both; }
 
 /* ── Collections: the vault's own, a few sounds each ────────────────── */
+/* Cards (collections and suggestions, one family) are wells: set into the page, a
+   hairline edge that carries a trace of the collection's color, the color itself
+   in the small mark by the name. */
 .cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
-.col {
-  --tint: transparent; position: relative; display: flex; flex-direction: column; min-width: 0; padding: 12px 12px 10px 14px;
-  border-radius: var(--r-lg); border: 1px solid var(--line); cursor: pointer;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 7%, var(--bg-2)) 0, var(--bg-2) 96px);
-  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+.col, .card {
+  --tint: transparent;
+  background: var(--well); box-shadow: var(--well-shade);
+  border: 1px solid color-mix(in srgb, var(--tint) 16%, var(--well-line));
+  transition: border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
 }
-.col:hover { border-color: var(--line-2); }
+.col:hover, .card:hover { background: var(--well-hover); border-color: color-mix(in srgb, var(--tint) 22%, var(--well-line-hover)); }
+.col { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 12px 12px 10px 14px; border-radius: var(--r-lg); cursor: pointer; }
 .col .c-color.none { display: block; background: var(--bg-4); }
 .col h3 { display: flex; min-width: 0; }
 .col .cname { font: 600 14px/20px var(--font-display); color: var(--fg-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; min-width: 0; border-radius: var(--r-sm); }
 .col .cname:hover { text-decoration: underline; text-decoration-color: var(--line-3); text-underline-offset: 3px; }
 .col .c-rows { margin: 8px -6px 0; min-height: 98px; }
-.col-none { margin-top: 8px; min-height: 98px; display: grid; place-items: center; padding: 0 18px; text-align: center; font-size: var(--fs-sm); line-height: 1.45; color: var(--fg-3); border: 1px dashed var(--line-2); border-radius: var(--r-md); }
+.col-none { margin-top: 8px; min-height: 98px; display: grid; place-items: center; padding: 0 22px; text-align: center; font-size: var(--fs-sm); line-height: 1.5; color: var(--fg-3); }
 .col .c-foot { padding-top: 8px; }
 .col .find { margin-left: -8px; color: var(--fg-3); }
 .col .find .i { color: var(--fg-3); transition: color var(--t-fast); }
 .col .find:hover:not(:disabled) { color: var(--fg-1); background: var(--bg-3); }
 .col .find:hover .i, .col .find.busy .i { color: var(--accent); }
 .col .find.busy { cursor: default; }
-.col.drop-target { border-color: var(--accent-line); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.col.drop-target { border-color: var(--accent-line); box-shadow: var(--well-shade), inset 0 0 0 1px var(--accent-line); }
 .col.landed { animation: col-landed 1.8s var(--ease); }
-@keyframes col-landed { 0% { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft-2); } 60% { border-color: var(--line-2); box-shadow: 0 0 0 3px transparent; } }
+@keyframes col-landed { 0% { border-color: var(--accent-line); box-shadow: var(--well-shade), 0 0 0 3px var(--accent-soft-2); } 60% { border-color: var(--well-line-hover); box-shadow: var(--well-shade), 0 0 0 3px transparent; } }
 /* a collection's sounds: a quiet play glyph instead of a rank */
 .c-row.plain .pb { color: var(--fg-4); }
 .c-row.plain:not(.playing) .pb .play { display: block; }
@@ -85,9 +89,9 @@
 .col-skel { display: none; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
 .bv.cols-loading .col-skel, .bv.moving .cols-sec:not(.none) .col-skel { display: grid; }
 .bv.cols-loading .cols, .bv.cols-loading .cols-empty, .bv.moving .cols, .bv.moving .suggest { display: none !important; }
-.sk-col { position: relative; overflow: hidden; height: 168px; padding: 16px 16px 14px; display: grid; align-content: start; gap: 16px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--bg-2); }
-.sk-col i { display: block; height: 8px; border-radius: 4px; background: var(--bg-3); }
-.sk-col .sk-ln { height: 7px; background: rgba(255, 255, 255, .035); }
+.sk-col { position: relative; overflow: hidden; height: 168px; padding: 16px 16px 14px; display: grid; align-content: start; gap: 16px; border-radius: var(--r-lg); border: 1px solid var(--well-line); background: var(--well); box-shadow: var(--well-shade); }
+.sk-col i { display: block; height: 8px; border-radius: 4px; background: var(--bg-2); }
+.sk-col .sk-ln { height: 7px; background: rgba(255, 255, 255, .03); }
 .sk-col i:first-child + .sk-ln { margin-top: 6px; }
 .bv.cols-loading .sk-col::after, .bv.moving .sk-col::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 60%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .028) 50%, transparent); animation: sk-sweep 1.6s var(--ease) infinite; }
 
@@ -242,8 +246,7 @@
 /* ── Suggested collections ──────────────────────────────────────────── */
 .cards { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .cards:empty { display: none; }
-.card { --tint: transparent; position: relative; display: flex; flex-direction: column; min-width: 0; padding: 14px 14px 12px; border-radius: var(--r-lg); border: 1px solid var(--line); background: linear-gradient(180deg, color-mix(in srgb, var(--tint) 8%, var(--bg-2)) 0, var(--bg-2) 110px); transition: border-color var(--t-fast), box-shadow var(--t-fast); }
-.card:hover { border-color: var(--line-2); }
+.card { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 14px 14px 12px; border-radius: var(--r-lg); }   /* surface: see .col, .card */
 .card.flown { visibility: hidden; }
 .card.leaving { pointer-events: none; z-index: 0; }
 .card .shim { border-radius: var(--r-lg); }
@@ -276,7 +279,8 @@
 .c-row:hover .pb, .c-row:focus-visible .pb { background: var(--bg-4); color: var(--fg-1); }
 .c-row:hover .rank, .c-row:focus-visible .rank, .c-row.playing .rank { display: none; }
 .c-row:hover:not(.playing) .pb .play, .c-row:focus-visible:not(.playing) .pb .play { display: block; }
-.c-row.playing { background: linear-gradient(90deg, var(--accent-soft), rgba(var(--accent-rgb), .03) 70%, transparent); box-shadow: inset 2px 0 0 var(--accent); }
+.c-row.playing { background: rgba(var(--accent-rgb), .07); }
+.c-row.playing .nm { color: var(--accent); }
 .c-row.playing .pb { background: var(--accent); color: var(--accent-ink); }
 .c-row.playing:hover .pb .pause { display: block; }
 .eq { display: none; align-items: flex-end; gap: 1.5px; height: 9px; }
@@ -329,8 +333,10 @@
 .rv-list:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-line); }
 .rr { display: grid; grid-template-columns: 18px 26px minmax(0, 1fr) minmax(70px, 110px) 42px; align-items: center; gap: 10px; height: 48px; padding: 0 8px 0 10px; border-radius: var(--r-md); cursor: pointer; position: relative; contain: size layout; }
 .rr:hover { background: rgba(255, 255, 255, .025); }
-.rr.cursor { background: rgba(255, 255, 255, .045); box-shadow: inset 2px 0 0 var(--fg-3); }
-.rr.playing { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.rr.cursor { background: rgba(255, 255, 255, .05); }
+.rr.playing { background: rgba(var(--accent-rgb), .07); }
+.rr.playing.cursor { background: rgba(var(--accent-rgb), .1); }
+.rr.playing .nm { color: var(--accent); }
 .ck { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--line-3); display: grid; place-items: center; color: transparent; transition: background var(--t-fast), border-color var(--t-fast); }
 .ck .i { width: 11px; height: 11px; stroke-width: 2.4; }
 .ck:hover { border-color: var(--fg-3); }

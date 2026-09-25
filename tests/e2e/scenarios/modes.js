@@ -198,6 +198,77 @@ module.exports = async (ctx) => {
     check('Sound mode brings the global accent back', back.accent === global && (await scrubColor()) === global, back);
     await ctx.exec(async id => { const v = await window.sv.vaults.list(); const other = v.vaults.find(x => x.id !== id); const A = await import('./js/actions.js'); if (other) await A.switchVault(other.id); await window.sv.vaults.remove(id); await A.refreshCollections(); return true; }, twin);
 
+    // ── 4. Menus: the button that opens one closes it; dialogs never show "null" ──
+    const center = sel => ctx.exec(s => { const e = document.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null; }, sel);
+    const menuOpen = () => ctx.exec(() => !!document.querySelector('.menu'));
+    const toggles = [];
+    const toggle = async (label, sel) => {
+        const p = await center(sel);
+        if (!p) { toggles.push({ label, missing: true }); return; }
+        await T.click(ctx, p.x, p.y); await ctx.wait(220);
+        const opened = await menuOpen(), exp = await ctx.exec(s => document.querySelector(s).getAttribute('aria-expanded'), sel);
+        await T.click(ctx, p.x, p.y); await ctx.wait(220);
+        toggles.push({ label, opened, exp, closed: !(await menuOpen()), exp2: await ctx.exec(s => document.querySelector(s).getAttribute('aria-expanded'), sel) });
+        if (await menuOpen()) { await T.key(ctx, 'Escape'); await ctx.wait(150); }
+    };
+    const nulls = () => ctx.exec(() => {
+        const d = document.querySelector('.dialog');
+        if (!d) return null;
+        const w = document.createTreeWalker(d, NodeFilter.SHOW_TEXT), bad = [];
+        while (w.nextNode()) if (/^(null|undefined)$/.test(w.currentNode.nodeValue.trim())) bad.push(w.currentNode.nodeValue);
+        return { bad, title: (d.querySelector('.dlg-head h3') || {}).textContent };
+    });
+    const dialogs = [];
+    const dialog = async (label, open) => {
+        await open();
+        const d = await ctx.waitFor(() => document.querySelector('.dialog') && true, 4000, label).then(() => nulls()).catch(() => null);
+        dialogs.push({ label, ...(d || { missing: true }) });
+        await T.key(ctx, 'Escape'); await ctx.wait(250);
+        if (await ctx.exec(() => !!document.querySelector('.dialog'))) { await T.key(ctx, 'Escape'); await ctx.wait(200); }
+    };
+    if ((await mode()) !== 'Vault') { await T.key(ctx, '1', ['control']); await ctx.wait(1300); }
+    await ctx.waitFor(() => document.querySelector('.main.brief-on') && document.querySelectorAll('.cols > .col').length > 3, 8000, 'home');
+    await toggle('vault switcher', '.vault-switch');
+    await toggle('search scope', '.search .scope');
+    await toggle('vault options', '.bhead .head-actions .icon-btn');
+    await dialog('color', () => ctx.exec(() => { document.querySelector('.node[data-kind="collection"] .col-color').click(); return true; }));
+    await dialog('new collection', () => ctx.exec(() => { document.querySelector('.sb-head .icon-btn').click(); return true; }));
+    await dialog('edit vault', async () => { const p = await center('.vault-switch'); await T.click(ctx, p.x, p.y); await ctx.wait(200); await ctx.exec(() => { [...document.querySelectorAll('.menu .mi')].find(m => m.textContent.startsWith('Edit vault')).click(); return true; }); });
+    await dialog('settings', () => ctx.exec(() => { document.querySelector('.tb-right .icon-btn').click(); return true; }));
+    // a collection's own menu, and a confirm dialog from it
+    await ctx.exec(() => { document.querySelector('.node[data-kind="collection"]').click(); return true; });
+    await ctx.waitFor(() => !document.querySelector('.main.brief-on') && document.querySelector('.panel-head [aria-label="Collection options"]'), 8000, 'collection open');
+    await ctx.wait(700);
+    await toggle('collection options', '.panel-head [aria-label="Collection options"]');
+    await dialog('delete collection (confirm)', async () => { const p = await center('.panel-head [aria-label="Collection options"]'); await T.click(ctx, p.x, p.y); await ctx.wait(200); await ctx.exec(() => { [...document.querySelectorAll('.menu .mi')].find(m => m.textContent.startsWith('Delete collection')).click(); return true; }); });
+    // Sound mode: the sort menu, and the collect picker (C on a sound)
+    await T.key(ctx, '2', ['control']);
+    await ctx.waitFor(() => document.querySelectorAll('.list .row:not([aria-hidden="true"])').length > 3 && !document.getElementById('main').classList.contains('loading'), 10000, 'sounds');
+    await ctx.wait(400);
+    await toggle('sort', '.panel-head .head-actions .btn');
+    await dialog('collect into (C)', async () => { await ctx.exec(async () => { const { list } = await import('./js/ui/list.js'); list.el.focus(); list.setCursor(0, { play: false }); return true; }); await T.key(ctx, 'C'); });
+    ctx.log('toggles', JSON.stringify(toggles));
+    ctx.log('dialogs', JSON.stringify(dialogs));
+    check('every menu button is a toggle: a second press closes its menu (aria-expanded follows)', toggles.length === 5 && toggles.every(t => t.opened && t.closed && t.exp === 'true' && t.exp2 === 'false'), toggles);
+    check('no dialog shows "null" (collect, color, prompt, vault, confirm, settings)', dialogs.length === 6 && dialogs.every(d => !d.missing && d.bad.length === 0), dialogs);
+
+    // ── 5. Collection cards are wells: darker than the page, a hairline carrying the color, no gradient ──
+    await T.key(ctx, '1', ['control']);
+    await ctx.wait(900);
+    await ctx.exec(() => { document.querySelector('.brief-node').click(); return true; });        // the home (Vault mode reopened the last collection)
+    await ctx.exec(async () => { const l = await window.sv.collections.list(); await window.sv.collections.setColor(l[0].name, '#f97066'); await (await import('./js/actions.js')).refreshCollections(); return true; });
+    await ctx.waitFor(() => document.querySelector('.main.brief-on') && document.querySelectorAll('.cols > .col').length > 3 && !document.querySelector('.bv.cols-loading'), 8000, 'home again');
+    await ctx.wait(500);
+    const well = await ctx.exec(() => {
+        const lum = c => { const m = c.match(/[\d.]+/g).map(Number); return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+        const card = document.querySelector('.cols > .col'), cs = getComputedStyle(card), page = getComputedStyle(document.getElementById('main'));
+        const n = cs.borderTopColor.match(/[\d.]+/g).map(Number), k = /^color\(/.test(cs.borderTopColor) ? 255 : 1;   // color-mix() computes to color(srgb r g b / a)
+        const b = n.slice(0, 3).map(v => v * k);
+        return { card: lum(cs.backgroundColor), page: lum(page.backgroundColor), image: cs.backgroundImage, shadow: cs.boxShadow, border: cs.borderTopColor, redTrace: b[0] > b[1] + 20 && b[0] > b[2] + 20 };
+    });
+    check('collection cards are wells: darker than the page, no gradient, a soft inner shadow, the red trace in the hairline', well.card < well.page && well.image === 'none' && /inset/.test(well.shadow) && well.redTrace, well);
+    await shot('06-cards-wells');
+
     const errors = ctx.report.console.filter(m => m.level === 3 || m.level === 'error').map(m => m.message);
     check('no renderer errors', errors.length === 0, errors.slice(0, 5));
     done();

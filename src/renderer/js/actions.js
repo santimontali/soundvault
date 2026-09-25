@@ -67,8 +67,9 @@ export async function removeFromCollection(name, items) {
     });
 }
 
-export function collectionMenu({ name, x, y }) {
-    showMenu({ x, y }, [
+/** The collection's menu: at a point (right-click) or under its "…" button (which then toggles it). */
+export function collectionMenu({ name, x, y, anchor = null }) {
+    showMenu(anchor || { x, y }, [
         { label: 'Open', icon: 'collection', onClick: () => bus.emit('nav:collection', name) },
         { label: 'Collect into this', icon: 'collection-plus', kbd: 'C', onClick: () => bus.emit('collect:set', name) },
         'sep',

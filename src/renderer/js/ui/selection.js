@@ -3,12 +3,16 @@
 import { h, icon, setIcon, Emitter, formatDuration, clamp } from '../util.js';
 import { player } from '../audio/engine.js';
 
+// Fades carry the editor's curve model (edit-dsp: shape + tension, linear by default).
+const FADE_DEFAULTS = { fadeIn: 0, fadeOut: 0, fadeInShape: 'power', fadeInTension: 0, fadeOutShape: 'power', fadeOutTension: 0 };
+export const selectionFades = s => ({ fadeIn: s.fadeIn, fadeOut: s.fadeOut, fadeInShape: s.fadeInShape, fadeInTension: s.fadeInTension, fadeOutShape: s.fadeOutShape, fadeOutTension: s.fadeOutTension });
+
 class Selection extends Emitter {
     constructor() { super(); this._s = null; }
     get() { return this._s; }
     set(s) {
         const prev = this._s;
-        this._s = s ? { fadeIn: 0, fadeOut: 0, ...s } : null;
+        this._s = s ? { ...FADE_DEFAULTS, ...s } : null;
         this.emit('change', { prev, cur: this._s });
     }
     update(patch) {
@@ -18,6 +22,8 @@ class Selection extends Emitter {
         const s = this._s, len = s.end - s.start;
         s.fadeIn = clamp(s.fadeIn || 0, 0, len);
         s.fadeOut = clamp(s.fadeOut || 0, 0, len - s.fadeIn);
+        s.fadeInTension = clamp(s.fadeInTension || 0, -1, 1);
+        s.fadeOutTension = clamp(s.fadeOutTension || 0, -1, 1);
         this.emit('change', { prev, cur: this._s });
     }
     clear() { if (this._s) this.set(null); }

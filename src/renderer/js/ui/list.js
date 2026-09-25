@@ -2,35 +2,78 @@
 //  • Recycled row pool positioned with transforms; all events delegated.
 //  • Keyboard: ↑/↓ (auto-play), Enter, Space, ←/→ seek, Home/End, PgUp/PgDn,
 //    Ctrl+A, Shift/Ctrl multi-select, Delete, F2.
-//  • Waveform: click = play from there, drag = time selection (auto-plays),
-//    drag the edges = resize, drag the dots on the top corners = fades
-//    (double-click a dot removes its fade; Shift+edge still works too).
+//  • Waveform (quick trim): click = play from there, drag = time selection
+//    (auto-plays). On a selection: drag its body = move it (length kept), its
+//    edges = resize, the dots on the top corners = fade lengths (double-click
+//    removes a fade; Shift+edge too), a fade's curve = bend it (up: fast start,
+//    down: slow start; sideways: its length), double-click the curve = linear.
+//    Fades are the editor's model (edit-dsp): drawn, played and rendered alike.
 //  • One rAF loop updates the playing row's progress (clip-path), no redraws.
 import { h, icon, setIcon, formatDuration, formatFormat, stripExt, clamp, Emitter, isEditableTarget } from '../util.js';
 import { player } from '../audio/engine.js';
 import { peaksFor, requestPeaks } from '../audio/peaks.js';
-import { drawPair, setProgress, fitCanvas, retint } from './waveform.js';
+import { fadeGain, tensionThrough, describeFade } from '../audio/edit-dsp.js';
+import { drawPair, setProgress, progressFrom, fitCanvas, retint } from './waveform.js';
 import { selection } from './selection.js';
 import { isDialogOpen } from './overlays.js';
+import { fadeGlyph } from './fade-glyph.js';
 
 const ROW_H = 56;
 const OVERSCAN = 8;
+const CURVE_HIT = 5;                  // px: how close to a fade's curve grabs it
+const CURVE_PTS = 32;                 // points per drawn fade curve
+const SIDE_DEAD = 4;                  // px: sideways slack before a bend also changes the fade's length
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const svgEl = (tag, cls) => { const e = document.createElementNS(SVG_NS, tag); if (cls) e.setAttribute('class', cls); return e; };
 
 /**
- * Fades drawn the way DAWs draw them: a gain line from silence (bottom
- * corner) to full level, with a veil over the part the fade takes away.
- * One SVG per row, stretched to the selection (strokes stay 1.25 px).
+ * Fades drawn the way DAWs draw them: the gain curve from silence (bottom
+ * corner) to full level, with a veil over the part the fade takes away. The
+ * curve casts a thin dark casing so it reads over the colored progress too.
+ * One SVG per row, stretched to the selection (strokes keep their width).
  */
 function makeFadeLayer() {
     const svg = svgEl('svg', 'fades');
     svg.setAttribute('viewBox', '0 0 100 100');
     svg.setAttribute('preserveAspectRatio', 'none');
     svg.setAttribute('aria-hidden', 'true');
-    const parts = { veilIn: svgEl('polygon', 'veil in'), lineIn: svgEl('line', 'fl in'), veilOut: svgEl('polygon', 'veil out'), lineOut: svgEl('line', 'fl out') };
-    svg.append(parts.veilIn, parts.veilOut, parts.lineIn, parts.lineOut);
+    const parts = {
+        veilIn: svgEl('path', 'veil in'), veilOut: svgEl('path', 'veil out'),
+        caseIn: svgEl('path', 'fc in'), caseOut: svgEl('path', 'fc out'),
+        lineIn: svgEl('path', 'fl in'), lineOut: svgEl('path', 'fl out'),
+    };
+    svg.append(parts.veilIn, parts.veilOut, parts.caseIn, parts.caseOut, parts.lineIn, parts.lineOut);
     return { svg, ...parts };
+}
+
+/** A fade's curve in the selection's 0..100 box, from its silent edge to full level (`lenPct`: its length in % of the selection). */
+function fadePoints(side, lenPct, shape, tension) {
+    const pts = [];
+    for (let i = 0; i <= CURVE_PTS; i++) {
+        const u = i / CURVE_PTS, y = 100 * (1 - fadeGain(u, shape, tension));
+        pts.push([side === 'in' ? u * lenPct : 100 - u * lenPct, y]);
+    }
+    return pts;
+}
+const pathOf = pts => 'M' + pts.map(([x, y]) => `${x.toFixed(3)},${y.toFixed(3)}`).join('L');
+
+/** Distance (px) from (x, y) to a polyline. */
+function distToPolyline(pts, x, y) {
+    let best = Infinity;
+    for (let i = 1; i < pts.length; i++) {
+        const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
+        const dx = bx - ax, dy = by - ay, L = dx * dx + dy * dy;
+        const t = L ? clamp(((x - ax) * dx + (y - ay) * dy) / L, 0, 1) : 0;
+        best = Math.min(best, Math.hypot(ax + t * dx - x, ay + t * dy - y));
+    }
+    return best;
+}
+
+/** While a gesture runs its cursor holds everywhere (the pointer may leave the row). */
+function holdCursor(c) {
+    const root = document.documentElement;
+    root.classList.toggle('hold-cursor', !!c);
+    root.style.setProperty('--hold-cursor', c || 'auto');
 }
 
 class SoundList extends Emitter {
@@ -46,6 +89,7 @@ class SoundList extends Emitter {
         this.opts = { baseDir: '', query: '', showScore: false };
         this._lastW = 0;
         this._raf = null;
+        this._hot = null;                // row + zone under the pointer (cursor, curve highlight)
     }
 
     mount(el) {
@@ -64,6 +108,7 @@ class SoundList extends Emitter {
         }).observe(el);
         el.addEventListener('mousedown', e => this._onMouseDown(e));
         el.addEventListener('mousemove', e => this._onHover(e));
+        el.addEventListener('mouseleave', () => this._hoverZone(null));
         el.addEventListener('dblclick', e => this._onDblClick(e));
         el.addEventListener('contextmenu', e => this._onContext(e));
         el.addEventListener('dragstart', e => this._onDragStart(e));
@@ -231,10 +276,13 @@ class SoundList extends Emitter {
         const len = s.end - s.start;
         const fi = len > 0 ? clamp(s.fadeIn / len, 0, 1) * 100 : 0, fo = len > 0 ? clamp(s.fadeOut / len, 0, 1) * 100 : 0;
         const { fades, fkIn, fkOut } = r.refs;
-        fades.veilIn.setAttribute('points', `0,0 ${fi},0 0,100`);
-        fades.lineIn.setAttribute('x1', 0); fades.lineIn.setAttribute('y1', 100); fades.lineIn.setAttribute('x2', fi); fades.lineIn.setAttribute('y2', 0);
-        fades.veilOut.setAttribute('points', `${100 - fo},0 100,0 100,100`);
-        fades.lineOut.setAttribute('x1', 100 - fo); fades.lineOut.setAttribute('y1', 0); fades.lineOut.setAttribute('x2', 100); fades.lineOut.setAttribute('y2', 100);
+        // the curves themselves (the exact law the audio gets), and the veil above them
+        const pin = fadePoints('in', fi, s.fadeInShape, s.fadeInTension), pout = fadePoints('out', fo, s.fadeOutShape, s.fadeOutTension);
+        const lineIn = pathOf(pin), lineOut = pathOf(pout);
+        fades.veilIn.setAttribute('d', `M0,0L${fi},0L${pathOf(pin.slice().reverse()).slice(1)}Z`);
+        fades.veilOut.setAttribute('d', `M100,0L${100 - fo},0L${pathOf(pout.slice().reverse()).slice(1)}Z`);
+        fades.lineIn.setAttribute('d', lineIn); fades.caseIn.setAttribute('d', lineIn);
+        fades.lineOut.setAttribute('d', lineOut); fades.caseOut.setAttribute('d', lineOut);
         fades.svg.classList.toggle('no-in', !(fi > 0));
         fades.svg.classList.toggle('no-out', !(fo > 0));
         fkIn.style.left = fi + '%';
@@ -261,7 +309,7 @@ class SoundList extends Emitter {
                 if (fd > 0) {
                     const pos = player.position();
                     const frac = pos / fd;
-                    setProgress(r.refs.played, frac);
+                    setProgress(r.refs.played, frac, progressFrom(player, fd));
                     r.refs.ph.style.transform = `translateX(${frac * r.refs.wf.clientWidth}px)`;
                 }
             }
@@ -326,10 +374,53 @@ class SoundList extends Emitter {
 
     _onHover(e) {
         const wf = e.target.closest && e.target.closest('.wf');
-        if (!wf) return;
+        if (!wf) { this._hoverZone(null); return; }
         const line = wf.querySelector('.hover-line');
         const rect = wf.getBoundingClientRect();
         line.style.transform = `translateX(${e.clientX - rect.left}px)`;
+        if (document.documentElement.classList.contains('hold-cursor')) return;     // a gesture runs
+        const r = this._rowFromEvent(e);
+        this._hoverZone(r && !e.target.closest('.h, .fk') ? r : null, r ? this._zoneAt(r, e.clientX, e.clientY) : null);
+    }
+
+    /** The cursor says what a press would do: grab the selection, bend a curve, or draw a new selection. */
+    _hoverZone(r, zone = null) {
+        const prev = this._hot;
+        if (prev && (prev.r !== r || prev.zone !== zone)) {
+            prev.r.refs.wf.style.cursor = '';
+            prev.r.refs.fades.svg.classList.remove('hot-in', 'hot-out');
+        }
+        this._hot = r ? { r, zone } : null;
+        if (!r) return;
+        r.refs.wf.style.cursor = zone === 'body' ? 'grab' : zone === 'curveIn' || zone === 'curveOut' ? 'ns-resize' : '';
+        r.refs.fades.svg.classList.toggle('hot-in', zone === 'curveIn');
+        r.refs.fades.svg.classList.toggle('hot-out', zone === 'curveOut');
+    }
+
+    /**
+     * What is under the pointer on a row's waveform: 'curveIn' / 'curveOut' (a fade's
+     * line), 'body' (inside the selection) or 'outside'. The edge grips and the dots
+     * are elements of their own and win before this (the curve is grabbable all
+     * along, the dot keeps its own spot at the top).
+     */
+    _zoneAt(r, cx, cy) {
+        const s = selection.get(), pk = peaksFor(r.path), dur = pk && pk.duration;
+        if (!s || s.path !== r.path || !dur) return 'outside';
+        const b = r.refs.wf.getBoundingClientRect();
+        const x = cx - b.left, y = cy - b.top, W = b.width, H = b.height;
+        const xs = s.start / dur * W, xe = s.end / dur * W;
+        if (x < xs || x > xe) return 'outside';
+        if (!r.refs.sel.classList.contains('narrow')) {
+            const box = (xe - xs) / 100, hy = H / 100;
+            for (const side of ['in', 'out']) {
+                const len = side === 'in' ? s.fadeIn : s.fadeOut;
+                if (len / dur * W < 8) continue;
+                const pts = fadePoints(side, len / (s.end - s.start) * 100, side === 'in' ? s.fadeInShape : s.fadeOutShape, side === 'in' ? s.fadeInTension : s.fadeOutTension)
+                    .map(([px, py]) => [xs + px * box, py * hy]);
+                if (distToPolyline(pts, x, y) <= CURVE_HIT) return side === 'in' ? 'curveIn' : 'curveOut';
+            }
+        }
+        return 'body';
     }
 
     _onMouseDown(e) {
@@ -368,6 +459,13 @@ class SoundList extends Emitter {
             }
             return;
         }
+        const zone = r && e.target.closest('.wf') && !e.target.closest('.h') ? this._zoneAt(r, e.clientX, e.clientY) : null;
+        if (zone === 'curveIn' || zone === 'curveOut') {    // double-click a fade's curve: back to linear
+            const isIn = zone === 'curveIn';
+            selection.update(isIn ? { fadeInShape: 'power', fadeInTension: 0 } : { fadeOutShape: 'power', fadeOutTension: 0 });
+            this.emit('selection-done', selection.get());
+            return;
+        }
         if (!r || e.target.closest('.wf') || e.target.closest('.pbtn') || e.target.closest('.grip')) return;
         this.emit('play', { item: this.items[r.idx], from: 0 });
     }
@@ -389,6 +487,7 @@ class SoundList extends Emitter {
             const before = isIn ? cur.fadeIn : cur.fadeOut;
             const tag = r.refs.ftag;
             knob.classList.add('active');
+            holdCursor('ew-resize');
             const onMove = me => {
                 const t = tAt(me.clientX), len = cur.end - cur.start;
                 if (isIn) selection.update({ fadeIn: clamp(t - cur.start, 0, len * 0.9 - (cur.fadeOut || 0)) });
@@ -402,6 +501,7 @@ class SoundList extends Emitter {
             const onUp = () => {
                 document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
                 knob.classList.remove('active'); tag.classList.remove('show');
+                holdCursor(null);
                 const now = selection.get();
                 if (now && (isIn ? now.fadeIn : now.fadeOut) !== before) this.emit('selection-done', now);   // hear the new fade
             };
@@ -412,6 +512,7 @@ class SoundList extends Emitter {
         if (handle && cur && cur.path === it.path) {
             const left = handle.classList.contains('l');
             const fade = e.shiftKey;
+            holdCursor(fade ? 'ew-resize' : 'col-resize');
             const onMove = me => {
                 const t = tAt(me.clientX);
                 if (fade) {
@@ -421,10 +522,15 @@ class SoundList extends Emitter {
                 } else if (left) selection.update({ start: Math.min(t, cur.end - 0.001) });
                 else selection.update({ end: Math.max(t, cur.start + 0.001) });
             };
-            const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); this.emit('selection-done', selection.get()); };
+            const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); holdCursor(null); this.emit('selection-done', selection.get()); };
             document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
             return;
         }
+
+        // on the selection itself: bend a fade's curve, or move the whole selection
+        const zone = cur && cur.path === it.path && dur ? this._zoneAt(r, e.clientX, e.clientY) : 'outside';
+        if (zone === 'curveIn' || zone === 'curveOut') { this._bendDrag(e, r, it, zone === 'curveIn' ? 'in' : 'out', rect, dur); return; }
+        if (zone === 'body') { this._moveDrag(e, r, it, rect, dur); return; }
 
         const x0 = e.clientX, t0 = tAt(x0);
         let dragging = false;
@@ -449,6 +555,73 @@ class SoundList extends Emitter {
             if (s && s.path === it.path && t >= s.start && t <= s.end) { this.emit('play-selection', s); return; }
             if (s && s.path === it.path) selection.clear();
             this.emit('play', { item: it, from: t });
+        };
+        document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    }
+
+    /** Drag inside a selection: move it, its length and fades kept (the editor's slip). A plain click still plays it. */
+    _moveDrag(e, r, it, rect, dur) {
+        const s0 = { ...selection.get() }, x0 = e.clientX;
+        let moved = false;
+        const onMove = me => {
+            const dx = me.clientX - x0;
+            if (!moved && Math.abs(dx) < 3) return;
+            if (!moved) { moved = true; holdCursor('grabbing'); }
+            const dt = clamp(dx / rect.width * dur, -s0.start, dur - s0.end);
+            selection.update({ start: s0.start + dt, end: s0.end + dt });
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+            holdCursor(null);
+            const s = selection.get();
+            if (!s || s.path !== it.path) return;
+            this.emit(moved ? 'selection-done' : 'play-selection', s);
+        };
+        document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    }
+
+    /**
+     * Drag a fade's curve: it passes under the pointer. Up and down bend it (the
+     * editor's tension: up = fast start, down = slow start); sideways, past a few
+     * pixels of slack, its length follows the pointer as its dot would. A readout
+     * names the shape while it moves. A plain click plays the selection.
+     */
+    _bendDrag(e, r, it, side, rect, dur) {
+        const s0 = { ...selection.get() }, x0 = e.clientX, y0 = e.clientY, W = rect.width, H = rect.height;
+        const isIn = side === 'in', shape = isIn ? s0.fadeInShape : s0.fadeOutShape;
+        const len0 = isIn ? s0.fadeIn : s0.fadeOut, other = isIn ? s0.fadeOut : s0.fadeIn, span = s0.end - s0.start;
+        const xs = s0.start / dur * W, xe = s0.end / dur * W, edge = isIn ? xs : xe;
+        const tag = r.refs.ftag, svg = r.refs.fades.svg;
+        let moved = false;
+        const onMove = me => {
+            const dx = me.clientX - x0, dy = me.clientY - y0;
+            if (!moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+            if (!moved) { moved = true; holdCursor('ns-resize'); svg.classList.add(isIn ? 'hot-in' : 'hot-out'); r.el.classList.add('bending'); }
+            const sx = Math.abs(dx) <= SIDE_DEAD ? 0 : dx - Math.sign(dx) * SIDE_DEAD;
+            const len = clamp(len0 + (isIn ? sx : -sx) / W * dur, 0, span * 0.9 - other);
+            const lenPx = len / dur * W, x = me.clientX - rect.left;
+            const cur = selection.get();
+            let k = isIn ? cur.fadeInTension : cur.fadeOutTension;
+            if (lenPx >= 1) {
+                const u = clamp(isIn ? (x - edge) / lenPx : (edge - x) / lenPx, 0.03, 0.97);
+                const g = clamp(1 - (me.clientY - rect.top) / H, 0.001, 0.999);
+                const solved = tensionThrough(shape, u, g);
+                if (solved !== null) k = Math.round(solved * 1000) / 1000;
+            }
+            selection.update(isIn ? { fadeIn: len, fadeInTension: k } : { fadeOut: len, fadeOutTension: k });
+            tag.replaceChildren(fadeGlyph(shape, k, side, { w: 22, h: 12 }), document.createTextNode(`${isIn ? 'Fade in' : 'Fade out'} · ${describeFade(shape, k)} · ${len > 0 ? formatDuration(len) : 'off'}`));
+            tag.style.left = r.refs[isIn ? 'fkIn' : 'fkOut'].style.left;        // beside the fade, never over its curve
+            tag.classList.toggle('out', !isIn);
+            tag.classList.add('show', 'curve');
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp);
+            holdCursor(null);
+            svg.classList.remove('hot-in', 'hot-out'); r.el.classList.remove('bending');
+            tag.classList.remove('show', 'curve');
+            const s = selection.get();
+            if (!s || s.path !== it.path) return;
+            this.emit(moved ? 'selection-done' : 'play-selection', s);
         };
         document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
     }

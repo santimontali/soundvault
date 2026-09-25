@@ -22,6 +22,15 @@ export function h(tag, props = {}, ...children) {
     return el;
 }
 
+/**
+ * replaceChildren that skips null / undefined / false, as h() does. The DOM's own
+ * append() and replaceChildren() turn a null into the text "null".
+ */
+export function fill(el, ...kids) {
+    el.replaceChildren(...kids.flat().filter(k => k !== null && k !== undefined && k !== false));
+    return el;
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 /** <svg class="i"><use href="#i-name"/></svg> */
 export function icon(name, cls = '') {
