@@ -112,6 +112,37 @@ const compact = files => ({ paths: files.map(f => f.path), mtimes: Float64Array.
     // near-identical variant first and part of the family near the top.
     ok('Echo "more like this file" puts the closest variant first', f1.results && f1.results[0] && /fam02_/.test(f1.results[0].path) && f1Fam >= 2,
         `${f1Fam} of top 8 · ${(f1.results || []).slice(0, 5).map(r => path.basename(r.path)).join(', ')}`);
+    // ── vault brief: words and a reference sound become suggested collections ─
+    const rainRef = path.join(lib, 'Ambiences', 'Rain', 'rain_01.wav');
+    const kickRef = path.join(lib, 'Impacts', 'Kicks', 'kick_01.wav');
+    const br = await engine.brief({
+        queries: [
+            { key: 'w:rain', title: 'rain', kind: 'word', text: 'rain', weight: 0.6, names: files.filter(f => /rain/i.test(path.basename(f.path))).map(f => f.path) },
+            { key: 'w:whoosh', title: 'whoosh', kind: 'word', text: 'whoosh', weight: 0.6 },
+            { key: 's:kick', title: 'Like kick_01', label: 'kick_01', kind: 'sound', path: kickRef, weight: 0.7 },
+        ],
+        exclude: [rainRef], perCard: 12,
+    });
+    const all = (br.cards || []).flatMap(c => c.candidates.map(x => x.path));
+    const rainCard = (br.cards || []).find(c => c.key === 'w:rain');
+    ok('brief: each word and the reference sound get their own card', rainCard && (br.cards || []).some(c => c.reasons.some(r => r.kind === 'sound')),
+        (br.cards || []).map(c => `${c.title} (${c.candidates.length})`).join(', ') + (br.unmatched && br.unmatched.length ? ` · no good match: ${br.unmatched.join(', ')}` : ''));
+    ok('brief: the rain card leads with rain sounds', rainCard && /rain_0\d/.test(path.basename(rainCard.candidates[0].path)), rainCard && rainCard.candidates.slice(0, 4).map(x => path.basename(x.path)).join(', '));
+    ok('brief: a sound is suggested in one card only, excluded sounds never', all.length === new Set(all).size && !all.includes(rainRef) && !all.includes(kickRef), `${all.length} sounds`);
+    // Two references that share their neighbours, one pinned: the pinned one takes the shared
+    // sounds; the other keeps its own card or joins that one, but never reads as "no good match".
+    const kick2 = path.join(lib, 'Impacts', 'Kicks', 'kick_02.wav');
+    const br2 = await engine.brief({
+        queries: [
+            { key: 's:k1', title: 'Like kick_01', label: 'kick_01', kind: 'sound', path: kickRef, weight: 0.7 },
+            { key: 's:k2', title: 'Like kick_02', label: 'kick_02', kind: 'sound', path: kick2, weight: 0.7, pinned: true },
+        ],
+        perCard: 12,
+    });
+    const k1Card = (br2.cards || []).find(c => c.reasons.some(r => r.key === 's:k1'));
+    ok('brief: a reference whose sounds went to a pinned one joins a card, not "unmatched"', k1Card && !(br2.unmatched || []).includes('Like kick_01'),
+        (br2.cards || []).map(c => `${c.title} [${c.reasons.map(r => r.label).join(' + ')}] (${c.candidates.length})`).join(', ') + ` · unmatched: ${(br2.unmatched || []).join(', ') || 'none'}`);
+
     const dupPath = path.join(lib, 'Families', 'fam02', 'fam02_copy.wav');
     fs.copyFileSync(path.join(lib, 'Families', 'fam02', 'fam02_orig.wav'), dupPath);
 

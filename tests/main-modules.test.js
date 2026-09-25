@@ -73,6 +73,49 @@ test('LibraryIndex: scan skips ignored dirs, builds tree with recursive counts, 
     assert.ok(ms.missingRoot && missing.size === 0);
 });
 
+test('VaultStore: brief is validated, shared images survive duplicates, references follow moves', () => {
+    const d = tmp(), f = path.join(d, 'vaults.json');
+    const vs = new VaultStore(f, () => null);
+    assert.deepStrictEqual(vs.brief(), { words: [], refs: [], images: [], pinned: [], removed: [], dismissed: [], created: {} });
+    const b = vs.updateBrief({ words: ['rain', 'Rain', '  wooden deck ', '', 42], refs: ['C:/lib/a.wav'], created: { 'w:rain': 'Rain' } });
+    assert.deepStrictEqual(b.words, ['rain', 'wooden deck'], 'trimmed, deduplicated case-insensitively, non-strings dropped');
+    assert.deepStrictEqual(vs.updateBrief({ created: { 'w:rain': null } }).created, {}, 'null undoes a created suggestion');
+    const file = 'a'.repeat(40) + '.webp';
+    vs.addBriefImage({ file, name: 'moodboard.png', palette: ['#112233', 'not-a-color'] });
+    vs.addBriefImage({ file: '../../evil.webp', name: 'x' });
+    assert.deepStrictEqual(vs.brief().images.map(i => [i.file, i.palette]), [[file, ['#112233']]], 'only content-addressed files, only valid colors');
+    assert.strictEqual(vs.brief().images[0].analyzed, false, 'not analyzed yet');
+    const seen = vs.setBriefImageConcepts(file.slice(0, 12), []).images[0];
+    assert.deepStrictEqual([seen.analyzed, seen.concepts], [true, []], 'analyzed, nothing stands out: not analyzed again');
+    const found = vs.setBriefImageConcepts(file.slice(0, 12), [{ key: 'AMBSea', label: 'seaside', score: 1.7 }, { label: 'no key' }]).images[0];
+    assert.deepStrictEqual(found.concepts, [{ key: 'AMBSea', label: 'seaside', score: 1 }], 'concepts validated and clamped');
+    const copy = vs.duplicateVault(vs.active().id);
+    assert.strictEqual(vs.removeBriefImage(file.slice(0, 12)), null, 'the duplicate still uses the file: not orphaned');
+    vs.switchVault(copy);
+    assert.strictEqual(vs.removeBriefImage(file.slice(0, 12)), file, 'last user gone: the file can be deleted');
+    // Reference keys hold the whole path ("s:" + path), far past 80 characters in real libraries.
+    const long = 'C:/lib/Old/' + 'Boom Library Cannons Distant Rumble '.repeat(4) + 'a.wav';
+    const refKey = p => 's:' + (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+    vs.updateBrief({ refs: [long], pinned: [refKey(long)], dismissed: [refKey(long)], created: { [refKey(long)]: 'Like it' } });
+    assert.deepStrictEqual([vs.brief().pinned, vs.brief().dismissed], [[refKey(long)], [refKey(long)]], 'long reference keys are kept whole');
+    vs.remapPaths([{ from: 'C:/lib/Old', to: 'C:/lib/New', dir: true }]);
+    assert.strictEqual(path.basename(path.dirname(vs.brief().refs[0])), 'New', 'brief references follow folder moves');
+    const moved = refKey(long.replace('/Old/', '/New/'));
+    assert.deepStrictEqual([vs.brief().pinned, vs.brief().dismissed, Object.keys(vs.brief().created)], [[moved], [moved], [moved]], 'their suggestion keys follow too');
+    // A collection made from a suggestion: renaming it keeps the link, deleting it lets the suggestion come back.
+    vs.createCollection('Rain');
+    vs.updateBrief({ created: { 'w:rain': 'Rain' } });
+    vs.renameCollection('Rain', 'Storm');
+    assert.strictEqual(vs.brief().created['w:rain'], 'Storm', 'renamed collection');
+    vs.deleteCollection('Storm');
+    assert.ok(!('w:rain' in vs.brief().created), 'deleted collection: the suggestion is not hidden any more');
+    assert.ok(vs.allPaths().some(p => /New/.test(p)), 'references count as used paths (library relink)');
+    vs.flush();
+    const again = new VaultStore(f, () => null);
+    again.switchVault(copy);
+    assert.strictEqual(again.brief().refs.length, 1, 'persisted');
+});
+
 test('VaultStore: collections validation, dedupe, remap across vaults, legacy-compatible file', () => {
     const d = tmp(), f = path.join(d, 'vaults.json');
     const vs = new VaultStore(f, () => null);
