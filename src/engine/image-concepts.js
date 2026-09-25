@@ -27,7 +27,7 @@ const SIZE = 224, DIM = 768;
 const IDLE_MS = 2 * 60000;
 
 // Calibrated on ~50 pictures (photos, pack covers, game art, abstract wallpapers):
-const TERM_Z = 3.4;        // a word stands out among the ~10k (z within the picture, best view)
+const TERM_Z = 4.0;        // a word stands out among the ~10k (z within the picture, best view; 3.4 let in 2.7x more wrong words)
 const CONCEPT_Z = 1.5;     // ...and the picture itself supports its category
 const GENERIC_LINKS = 3;   // a word listed in more subcategories than this ("animal", "night")...
 const GENERIC_Z = 2.5;     // ...only counts where the picture supports it strongly
