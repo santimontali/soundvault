@@ -307,12 +307,30 @@ function flattenTree(n, out = []) {
     return out;
 }
 
+// ── vault brief ─────────────────────────────────────────────────────────
+/** Append library sounds to the active vault's Brief as reference sounds. */
+export async function addBriefRefs(items) {
+    const b = await sv.brief.get();
+    const have = new Set(b.refs.map(r => r.path.toLowerCase()));
+    const add = items.filter(i => !i.external && !have.has(i.path.toLowerCase()));
+    if (!add.length) return toast(items.length === 1 ? 'Already a reference in the Brief' : 'Already references in the Brief', { icon: 'info' });
+    const room = 24 - b.refs.length;
+    if (room <= 0) return toast('A brief holds up to 24 reference sounds', { icon: 'info' });
+    const next = await sv.brief.update({ refs: [...b.refs.filter(r => !r.missing).map(r => r.path), ...add.slice(0, room).map(i => i.path)] });
+    bus.emit('brief:changed', next);
+    const n = Math.min(add.length, room), v = activeVault();
+    const where = v ? `the ${v.name} Brief` : 'the Brief';
+    toast(n === 1 ? `Added “${stripExt(add[0].name)}” to ${where}` : `Added ${plural(n, 'reference')} to ${where}`,
+        { action: state.view.kind === 'brief' ? undefined : { label: 'Open Brief', onClick: () => bus.emit('nav:brief') } });
+}
+
 // ── row context menu ────────────────────────────────────────────────────
 export function rowMenu({ item, items, x, y }) {
     const multi = items.length > 1;
     const inCollection = state.view.kind === 'collection';
     const cols = state.collections;
     const recent = cols.slice(0, 6);
+    const local = items.filter(i => !i.external);
     showMenu({ x, y }, [
         multi ? { header: `${items.length} sounds` } : null,
         !multi ? { label: player.isCurrent(item.path) && player.playing ? 'Pause' : 'Play', icon: player.isCurrent(item.path) && player.playing ? 'pause' : 'play', kbd: 'Space', onClick: () => bus.emit('list:toggle-item', item) } : null,
@@ -321,6 +339,7 @@ export function rowMenu({ item, items, x, y }) {
         { label: multi ? `Add ${items.length} to collection…` : 'Add to collection…', icon: 'collection-plus', kbd: 'C', onClick: () => addToCollectionFlow(items) },
         ...(recent.length && !multi ? recent.map(c => ({ label: c.name, color: c.color || '', onClick: () => addToCollection(c.name, items) })) : []),
         inCollection ? { label: `Remove from “${state.view.collection}”`, icon: 'x', onClick: () => removeFromCollection(state.view.collection, items) } : null,
+        local.length ? { label: local.length > 1 ? `Use ${local.length} as Brief references` : 'Use as Brief reference', icon: 'board', onClick: () => addBriefRefs(local) } : null,
         'sep',
         !multi && !item.external ? { label: 'Show in library folder', icon: 'folder', onClick: () => bus.emit('locate', item) } : null,
         !multi ? { label: 'Show in Explorer', icon: 'reveal', onClick: () => sv.files.reveal(item.path) } : null,

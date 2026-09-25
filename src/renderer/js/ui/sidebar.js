@@ -10,6 +10,8 @@ try { expanded = new Set(JSON.parse(localStorage.getItem(EXPANDED_KEY) || '[]'))
 const saveExpanded = () => { try { localStorage.setItem(EXPANDED_KEY, JSON.stringify([...expanded].slice(-400))); } catch (e) {} };
 
 let root = null, tree = null;
+let briefCount = null;                  // open suggestions on the Brief (null: not known yet)
+const marks = new Map();                // collection name -> classes kept across re-renders
 
 export function mountSidebar(el) {
     root = el;
@@ -96,7 +98,11 @@ function renderVault() {
         icon('chev-d', 'sm'));
     sw.addEventListener('click', () => bus.emit('vault:menu', sw));
     sw.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); bus.emit('vault:menu', sw); } });
-    root.append(sw,
+    // The Brief: the vault's home, above its collections
+    const brief = h('div.node.brief-node', { role: 'button', tabindex: '0', dataset: { kind: 'brief' } }, icon('board', 'ico'), h('span.name', { text: 'Brief' }), h('span.cnt'));
+    brief.addEventListener('click', () => bus.emit('nav:brief'));
+    brief.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); bus.emit('nav:brief'); } });
+    root.append(sw, brief,
         h('div.sb-head', {},
             h('span.sb-title', { text: 'Collections' }),
             h('button.icon-btn.sm', { 'data-tip': 'New collection', 'aria-label': 'New collection', onclick: () => bus.emit('collection:new') }, icon('plus')),
@@ -110,6 +116,7 @@ function renderVault() {
         const dot = h('span.col-color' + (c.color ? '' : '.none'), { style: c.color ? { background: c.color } : null, 'data-tip': 'Color', role: 'button', 'aria-label': 'Collection color' });
         const el = h('div.node', { role: 'listitem', tabindex: '-1', dataset: { col: c.name, kind: 'collection' }, style: { paddingLeft: '10px' } },
             dot, h('span.name', { text: c.name }), h('span.cnt', { text: c.count.toLocaleString('en-US') }));
+        for (const cls of marks.get(c.name) || []) el.classList.add(cls);
         dot.addEventListener('click', e => { e.stopPropagation(); bus.emit('collection:color', { name: c.name, anchor: dot }); });
         el.addEventListener('click', () => bus.emit('nav:collection', c.name));
         el.addEventListener('contextmenu', e => { e.preventDefault(); bus.emit('collection:menu', { name: c.name, x: e.clientX, y: e.clientY }); });
@@ -117,6 +124,33 @@ function renderVault() {
         scroll.appendChild(el);
     }
     root.appendChild(scroll);
+    paintBriefCount();
+}
+
+/** Number of open suggestions shown next to the Brief (null or 0 hides it). */
+export function setBriefCount(n) {
+    briefCount = Number.isFinite(n) && n > 0 ? n : null;
+    paintBriefCount();
+}
+function paintBriefCount() {
+    const node = root && root.querySelector('.brief-node');
+    if (!node) return;
+    node.querySelector('.cnt').textContent = briefCount ? String(briefCount) : '';
+    node.setAttribute('aria-label', briefCount ? `Brief, ${count(briefCount, 'suggestion')}` : 'Brief');
+}
+
+/** The sidebar node of a collection (vault mode), or null. */
+export function collectionNode(name) {
+    return (root && [...root.querySelectorAll('.node[data-kind="collection"]')].find(n => n.dataset.col === name)) || null;
+}
+
+/** Add or remove a class on a collection node that survives re-renders (arriving, landed, bump). */
+export function markCollection(name, cls, on = true) {
+    let s = marks.get(name);
+    if (on) { if (!s) marks.set(name, (s = new Set())); s.add(cls); }
+    else if (s) { s.delete(cls); if (!s.size) marks.delete(name); }
+    const n = collectionNode(name);
+    if (n) n.classList.toggle(cls, on);
 }
 
 function collapseBtn() {
@@ -129,7 +163,8 @@ function highlight() {
     const v = state.view;
     for (const n of root.querySelectorAll('.node[data-kind]')) {
         const on = (n.dataset.kind === 'folder' && v.kind === 'folder' && n.dataset.rel === v.folder)
-            || (n.dataset.kind === 'collection' && v.kind === 'collection' && n.dataset.col === v.collection);
+            || (n.dataset.kind === 'collection' && v.kind === 'collection' && n.dataset.col === v.collection)
+            || (n.dataset.kind === 'brief' && v.kind === 'brief');
         n.classList.toggle('active', on);
         if (on) n.setAttribute('aria-current', 'true'); else n.removeAttribute('aria-current');
     }

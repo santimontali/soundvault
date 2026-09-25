@@ -13,7 +13,7 @@ export const state = {
     vaults: { activeVaultId: null, vaults: [] },
     collections: [],         // [{name, color, count}]
     view: {                  // what the list is showing
-        kind: 'none',        // 'folder' | 'collection' | 'search' | 'none'
+        kind: 'none',        // 'folder' | 'collection' | 'search' | 'brief' (vault home) | 'none' (booting)
         folder: '',          // library-relative (folder views)
         collection: null,    // collection name
         query: '',           // search text

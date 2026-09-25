@@ -171,20 +171,21 @@ window.addEventListener('blur', closeMenu);
 window.addEventListener('resize', closeMenu);
 
 // ── Toasts ─────────────────────────────────────────────────────────────
-/** toast('Imported 12 sounds', {kind:'ok'|'error'|'warn', action:{label,onClick}, timeout, progress}) */
+/** toast('Imported 12 sounds', {kind:'ok'|'error'|'warn', action:{label,onClick} | actions:[{label,onClick}], timeout, progress}) */
 export function toast(message, opts = {}) {
     const root = document.getElementById('toasts');
     const kindIcon = opts.kind === 'error' ? 'warn' : opts.kind === 'warn' ? 'warn' : opts.icon || 'check';
     const msg = h('span.msg', { text: message });
     const bar = opts.progress !== undefined ? h('span.progress', {}, h('i')) : null;
+    const actions = opts.actions || (opts.action ? [opts.action] : []);
     const el = h('div.toast' + (opts.kind ? '.' + opts.kind : ''), { role: 'status' }, icon(kindIcon), msg, bar,
-        opts.action ? h('button.act', { text: opts.action.label, onclick: () => { opts.action.onClick(); close(); } }) : null);
+        ...actions.map(a => h('button.act', { text: a.label, onclick: () => { a.onClick(); close(); } })));
     root.appendChild(el);
     while (root.children.length > 4) root.firstChild.remove();
     let timer = null;
     const close = () => { clearTimeout(timer); el.classList.add('out'); setTimeout(() => el.remove(), 220); };
     const arm = ms => { clearTimeout(timer); if (ms > 0) timer = setTimeout(close, ms); };
-    arm(opts.timeout ?? (opts.action ? 6000 : 2600));
+    arm(opts.timeout ?? (actions.length ? 6000 : 2600));
     const handle = {
         update(text, pct, ms) { if (text) msg.textContent = text; if (bar && pct !== undefined) bar.firstChild.style.width = clamp(pct, 0, 100) + '%'; if (ms !== undefined) arm(ms); },
         close,

@@ -10,6 +10,7 @@ import { renderHeader, refreshHeader, sortButton, actionBtn, iconAction, setBann
 import { focusSearch, setSearchText, effectiveScope } from './ui/titlebar.js';
 import { revealFolder, menuForVaults } from './ui/sidebar.js';
 import { toast, isDialogOpen, pickDialog } from './ui/overlays.js';
+import { initBrief, showBrief, refreshBrief } from './ui/brief.js';
 import { refreshColors } from './theme.js';
 import * as A from './actions.js';
 import { dragFiles, dragRegion, prerenderRegion, regionChannels } from './drag.js';
@@ -95,17 +96,17 @@ export async function openCollection(name, { keepScroll = false } = {}) {
     loadResonance(name);
 }
 
+/** The vault's home is its Brief (it is also where the app reopens next time). */
 function showVaultHome() {
     ++loadSeq;
-    setView({ kind: 'none', collection: null, folder: '', query: '' });
+    state.lastCollection = null;
+    try { const m = JSON.parse(localStorage.getItem('sv.lastCollectionByVault') || '{}'); delete m[state.vaults.activeVaultId]; localStorage.setItem('sv.lastCollectionByVault', JSON.stringify(m)); } catch (e) {}
+    setView({ kind: 'brief', collection: null, folder: '', query: '' });
     list.setItems([]);
     renderResonance(null);
     setBanner('missing', null);
-    const v = activeVault();
-    renderHeader({ title: v ? v.name : 'Vault', countText: v ? count(state.collections.length, 'collection') : '', actions: [actionBtn('plus', 'New collection', () => A.newCollection())] });
-    setEmpty(state.collections.length
-        ? { icon: 'vault', title: 'Pick a collection', text: v && v.description ? v.description : 'Collections live in this vault. Pick one in the sidebar, or search the whole vault above.' }
-        : { icon: 'vault', title: 'Start your first collection', text: 'A vault holds collections for one project. Create a collection, then gather sounds into it from anywhere in your library.', actions: [h('button.btn.primary', { onclick: () => A.newCollection() }, icon('plus'), 'New collection')] });
+    showBrief();
+    persistLastState();
 }
 
 function libraryMissingEmpty() {
@@ -298,6 +299,7 @@ function reloadView(keepScroll = true) {
     if (v.kind === 'folder') return openFolder(v.folder, { keepScroll });
     if (v.kind === 'collection') return openCollection(v.collection, { keepScroll });
     if (v.kind === 'search') return runSearch({ q: v.query, weights: v.weights });
+    if (v.kind === 'brief') return refreshBrief();
 }
 
 const onLibraryChanged = debounce(async () => {
@@ -389,6 +391,11 @@ export function wireApp() {
     try { if (localStorage.getItem('sv.sidebar') === '0') document.getElementById('app').classList.add('sidebar-collapsed'); } catch (e) {}
     bus.on('nav:folder', rel => { if (state.mode !== 'sounds') { state.mode = 'sounds'; refreshColors(); bus.emit('mode', 'sounds'); } openFolder(rel); });
     bus.on('nav:collection', name => openCollection(name));
+    bus.on('nav:brief', () => {
+        if (state.view.query) { setSearchText(''); setView({ query: '' }); bus.emit('search:words', []); }
+        state.lastCollection = null;
+        if (state.mode !== 'vault') setMode('vault'); else showVaultHome();
+    });
     bus.on('view:sort', sort => { setView({ sort }); setSettings({ sort }); reloadView(false); });
     bus.on('view:recursive', recursive => { setView({ recursive }); setSettings({ recursive }); reloadView(false); });
     bus.on('view:reload', () => reloadView(true));
@@ -466,6 +473,7 @@ export function wireApp() {
     sv.settings.onChanged(async s => { state.settings = s; bus.emit('settings', s); state.library = await sv.library.status(); bus.emit('library-status', state.library); await reloadTree(); reloadView(false); });
     document.addEventListener('keydown', onKey);
     document.getElementById('main').addEventListener('scroll', positionSelToolbar, true);
+    initBrief();
 }
 
 export { playItem, togglePlay, toggleAI, rescan, collect, setCollectTarget };
