@@ -21,7 +21,7 @@ node scripts/prepare-image-model.js
 node scripts/run-electron-node.js scripts/build-image-vocabulary.js
 ```
 
-  El primero adapta el codificador de imagen al ONNX Runtime de la app y lo deja en `build-assets/models/siglip2/` (96 MB). El segundo usa el codificador de texto para calcular los 753 conceptos UCS con sus sinónimos (`concepts.json` y `concepts.f16`, unos 3 min). Al instalador solo viajan el codificador de imagen y el vocabulario; el de texto se usa únicamente para compilar.
+  El primero adapta el codificador de imagen al ONNX Runtime de la app y lo deja en `build-assets/models/siglip2/` (96 MB). El segundo usa el codificador de texto para calcular los 753 conceptos UCS y sus 9.857 sinónimos como términos visuales (`concepts.json`, `concepts.f16` y `terms.q8`, unos 20 min). Al instalador solo viajan el codificador de imagen y el vocabulario; el de texto se usa únicamente para compilar.
 
 ## 2. Comandos
 
@@ -46,7 +46,7 @@ npm run verify:dist    # valida dist\win-unpacked
 | `soundvault-<versión>-Setup.exe` | Instalador por usuario (sin permisos de administrador). Accesos directos en Escritorio y Menú Inicio, y desinstalador. **Es el que conviene compartir** |
 | `soundvault-<versión>-x64.zip` | Versión portable: se descomprime y se ejecuta `soundvault.exe`. Reemplaza al `.exe` portable anterior, que re-extraía ~1 GB en %TEMP% en cada arranque (70-166 s) |
 
-La app funciona 100% offline desde el primer arranque. Los modelos van incluidos: audio 117 MB y texto 251 MB en float16, con resultados idénticos a FP32 (coseno ≥ 0,99999) y ~480 MB menos de RAM. La comprensión de imágenes (SigLIP 2, 97 MB) se carga recién al analizar una imagen y se libera después de 2 minutos sin uso.
+La app funciona 100% offline desde el primer arranque. Los modelos van incluidos: audio 117 MB y texto 251 MB en float16, con resultados idénticos a FP32 (coseno ≥ 0,99999) y ~480 MB menos de RAM. La comprensión de imágenes (SigLIP 2 y su vocabulario UCS, 105 MB) se carga recién al analizar una imagen y se libera después de 2 minutos sin uso.
 
 ## 4. En la PC de destino
 1. Ejecutar el Setup. SmartScreen muestra *"Windows protected your PC"* → **More info → Run anyway** (sin certificado de firma; ver §6).
