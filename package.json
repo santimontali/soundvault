@@ -1,6 +1,6 @@
 {
   "name": "soundvault",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Personal sound library manager for game audio designers",
   "main": "src/main.js",
   "author": "SoundVault Contributors",
@@ -9,22 +9,21 @@
     "start": "electron .",
     "dev": "electron . --dev",
     "postinstall": "electron-rebuild --only=better-sqlite3",
-    "test": "node --test tests/lexical-search.test.js tests/vector-search.test.js tests/audio-peaks.test.js tests/semantic-e2e.test.js tests/packaging.test.js tests/hnsw-integration.test.js tests/hnsw-perf.test.js tests/perf-improvements.test.js",
-    "test:fast": "node --test tests/lexical-search.test.js tests/vector-search.test.js tests/semantic-e2e.test.js tests/packaging.test.js tests/hnsw-integration.test.js tests/hnsw-perf.test.js tests/perf-improvements.test.js",
-    "test:audio": "node --test tests/audio-peaks.test.js",
-    "test:semantic": "electron tests/semantic-live.js",
-    "prepack": "node scripts/stage-crt-dlls.js && node scripts/make-icon.js",
+    "test": "node --test tests/lexical-search.test.js tests/translate.test.js tests/decode.test.js tests/wav-io.test.js tests/vector-store.test.js tests/echo-core.test.js tests/main-modules.test.js tests/edit-dsp.test.js tests/packaging.test.js",
+    "test:engine": "node scripts/run-electron-node.js tests/engine.electron.js --hnsw && node scripts/run-electron-node.js tests/clap-fbank.electron.js",
+    "test:e2e": "node tests/e2e/run.js --all",
+    "icon": "electron scripts/make-icon.js",
+    "models": "node scripts/prepare-models.js",
+    "prepack": "node scripts/stage-crt-dlls.js && node scripts/prepare-models.js && electron scripts/make-icon.js",
     "pack": "electron-builder --dir",
-    "predist": "node scripts/stage-crt-dlls.js && node scripts/make-icon.js",
+    "predist": "node scripts/stage-crt-dlls.js && node scripts/prepare-models.js && electron scripts/make-icon.js",
     "dist": "electron-builder --win",
-    "dist:portable": "electron-builder --win portable",
     "verify:dist": "node scripts/verify-dist.js"
   },
   "dependencies": {
     "@xenova/transformers": "^2.17.2",
     "better-sqlite3": "^12.8.0",
-    "ffmpeg-static": "^5.3.0",
-    "fluent-ffmpeg": "^2.1.3"
+    "ffmpeg-static": "^5.3.0"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.3",
@@ -43,31 +42,50 @@
     },
     "asar": true,
     "npmRebuild": false,
+    "electronLanguages": [
+      "en-US",
+      "es",
+      "es-419"
+    ],
     "files": [
       "**/*",
-      "!node_modules/electron/**",
-      "!node_modules/@xenova/transformers/.cache/**",
-      "!node_modules/onnxruntime-node/bin/napi-v3/darwin/**",
-      "!node_modules/onnxruntime-node/bin/napi-v3/linux/**",
-      "!node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/**",
-      "!node_modules/sharp/vendor/**",
-      "!node_modules/hnswlib-node/build/Release/obj/**",
-      "!node_modules/hnswlib-node/build/Release/*.{pdb,iobj,ipdb,exp,lib}",
-      "!node_modules/better-sqlite3/deps/**",
-      "!node_modules/better-sqlite3/src/**",
-      "!node_modules/better-sqlite3/build/Release/obj/**",
-      "!node_modules/fluent-ffmpeg/coverage/**",
-      "!node_modules/fluent-ffmpeg/doc/**",
-      "!node_modules/fluent-ffmpeg/tools/**",
-      "!node_modules/onnxruntime-web/docs/**",
-      "!**/*.{ts,map}",
+      "!{tests,docs,scripts,reaper-scripts,packaging,.claude,dist,build,build-assets,web}/**",
+      "!*.md",
+      "!**/*.{ts,map,gyp,gypi,cc,cpp,c,h,hpp,vcxproj,filters}",
+      "!**/{README,Readme,readme,CHANGELOG,Changelog,changelog,HISTORY,History,CONTRIBUTING}{,.md,.markdown,.txt}",
       "!**/.github/**",
-      "!{tests,docs,scripts,reaper-scripts,.claude,dist,build,build-assets}/**"
+      "!node_modules/electron/**",
+      "!node_modules/@xenova/transformers/{.cache,dist,types}/**",
+      "!node_modules/onnxruntime-node/bin/napi-v3/{darwin,linux}/**",
+      "!node_modules/onnxruntime-node/bin/napi-v3/win32/arm64/**",
+      "!node_modules/onnxruntime-web/**",
+      "!node_modules/sharp/**",
+      "!node_modules/{onnx-proto,protobufjs,@protobufjs,long,flatbuffers,guid-typescript,platform,@types,undici-types}/**",
+      "!node_modules/{prebuild-install,node-abi,node-addon-api,napi-build-utils,detect-libc,rc,ini,deep-extend,strip-json-comments,minimist,expand-template,github-from-package,mkdirp-classic,chownr,tunnel-agent,safe-buffer,simple-get,simple-concat,decompress-response,mimic-response,pump,end-of-stream,once,wrappy,tar-fs,tar-stream,bl,buffer,base64-js,ieee754,fs-constants,readable-stream,string_decoder,inherits,util-deprecate,b4a,fast-fifo,streamx,text-decoder,teex,events-universal}/**",
+      "!node_modules/bare-*/**",
+      "!node_modules/{color,color-convert,color-name,color-string,simple-swizzle,is-arrayish,semver}/**",
+      "!node_modules/{@derhuerst,env-paths,https-proxy-agent,agent-base,debug,ms,progress,caseless,concat-stream,buffer-from,typedarray,http-response-object,parse-cache-control}/**",
+      "!node_modules/hnswlib-node/{src,node_modules}/**",
+      "!node_modules/hnswlib-node/build/Release/{obj,addon}/**",
+      "!node_modules/hnswlib-node/build/*.{vcxproj,filters,sln}",
+      "!node_modules/hnswlib-node/build/Release/*.{pdb,iobj,ipdb,exp,lib}",
+      "!node_modules/better-sqlite3/{deps,src}/**",
+      "!node_modules/better-sqlite3/build/Release/{obj,test_extension.node}",
+      "!node_modules/better-sqlite3/build/Release/obj/**",
+      "!node_modules/ffmpeg-static/{install.js,example.js}",
+      "!node_modules/fluent-ffmpeg/**",
+      {
+        "from": "packaging/stubs/onnxruntime-web",
+        "to": "node_modules/onnxruntime-web"
+      },
+      {
+        "from": "packaging/stubs/sharp",
+        "to": "node_modules/sharp"
+      }
     ],
     "asarUnpack": [
       "node_modules/ffmpeg-static/ffmpeg.exe",
       "node_modules/better-sqlite3/build/Release/better_sqlite3.node",
-      "node_modules/sharp/**",
       "node_modules/onnxruntime-node/**",
       "node_modules/hnswlib-node/build/Release/addon.node"
     ],
@@ -86,14 +104,14 @@
           ]
         },
         {
-          "target": "portable",
+          "target": "zip",
           "arch": [
             "x64"
           ]
         }
       ],
       "icon": "build/icon.ico",
-      "artifactName": "${productName}-${version}-${targetName}-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -102,10 +120,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "SoundVault",
+      "uninstallDisplayName": "SoundVault ${version}",
       "artifactName": "${productName}-${version}-Setup.${ext}"
-    },
-    "portable": {
-      "artifactName": "${productName}-${version}-Portable.${ext}"
     }
   }
 }

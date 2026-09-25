@@ -7,7 +7,7 @@
  * msvcp140.dll / vcruntime140.dll / vcruntime140_1.dll, which a CLEAN Windows
  * install does NOT have (Electron/Chromium links the CRT statically, so the
  * packaged app provides nothing). Without these, `require('onnxruntime-node')`
- * throws at module load — which kills the WHOLE app at startup, not just the
+ * throws at module load, which kills the WHOLE app at startup, not just the
  * AI features (the require chain is top-level).
  *
  * Node loads .node addons with LOAD_WITH_ALTERED_SEARCH_PATH, so DLLs placed

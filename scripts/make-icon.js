@@ -1,186 +1,157 @@
 'use strict';
-
+/**
+ * Builds the app icon from the SoundVault vault mark (the chest of
+ * src/renderer/js/ui/logo.js), rendered by Chromium for perfect anti-aliasing:
+ *   build/icon.ico, 16, 20, 24, 32, 40, 48, 64, 128, 256 px (PNG frames)
+ *   build/icon.png, 512 px (Linux / docs)
+ * The chest IS the icon: a full-bleed solid silhouette on a transparent canvas
+ * (no backing tile). The mark's outline becomes a light rim around a dark body,
+ * with the lid seam, the lid waveform and the lime lock plate inside. A faint
+ * dark keyline keeps the edge visible on light taskbars and wallpapers.
+ * 128 px and up scale the mark into a box 240/256 of the canvas wide; the 16 to
+ * 64 px frames are drawn on the pixel grid by hand so they stay crisp (16 px:
+ * 3 one-pixel bars; 16 and 20 px: 1 px keyhole slot, relatively bigger lock).
+ *
+ *   npx electron scripts/make-icon.js
+ */
 const fs = require('fs');
 const path = require('path');
-const zlib = require('zlib');
 
-const SIZE = 256;
-const SS = 4;
-const BG = [0x18, 0x18, 0x1c, 0xff];
-const WHITE = [0xf4, 0xf4, 0xf2, 0xff];
-const ACCENT = [0xc8, 0xf7, 0x6d, 0xff];
+const OUT_DIR = path.join(__dirname, '..', 'build');
+const SIZES = [16, 20, 24, 32, 40, 48, 64, 128, 256];
+const RIM = ['#f4f3ee', '#c9c7bf'];     // rim, seam and bars: top-lit light
+const BODY = ['#2b2b33', '#131316'];    // chest body (and the gap ring around the lock)
+const ACCENT = '#c8f76d', PLATE = ['#d3fa82', '#bff063'], INK = '#16161a';
 
-function crc32(buf) {
-    let crc = 0xFFFFFFFF;
-    for (let i = 0; i < buf.length; i++) {
-        crc ^= buf[i];
-        for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
-    }
-    return (crc ^ 0xFFFFFFFF) | 0;
+// The mark in its own units, relative to the chest's outer top-left corner:
+// logo.js draws rect 4.15,4.65 23.7x22.7 rx5.2 stroked 2.3, so the outer box is
+// 26x25 with r6.35; seam, bars, plate and keyhole below share that origin.
+const MARK = {
+    w: 26, h: 25, r: 6.35, rim: 2.3, seam: [14.75, 17.05],
+    bars: [[6.2, 6.8, 1.9, 2.4], [9.3, 5.5, 1.9, 5.0], [12.05, 4.3, 1.9, 7.4], [15.1, 6.0, 1.9, 4.0], [18.2, 7.1, 1.9, 1.8]],
+    plate: [9.8, 12.8, 6.4, 7.2], plateR: 1.8, ring: 0.8,
+    hole: { cx: 13, cy: 15.45, r: 1.05, nh: 0.62, ny: 16.3, bh: 0.94, by: 18.25 },
+};
+
+const n = v => +(+v).toFixed(3);
+
+// Classic keyhole: round top (centre cx,cy radius r) opening into a slot whose
+// half-width goes from nh at y=ny (on the circle) to bh at y=by.
+function keyhole({ cx, cy, r, nh, ny, bh, by }) {
+    return `M${n(cx)} ${n(cy - r)}A${n(r)} ${n(r)} 0 0 1 ${n(cx + nh)} ${n(ny)}L${n(cx + bh)} ${n(by)}`
+        + `H${n(cx - bh)}L${n(cx - nh)} ${n(ny)}A${n(r)} ${n(r)} 0 0 1 ${n(cx)} ${n(cy - r)}Z`;
 }
 
-function pngChunk(type, data) {
-    const out = Buffer.alloc(12 + data.length);
-    out.writeUInt32BE(data.length, 0);
-    out.write(type, 4);
-    data.copy(out, 8);
-    out.writeInt32BE(crc32(Buffer.concat([Buffer.from(type), data])), 8 + data.length);
-    return out;
+// Small frames drawn on the pixel grid (px, edges): box = chest outer edge
+// [x0,y0,x1,y1], bars/plate = [x0,y0,x1,y1(,rx)]. Odd chest widths where 1 or
+// 3 px features must sit on the centre line, even ones for 2 or 4 px bars.
+const PIXEL = {
+    16: { box: [0, 1, 15, 15], r: 3.5, rim: 1, seam: [9, 10],                  // 15x14, 3 bars
+        bars: [[5, 4, 6, 6, 0], [7, 3, 8, 7, 0], [9, 4, 10, 6, 0]],
+        plate: [5, 8, 10, 13], plateR: 1, ring: 1, hole: 'M7 9.5h1v2.5h-1z' },
+    20: { box: [0, 1, 19, 19], r: 4.5, rim: 2, seam: [11, 13],                 // 19x18, 1 px bars
+        bars: [[5, 6, 6, 7, 0], [7, 5, 8, 8, 0], [9, 4, 10, 9, 0], [11, 5, 12, 8, 0], [13, 6, 14, 7, 0]],
+        plate: [7, 10, 12, 16], plateR: 1.2, ring: 1, hole: 'M9 11.5h1v3h-1z' },
+    24: { box: [1, 1, 23, 22], r: 5.5, rim: 2, seam: [13, 15],                 // 22x21, 2 px bars
+        bars: [[5, 7, 7, 9, 1], [8, 6, 10, 10, 1], [11, 5, 13, 11, 1], [14, 6, 16, 10, 1], [17, 7, 19, 9, 1]],
+        plate: [9, 12, 15, 18], plateR: 1.5, ring: 1, hole: keyhole({ cx: 12, cy: 14.2, r: 1, nh: 0.55, ny: 15.04, bh: 0.9, by: 16.6 }) },
+    32: { box: [1, 1, 31, 30], r: 7, rim: 3, seam: [18, 21],                   // 30x29
+        bars: [[9, 9, 11, 11, 1], [12, 7, 14, 13, 1], [15, 6, 17, 14, 1], [18, 8, 20, 12, 1], [21, 9, 23, 11, 1]],
+        plate: [12, 16, 20, 24], plateR: 2, ring: 1, hole: keyhole({ cx: 16, cy: 19, r: 1.5, nh: 0.8, ny: 20.27, bh: 1, by: 22 }) },
+    40: { box: [1, 2, 38, 38], r: 9, rim: 3, seam: [23, 26],                   // 37x36, 3 px bars
+        bars: [[8, 11, 11, 15, 1.5], [13, 9, 16, 17, 1.5], [18, 8, 21, 18, 1.5], [23, 10, 26, 16, 1.5], [28, 12, 31, 14, 1]],
+        plate: [15, 20, 24, 30], plateR: 2.5, ring: 1, hole: keyhole({ cx: 19.5, cy: 24, r: 1.5, nh: 0.9, ny: 25.2, bh: 1.35, by: 28 }) },
+    48: { box: [1, 2, 46, 45], r: 11, rim: 4, seam: [27, 31],                  // 45x43, 3 px bars
+        bars: [[12, 13, 15, 18, 1.5], [17, 11, 20, 20, 1.5], [22, 9, 25, 22, 1.5], [27, 12, 30, 19, 1.5], [32, 14, 35, 17, 1.5]],
+        plate: [18, 24, 29, 36], plateR: 3, ring: 1.5, hole: keyhole({ cx: 23.5, cy: 28.6, r: 1.8, nh: 1.05, ny: 30.06, bh: 1.6, by: 33.4 }) },
+    64: { box: [2, 3, 62, 61], r: 14.5, rim: 5, seam: [37, 42],                // 60x58, 4 px bars
+        bars: [[16, 19, 20, 25, 2], [23, 16, 27, 28, 2], [30, 13, 34, 31, 2], [37, 17, 41, 27, 2], [44, 20, 48, 24, 2]],
+        plate: [25, 33, 39, 50], plateR: 4, ring: 2, hole: keyhole({ cx: 32, cy: 39, r: 2.5, nh: 1.45, ny: 41.04, bh: 2.1, by: 45.5 }) },
+};
+
+// 128 px and up: the mark scaled into a centred box 240/256 of the canvas wide.
+function geometry(size) {
+    if (PIXEL[size]) return PIXEL[size];
+    const k = size * 240 / 256 / MARK.w, x0 = (size - MARK.w * k) / 2, y0 = (size - MARK.h * k) / 2;
+    const X = u => x0 + u * k, Y = u => y0 + u * k, h = MARK.hole, [px, py, pw, ph] = MARK.plate;
+    return {
+        box: [x0, y0, X(MARK.w), Y(MARK.h)], r: MARK.r * k, rim: MARK.rim * k, seam: MARK.seam.map(Y),
+        bars: MARK.bars.map(([x, y, w, hh]) => [X(x), Y(y), X(x + w), Y(y + hh), w * k / 2]),
+        plate: [X(px), Y(py), X(px + pw), Y(py + ph)], plateR: MARK.plateR * k, ring: MARK.ring * k,
+        hole: keyhole({ cx: X(h.cx), cy: Y(h.cy), r: h.r * k, nh: h.nh * k, ny: Y(h.ny), bh: h.bh * k, by: Y(h.by) }),
+    };
 }
 
-function rrHit(x, y, x0, y0, w, h, r) {
-    if (x < x0 || x > x0 + w || y < y0 || y > y0 + h) return false;
-    const cx = x < x0 + r ? x0 + r : x > x0 + w - r ? x0 + w - r : x;
-    const cy = y < y0 + r ? y0 + r : y > y0 + h - r ? y0 + h - r : y;
-    const dx = x - cx, dy = y - cy;
-    return dx * dx + dy * dy <= r * r;
+function svgFor(size) {
+    const g = geometry(size);
+    const [x0, y0, x1, y1] = g.box, [p0, q0, p1, q1] = g.plate, t = g.rim, e = g.ring;
+    const rect = (a, b, c, d, r, fill) => `<rect x="${n(a)}" y="${n(b)}" width="${n(c - a)}" height="${n(d - b)}" rx="${n(Math.max(0, r))}" fill="${fill}"/>`;
+    const grad = (id, [c0, c1], ya, yb) => `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="${n(ya)}" x2="0" y2="${n(yb)}">`
+        + `<stop offset="0" stop-color="${c0}"/><stop offset="1" stop-color="${c1}"/></linearGradient>`;
+    const plateFill = size >= 40 ? 'url(#plate)' : ACCENT;
+    const kw = size <= 128 ? 1 : size / 128;            // keyline width
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">`
+        + `<defs>${grad('rim', RIM, y0, y1)}${grad('body', BODY, y0, y1)}${size >= 40 ? grad('plate', PLATE, q0, q1) : ''}</defs>`
+        + rect(x0, y0, x1, y1, g.r, 'url(#rim)')                                   // silhouette = rim
+        + rect(x0 + t, y0 + t, x1 - t, y1 - t, g.r - t, 'url(#body)')             // dark body
+        + rect(x0 + t - 0.5, g.seam[0], x1 - t + 0.5, g.seam[1], 0, 'url(#rim)')  // lid seam
+        + g.bars.map(([a, b, c, d, r]) => rect(a, b, c, d, r, 'url(#rim)')).join('')
+        + rect(p0 - e, q0 - e, p1 + e, q1 + e, g.plateR + e, 'url(#body)')        // gap ring cuts the seam
+        + rect(p0, q0, p1, q1, g.plateR, plateFill)
+        + `<path d="${g.hole}" fill="${INK}"/>`
+        + `<rect x="${n(x0 + kw / 2)}" y="${n(y0 + kw / 2)}" width="${n(x1 - x0 - kw)}" height="${n(y1 - y0 - kw)}" rx="${n(g.r - kw / 2)}"`
+        + ` fill="none" stroke="rgba(0,0,0,${size <= 16 ? 0.16 : 0.2})" stroke-width="${n(kw)}"/>`
+        + '</svg>';
 }
 
-function rrStroke(x, y, x0, y0, w, h, r, t) {
-    return rrHit(x, y, x0, y0, w, h, r) &&
-        !rrHit(x, y, x0 + t, y0 + t, w - 2 * t, h - 2 * t, Math.max(0.5, r - t));
-}
-
-function capsuleHit(x, y, cx, top, bot, halfW) {
-    if (x < cx - halfW || x > cx + halfW) return false;
-    const r = halfW;
-    if (y < top + r) { const d = y - (top + r); const dx = x - cx; return dx * dx + d * d <= r * r; }
-    if (y > bot - r) { const d = y - (bot - r); const dx = x - cx; return dx * dx + d * d <= r * r; }
-    return y >= top + r && y <= bot - r;
-}
-
-const BARS = [0.30, 0.52, 0.74, 0.92, 1.00, 0.80, 0.58, 0.40, 0.24];
-
-function colorAt(x, y, S) {
-    const m = S * 0.085;
-    const ox = m, oy = m, ow = S - 2 * m, oh = S - 2 * m;
-    const R = S * 0.205;
-    const stroke = S * 0.030;
-
-    if (!rrHit(x, y, ox, oy, ow, oh, R)) return null;
-
-    const divY = oy + oh * 0.645;
-    const waveTop = oy + stroke + S * 0.055;
-    const waveBot = divY - S * 0.035;
-    const waveMid = (waveTop + waveBot) / 2;
-    const waveH = waveBot - waveTop;
-
-    const n = BARS.length;
-    const barW = S * 0.034;
-    const gap = (ow - stroke * 2 - S * 0.10 - n * barW) / (n - 1);
-    const barsX0 = ox + stroke + S * 0.05;
-
-    const lockW = S * 0.175, lockH = S * 0.135;
-    const lockX = (S - lockW) / 2, lockY = divY + S * 0.052;
-    const lockR = S * 0.030;
-    const shW = S * 0.105, shT = S * 0.026;
-    const shX = (S - shW) / 2;
-    const shCY = lockY - S * 0.012;
-    const shR = shW / 2;
-    const shTop = shCY - shR;
-
-    if (rrStroke(x, y, ox, oy, ow, oh, R, stroke)) return WHITE;
-
-    const divT = stroke;
-    if (x >= ox + stroke + S * 0.045 && x <= ox + ow - stroke - S * 0.045 &&
-        y >= divY - divT / 2 && y <= divY + divT / 2) return WHITE;
-
-    for (let b = 0; b < n; b++) {
-        const cx = barsX0 + b * (barW + gap) + barW / 2;
-        const h = BARS[b] * waveH;
-        if (capsuleHit(x, y, cx, waveMid - h / 2, waveMid + h / 2, barW / 2)) return WHITE;
-    }
-
-    const dxC = x - S / 2;
-    if (y >= shTop && y <= shCY) {
-        const d = Math.sqrt(dxC * dxC + (y - shCY) * (y - shCY));
-        if (d <= shR && d >= shR - shT) return ACCENT;
-    }
-    if (y >= shCY && y <= lockY + S * 0.012) {
-        if ((x >= shX && x <= shX + shT) || (x >= shX + shW - shT && x <= shX + shW)) return ACCENT;
-    }
-
-    if (rrHit(x, y, lockX, lockY, lockW, lockH, lockR)) {
-        const holeR = S * 0.020;
-        const holeCY = lockY + lockH * 0.42;
-        const slotW = S * 0.012, slotH = S * 0.030;
-        const inHole = (dxC * dxC + (y - holeCY) * (y - holeCY)) <= holeR * holeR;
-        const inSlot = x >= S / 2 - slotW / 2 && x <= S / 2 + slotW / 2 && y >= holeCY && y <= holeCY + slotH;
-        if (inHole || inSlot) return BG;
-        return ACCENT;
-    }
-
-    return BG;
-}
-
-function renderPng(size) {
-    const big = size * SS;
-    const acc = new Float32Array(big * big * 4);
-
-    for (let by = 0; by < big; by++) {
-        for (let bx = 0; bx < big; bx++) {
-            const fx = (bx + 0.5) / SS;
-            const fy = (by + 0.5) / SS;
-            const c = colorAt(fx, fy, size);
-            const o = (by * big + bx) * 4;
-            if (c) { acc[o] = c[0]; acc[o + 1] = c[1]; acc[o + 2] = c[2]; acc[o + 3] = c[3]; }
-        }
-    }
-
-    const raw = Buffer.alloc(size * (1 + size * 4));
-    for (let y = 0; y < size; y++) {
-        const rowOff = y * (1 + size * 4);
-        raw[rowOff] = 0;
-        for (let x = 0; x < size; x++) {
-            let r = 0, g = 0, b = 0, a = 0;
-            for (let sy = 0; sy < SS; sy++) {
-                for (let sx = 0; sx < SS; sx++) {
-                    const o = ((y * SS + sy) * big + (x * SS + sx)) * 4;
-                    r += acc[o]; g += acc[o + 1]; b += acc[o + 2]; a += acc[o + 3];
-                }
-            }
-            const n = SS * SS;
-            const px = rowOff + 1 + x * 4;
-            raw[px] = Math.round(r / n);
-            raw[px + 1] = Math.round(g / n);
-            raw[px + 2] = Math.round(b / n);
-            raw[px + 3] = Math.round(a / n);
-        }
-    }
-
-    const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-    const ihdr = Buffer.alloc(13);
-    ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4);
-    ihdr.writeUInt8(8, 8);
-    ihdr.writeUInt8(6, 9);
-    ihdr.writeUInt8(0, 10);
-    ihdr.writeUInt8(0, 11);
-    ihdr.writeUInt8(0, 12);
-    const idat = zlib.deflateSync(raw, { level: 9 });
-    return Buffer.concat([sig, pngChunk('IHDR', ihdr), pngChunk('IDAT', idat), pngChunk('IEND', Buffer.alloc(0))]);
-}
-
-function pngToIco(png) {
+function buildIco(frames) {
+    // ICONDIR + ICONDIRENTRY[] + PNG payloads (PNG-compressed entries, Vista+)
     const header = Buffer.alloc(6);
-    header.writeUInt16LE(0, 0);
-    header.writeUInt16LE(1, 2);
-    header.writeUInt16LE(1, 4);
-    const entry = Buffer.alloc(16);
-    entry.writeUInt8(0, 0);
-    entry.writeUInt8(0, 1);
-    entry.writeUInt8(0, 2);
-    entry.writeUInt8(0, 3);
-    entry.writeUInt16LE(1, 4);
-    entry.writeUInt16LE(32, 6);
-    entry.writeUInt32LE(png.length, 8);
-    entry.writeUInt32LE(6 + 16, 12);
-    return Buffer.concat([header, entry, png]);
+    header.writeUInt16LE(0, 0); header.writeUInt16LE(1, 2); header.writeUInt16LE(frames.length, 4);
+    const dir = Buffer.alloc(16 * frames.length);
+    let offset = 6 + dir.length;
+    frames.forEach(({ size, png }, i) => {
+        const o = i * 16;
+        dir.writeUInt8(size >= 256 ? 0 : size, o);
+        dir.writeUInt8(size >= 256 ? 0 : size, o + 1);
+        dir.writeUInt8(0, o + 2); dir.writeUInt8(0, o + 3);
+        dir.writeUInt16LE(1, o + 4); dir.writeUInt16LE(32, o + 6);
+        dir.writeUInt32LE(png.length, o + 8); dir.writeUInt32LE(offset, o + 12);
+        offset += png.length;
+    });
+    return Buffer.concat([header, dir, ...frames.map(f => f.png)]);
 }
 
-const outDir = path.join(__dirname, '..', 'build');
-fs.mkdirSync(outDir, { recursive: true });
-const png = renderPng(SIZE);
-const ico = pngToIco(png);
-const out = path.join(outDir, 'icon.ico');
-fs.writeFileSync(out, ico);
-console.log(`[make-icon] wrote ${out} (${ico.length} bytes, PNG frame ${png.length} bytes, ${SS}x SSAA)`);
+async function main() {
+    const { app, BrowserWindow } = require('electron');
+    setTimeout(() => { console.error('make-icon: timed out'); app.exit(2); }, 60000).unref();
+    await app.whenReady();
+    const win = new BrowserWindow({ show: false, width: 600, height: 600 });
+    await win.loadURL('about:blank');
+    const render = async size => {
+        const svg = svgFor(size);
+        const dataUrl = await win.webContents.executeJavaScript(`new Promise((res, rej) => {
+            const img = new Image();
+            img.onload = () => { const c = document.createElement('canvas'); c.width = ${size}; c.height = ${size};
+                const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0, ${size}, ${size}); res(c.toDataURL('image/png')); };
+            img.onerror = rej;
+            img.src = 'data:image/svg+xml;base64,' + ${JSON.stringify(Buffer.from(svg).toString('base64'))};
+        })`);
+        return Buffer.from(dataUrl.split(',')[1], 'base64');
+    };
+    fs.mkdirSync(OUT_DIR, { recursive: true });
+    const frames = [];
+    for (const size of SIZES) frames.push({ size, png: await render(size) });
+    // Largest frame first (convention; some shells read only the first entry).
+    fs.writeFileSync(path.join(OUT_DIR, 'icon.ico'), buildIco(frames.slice().sort((a, b) => b.size - a.size)));
+    fs.writeFileSync(path.join(OUT_DIR, 'icon.png'), await render(512));
+    console.log(`icon.ico (${SIZES.join(', ')} px) + icon.png (512 px) → ${OUT_DIR}`);
+    app.quit();
+}
+
+// Under Electron the entry script is NOT require.main, so detect the runtime.
+if (process.versions.electron && process.type === 'browser') {
+    main().catch(e => { console.error(e); process.exit(1); });
+}
+
+module.exports = { svgFor, buildIco, SIZES };

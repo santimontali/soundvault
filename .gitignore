@@ -139,7 +139,7 @@ dist
 dist/
 out/
 
-# SoundVault â€” archivos generados localmente, no van al repo
+# SoundVault: archivos generados localmente, no van al repo
 soundvault-semantic.db
 soundvault-config.json
 *.db
@@ -149,6 +149,6 @@ soundvault-config.json
 .claude/
 
 
-# Bundled CLAP model for electron-builder extraResources (~592MB — regenerate via DISTRIBUTION.md step 2)
+# Bundled CLAP model for electron-builder extraResources (~592MB: regenerate via DISTRIBUTION.md step 2)
 build-assets/
 
