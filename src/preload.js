@@ -67,6 +67,16 @@ contextBridge.exposeInMainWorld('sv', {
         remove: id => invoke('vaults:remove', id),
         duplicate: id => invoke('vaults:duplicate', id),
     },
+    brief: {
+        get: () => invoke('brief:get'),
+        update: patch => invoke('brief:update', patch),
+        addImage: img => invoke('brief:add-image', img),
+        removeImage: id => invoke('brief:remove-image', id),
+        analyzeImage: (id, pixels) => invoke('brief:analyze-image', id, pixels),
+        suggest: opts => invoke('brief:suggest', opts || {}),
+        more: () => invoke('brief:more'),
+        create: o => invoke('brief:create', o),
+    },
     collections: {
         list: () => invoke('collections:list'),
         create: name => invoke('collections:create', name),

@@ -414,6 +414,168 @@ ipcMain.handle('engine:search', async (_e, query, opts = {}) => {
     for (const r of weak) add(r.path, r.score, 'name');
     return { results: out.slice(0, limit), total: out.length, words: ai.words, query: ai.query, translated: !!ai.translated, nameMatches: names.length };
 });
+// ── IPC: vault brief (suggested collections) ───────────────────────────
+// The brief describes the project (words, reference sounds, images); the
+// engine turns it into suggested collections. Words also match file NAMES
+// (cached per library version: the brief is recomputed on every edit).
+const BRIEF_DIR = path.join(USER_DATA, 'brief');
+const nameCache = { version: -1, map: new Map() };
+function namesFor(q) {
+    if (nameCache.version !== library.version) { nameCache.version = library.version; nameCache.map.clear(); }
+    const k = q.toLowerCase();
+    if (!nameCache.map.has(k)) {
+        // Files named with every word; with fewer than 5 of those, also the ones
+        // named with most of the words ("footsteps" + "wood" for "footsteps on wet wood").
+        const all = lexical(library.all(), q, 3000), full = all.filter(r => !r.partial);
+        nameCache.map.set(k, (full.length >= 5 ? full : all).map(r => r.path));
+    }
+    return nameCache.map.get(k);
+}
+// The image vocabulary's distinctive UCS synonyms per concept ("tiger", "lion" for wild cats), read once.
+const IMAGE_MODEL_DIR = app.isPackaged ? path.join(process.resourcesPath, 'models', 'siglip2') : path.join(__dirname, '..', 'build-assets', 'models', 'siglip2');
+let conceptSyn = null;
+function synonymsFor(key) {
+    if (!conceptSyn) {
+        conceptSyn = new Map();
+        try {
+            for (const it of JSON.parse(fs.readFileSync(path.join(IMAGE_MODEL_DIR, 'concepts.json'), 'utf8')).items) if (Array.isArray(it.syn)) conceptSyn.set(it.key, it.syn);
+        } catch (e) { /* no vocabulary: CatIDs and labels only */ }
+    }
+    return conceptSyn.get(key) || [];
+}
+// Files named for a concept seen in a picture: its UCS CatID ("AMBSea_Rockpool 02.wav",
+// the most precise), its label, or one of its synonyms in the name or folder ("Bengal_Tiger_purr").
+// { all, exact }: all lift the ranking, exact (CatID or label) also prove the card.
+function conceptNames(c) {
+    const k = 'concept:' + String(c.key).toLowerCase();
+    if (nameCache.version !== library.version) { nameCache.version = library.version; nameCache.map.clear(); }
+    if (!nameCache.map.has(k)) {
+        const prefix = String(c.key).toLowerCase() + '_', syn = new Set(synonymsFor(c.key));
+        const hasSyn = f => f && f.list.some(t => syn.has(t));
+        const byCatId = [], bySyn = [];
+        for (const e of library.all()) {
+            if (e.name.toLowerCase().startsWith(prefix)) byCatId.push(e.path);
+            else if (syn.size && e._tokens && (hasSyn(e._tokens.name) || hasSyn(e._tokens.folder))) bySyn.push(e.path);
+        }
+        const exact = [...new Set([...byCatId, ...namesFor(c.label)])];
+        nameCache.map.set(k, { all: [...new Set([...exact, ...bySyn])].slice(0, 3000), exact: exact.slice(0, 3000) });
+    }
+    return nameCache.map.get(k);
+}
+const imageType = buf => (buf.length > 12 && buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP' ? 'webp'
+    : buf[0] === 0x89 && buf.toString('ascii', 1, 4) === 'PNG' ? 'png' : buf[0] === 0xff && buf[1] === 0xd8 ? 'jpg' : null);
+const briefKey = s => String(s).toLowerCase();
+
+function briefState() {
+    const v = vaults.active(), b = vaults.brief();
+    const images = b.images.map(im => {
+        let thumb = '';
+        try { thumb = `data:image/${im.file.endsWith('.jpg') ? 'jpeg' : im.file.split('.').pop()};base64,` + fs.readFileSync(path.join(BRIEF_DIR, im.file)).toString('base64'); } catch (e) { /* file gone: shown as a placeholder */ }
+        return { id: im.id, name: im.name, palette: im.palette, concepts: im.concepts, analyzed: im.analyzed, thumb };
+    });
+    const refs = b.refs.map(p => { const e = library.get(p); return e ? pub(e) : { path: p, name: path.basename(p), dir: '', missing: true }; });
+    return {
+        vaultId: v.id, name: v.name, color: v.color, description: v.description,
+        words: b.words, refs, images, pinned: b.pinned, removed: b.removed, dismissed: b.dismissed, created: b.created,
+        imageModel: engine.status().imageModel === 'ready' ? 'ready' : 'unavailable',
+    };
+}
+
+ipcMain.handle('brief:get', () => briefState());
+ipcMain.handle('brief:update', (_e, patch = {}) => {
+    const p = patch && typeof patch === 'object' ? patch : {};
+    const clean = {};
+    for (const k of ['words', 'pinned', 'removed', 'dismissed']) if (Array.isArray(p[k])) clean[k] = strArr(p[k]);
+    if (Array.isArray(p.refs)) clean.refs = strArr(p.refs).filter(x => library.has(x));   // references are library sounds
+    // created: { key: name } marks a suggestion as turned into a collection; { key: null } undoes it.
+    if (p.created && typeof p.created === 'object') clean.created = Object.fromEntries(Object.entries(p.created).map(([k, v]) => [str(k), typeof v === 'string' && v ? v : null]));
+    vaults.updateBrief(clean);
+    if (typeof p.description === 'string') vaults.updateVault(vaults.active().id, { description: p.description });
+    return briefState();
+});
+// 224x224 RGB of the picture (the renderer squashes it as SigLIP does) → concepts, stored on the image.
+const pixelsOf = p => (p && p.buffer && p.byteLength === 224 * 224 * 3 ? new Uint8Array(p.buffer, p.byteOffset || 0, p.byteLength) : null);
+async function analyzeBriefImage(id, pixels) {
+    if (!pixels || engine.status().imageModel !== 'ready') return;
+    const r = await engine.imageConcepts(pixels);
+    // A failed analysis (engine restarting) leaves the image unanalyzed, so it can be retried.
+    if (!r.error && Array.isArray(r.concepts)) vaults.setBriefImageConcepts(id, r.concepts);
+}
+ipcMain.handle('brief:analyze-image', async (_e, id, pixels) => { await analyzeBriefImage(str(id), pixelsOf(pixels)); return briefState(); });
+ipcMain.handle('brief:add-image', async (_e, img = {}) => {
+    const bytes = img && img.bytes;
+    const buf = bytes && bytes.buffer ? Buffer.from(bytes.buffer, bytes.byteOffset || 0, bytes.byteLength) : null;
+    if (!buf || buf.length < 64 || buf.length > 4 * 1024 * 1024) return { ...briefState(), error: 'That image could not be added (too large or unreadable).' };
+    const ext = imageType(buf);
+    if (!ext) return { ...briefState(), error: 'Only PNG, JPEG and WebP images can be added.' };
+    const file = require('crypto').createHash('sha1').update(buf).digest('hex') + '.' + ext;
+    const dest = path.join(BRIEF_DIR, file);
+    try {
+        fs.mkdirSync(BRIEF_DIR, { recursive: true });
+        if (!fs.existsSync(dest)) { fs.writeFileSync(dest + '.tmp', buf); fs.renameSync(dest + '.tmp', dest); }
+    } catch (e) { return { ...briefState(), error: 'The image could not be saved: ' + e.message }; }
+    vaults.addBriefImage({ file, name: str(img.name).slice(0, 120), palette: strArr(img.palette) });
+    await analyzeBriefImage(file.slice(0, 12), pixelsOf(img.pixels));
+    return briefState();
+});
+ipcMain.handle('brief:remove-image', (_e, id) => {
+    const orphan = vaults.removeBriefImage(str(id));
+    if (orphan) { try { fs.unlinkSync(path.join(BRIEF_DIR, orphan)); } catch (e) { /* already gone */ } }
+    return briefState();
+});
+ipcMain.handle('brief:suggest', async (_e, opts = {}) => {
+    if (library.scanning) await library.scanning;
+    const v = vaults.active(), b = vaults.brief();
+    const pinned = new Set(b.pinned.map(briefKey)), removed = new Set(b.removed.map(briefKey));
+    const refs = b.refs.filter(p => library.has(p));
+    const queries = [];
+    for (const w of b.words) {
+        const key = 'w:' + briefKey(w);
+        queries.push({ key, title: w, kind: 'word', text: w, weight: 0.6, pinned: pinned.has(key), names: namesFor(w) });
+    }
+    for (const im of b.images) for (const c of im.concepts) {
+        const key = 'c:' + briefKey(c.key);
+        if (removed.has(key) || queries.some(q => q.key === key)) continue;
+        const named = conceptNames(c);
+        queries.push({ key, title: c.label, kind: 'concept', text: c.label, weight: 0.3 + 0.7 * c.score, pinned: pinned.has(key), names: named.all, exact: named.exact });
+    }
+    for (const p of refs) {
+        const key = 's:' + P.key(p), nm = path.parse(library.get(p).name).name;
+        queries.push({ key, title: 'Like ' + nm, label: nm, kind: 'sound', path: p, weight: 0.7, pinned: pinned.has(key) });
+    }
+    if (!queries.length) return { cards: [], empty: true };
+    const res = await engine.brief({ queries, context: v.description, exclude: [...vaults.vaultPaths(), ...refs], perCard: 24, maxCards: 14 });
+    if (res.notReady || res.error) return { cards: [], notReady: !!res.notReady, error: res.error || null };
+    const hidden = new Set([...b.dismissed.map(briefKey), ...Object.keys(b.created).map(briefKey)]);
+    const max = Math.max(1, Math.min(12, (opts && opts.max) | 0 || 8));
+    const open = res.cards.filter(c => !hidden.has(briefKey(c.key)));
+    const cards = open.slice(0, max).map(c => ({ ...c, candidates: c.candidates.map(x => { const e = library.get(x.path); return e ? { ...pub(e), score: x.score } : null; }).filter(Boolean) }));
+    return { cards, more: (res.more || 0) + open.length - cards.length, unmatched: res.unmatched || [], ms: res.ms };
+});
+ipcMain.handle('brief:more', async () => {
+    const inVault = new Set(vaults.vaultPaths().map(P.key));
+    const out = [];
+    for (const c of vaults.collections().filter(c => c.count > 0).slice(0, 8)) {
+        const res = await engine.suggest(vaults.collectionPaths(c.name) || [], 16);
+        const suggestions = res.filter(r => !inVault.has(P.key(r.path))).map(r => { const e = library.get(r.path); return e ? { ...pub(e), score: r.score } : null; }).filter(Boolean).slice(0, 12);
+        if (suggestions.length) out.push({ name: c.name, color: c.color, count: c.count, suggestions });
+    }
+    return { collections: out };
+});
+ipcMain.handle('brief:create', (_e, o = {}) => {
+    const title = str(o && o.title).trim() || 'Suggested';
+    const base = title.charAt(0).toUpperCase() + title.slice(1);
+    let name = base, n = 2;
+    while (vaults.collections().some(c => c.name.toLowerCase() === name.toLowerCase())) name = `${base} ${n++}`;
+    const r = vaults.createCollection(name);
+    if (!r.ok) return r;
+    if (/^#[0-9a-f]{6}$/i.test(str(o && o.color))) vaults.setCollectionColor(r.name, str(o.color));
+    const added = vaults.addToCollection(r.name, strArr(o && o.paths).filter(p => library.has(p)));
+    if (str(o && o.key)) vaults.updateBrief({ created: { [str(o.key)]: r.name } });
+    send('collections:changed', {});
+    return { ok: true, name: r.name, added };
+});
+
 ipcMain.handle('engine:suggest', async (_e, name, limit) => {
     const paths = vaults.collectionPaths(str(name)) || [];
     const res = await engine.suggest(paths, Math.min(100, limit | 0 || 24));

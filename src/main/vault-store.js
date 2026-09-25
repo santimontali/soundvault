@@ -10,6 +10,16 @@
  * New in 1.1: validation, case-insensitive de-duplication of paths, batch
  * add/remove, and path remapping across ALL vaults when files or folders are
  * moved/renamed inside the app (so collections never silently break).
+ *
+ * New in 2.0: each vault may carry a `brief` (the project described with
+ * words, reference sounds and images) from which collections are suggested:
+ *   { words: string[], refs: string[] (library paths), images: [{ id, file,
+ *     name, addedAt, palette: string[], concepts: [{ key, label, score }],
+ *     analyzed (the image model has looked at it; concepts may still be empty) }],
+ *     pinned: string[], removed: string[], dismissed: string[],
+ *     created: { [suggestionKey]: collectionName } }
+ * Image files are content-addressed (file = sha1 name), so duplicated vaults
+ * share them safely; a file is deleted only when no vault references it.
  */
 const fs = require('fs');
 const path = require('path');
@@ -18,6 +28,50 @@ const P = require('./paths');
 
 const DEFAULT_COLOR = '#c8f76d';
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
+const IMAGE_FILE_RE = /^[0-9a-f]{40}[.](webp|png|jpg)$/;
+const KEY_LEN = 2048;
+
+const strList = (a, max, len) => {
+    const out = [], seen = new Set();
+    for (const x of Array.isArray(a) ? a : []) {
+        const t = typeof x === 'string' ? x.trim().slice(0, len) : '';
+        const k = t.toLowerCase();
+        if (!t || seen.has(k)) continue;
+        seen.add(k); out.push(t);
+        if (out.length >= max) break;
+    }
+    return out;
+};
+
+function normalizeBrief(b) {
+    b = b && typeof b === 'object' ? b : {};
+    const images = [];
+    for (const im of Array.isArray(b.images) ? b.images : []) {
+        if (!im || typeof im.file !== 'string' || !IMAGE_FILE_RE.test(im.file) || images.some(x => x.file === im.file)) continue;
+        images.push({
+            id: im.file.slice(0, 12), file: im.file,
+            name: typeof im.name === 'string' ? im.name.slice(0, 120) : '',
+            addedAt: Number(im.addedAt) || Date.now(),
+            palette: strList(im.palette, 6, 7).filter(c => COLOR_RE.test(c)),
+            concepts: (Array.isArray(im.concepts) ? im.concepts : []).filter(c => c && typeof c.key === 'string')
+                .slice(0, 12).map(c => ({ key: c.key.slice(0, 60), label: String(c.label || c.key).slice(0, 60), score: Math.max(0, Math.min(1, Number(c.score) || 0)) })),
+            analyzed: im.analyzed === true || (Array.isArray(im.concepts) && im.concepts.length > 0),
+        });
+        if (images.length >= 12) break;
+    }
+    // Suggestion keys: "w:" + word, "c:" + UCS CatID, "s:" + a reference's whole path (long).
+    const created = {};
+    if (b.created && typeof b.created === 'object') for (const [k, v] of Object.entries(b.created)) if (typeof v === 'string' && v) created[k.slice(0, KEY_LEN)] = v.slice(0, 80);
+    return {
+        words: strList(b.words, 40, 60),
+        refs: (Array.isArray(b.refs) ? b.refs : []).filter(p => typeof p === 'string' && p).slice(0, 24),
+        images,
+        pinned: strList(b.pinned, 60, KEY_LEN),
+        removed: strList(b.removed, 200, KEY_LEN),
+        dismissed: strList(b.dismissed, 200, KEY_LEN),
+        created,
+    };
+}
 
 function genId() {
     return 'v_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
@@ -52,7 +106,7 @@ class VaultStore {
             }
         } catch (e) { /* ignore unreadable legacy file */ }
         const id = genId();
-        return { activeVaultId: id, vaults: [{ id, name: 'Main Vault', color: DEFAULT_COLOR, description: '', createdAt: Date.now(), collections, collectionColors }] };
+        return { activeVaultId: id, vaults: [{ id, name: 'Main Vault', color: DEFAULT_COLOR, description: '', createdAt: Date.now(), collections, collectionColors, brief: normalizeBrief(null) }] };
     }
 
     _normalize(d, legacyLibraryPath) {
@@ -66,6 +120,7 @@ class VaultStore {
             v.collectionColors = v.collectionColors && typeof v.collectionColors === 'object' ? v.collectionColors : {};
             delete v.collections.__colors;
             for (const [k, arr] of Object.entries(v.collections)) if (!Array.isArray(arr)) v.collections[k] = [];
+            v.brief = normalizeBrief(v.brief);
         }
         if (!d.vaults.some(v => v.id === d.activeVaultId)) d.activeVaultId = d.vaults[0].id;
         return d;
@@ -93,7 +148,7 @@ class VaultStore {
         const id = genId();
         this.store.update(d => d.vaults.push({
             id, name: (name || '').trim() || 'New Vault', color: COLOR_RE.test(color || '') ? color : DEFAULT_COLOR,
-            description: '', createdAt: Date.now(), collections: {}, collectionColors: {},
+            description: '', createdAt: Date.now(), collections: {}, collectionColors: {}, brief: normalizeBrief(null),
         }));
         return id;
     }
@@ -154,10 +209,13 @@ class VaultStore {
         return [...set];
     }
 
-    /** Every path referenced by any collection of any vault. */
+    /** Every path referenced by any collection (or brief reference) of any vault. */
     allPaths() {
         const set = new Set();
-        for (const v of this.store.get().vaults) for (const arr of Object.values(v.collections)) for (const p of arr) set.add(p);
+        for (const v of this.store.get().vaults) {
+            for (const arr of Object.values(v.collections)) for (const p of arr) set.add(p);
+            for (const p of (v.brief && v.brief.refs) || []) set.add(p);
+        }
         return [...set];
     }
 
@@ -185,6 +243,7 @@ class VaultStore {
             delete v.collections[oldName];
             v.collections[n] = items;
             if (v.collectionColors[oldName]) { v.collectionColors[n] = v.collectionColors[oldName]; delete v.collectionColors[oldName]; }
+            if (v.brief) for (const [k, c] of Object.entries(v.brief.created)) if (c === oldName) v.brief.created[k] = n;
             return { ok: true, name: n };
         });
     }
@@ -195,6 +254,8 @@ class VaultStore {
             if (!v.collections[name]) return false;
             delete v.collections[name];
             delete v.collectionColors[name];
+            // Made from a brief suggestion: the suggestion may come back.
+            if (v.brief) for (const [k, c] of Object.entries(v.brief.created)) if (c === name) delete v.brief.created[k];
             return true;
         });
     }
@@ -236,6 +297,62 @@ class VaultStore {
         });
     }
 
+    // ── brief (active vault) ────────────────────────────────────────────
+    brief() { return JSON.parse(JSON.stringify(this.active().brief || normalizeBrief(null))); }
+
+    /** Replace the given brief fields (arrays replace; `created` merges). Returns the new brief. */
+    updateBrief(patch = {}) {
+        this.store.update(d => {
+            const v = d.vaults.find(x => x.id === d.activeVaultId);
+            const b = v.brief || normalizeBrief(null);
+            const next = { ...b };
+            for (const k of ['words', 'refs', 'pinned', 'removed', 'dismissed']) if (Array.isArray(patch[k])) next[k] = patch[k];
+            if (patch.created && typeof patch.created === 'object') next.created = { ...b.created, ...patch.created };   // null values are dropped by normalizeBrief
+            v.brief = normalizeBrief(next);
+        });
+        return this.brief();
+    }
+
+    addBriefImage(image) {
+        this.store.update(d => {
+            const v = d.vaults.find(x => x.id === d.activeVaultId);
+            const b = v.brief || normalizeBrief(null);
+            if (!b.images.some(im => im.file === image.file)) b.images.push({ ...image, addedAt: Date.now() });
+            v.brief = normalizeBrief(b);
+        });
+        return this.brief();
+    }
+
+    /** Store the concepts found in an image (by id) of the active vault's brief. */
+    setBriefImageConcepts(id, concepts) {
+        this.store.update(d => {
+            const v = d.vaults.find(x => x.id === d.activeVaultId);
+            const im = v.brief && v.brief.images.find(x => x.id === id);
+            if (im) { im.concepts = concepts; im.analyzed = true; v.brief = normalizeBrief(v.brief); }
+        });
+        return this.brief();
+    }
+
+    /** Remove an image from the active vault's brief; returns its file if no vault still uses it. */
+    removeBriefImage(id) {
+        let orphan = null;
+        this.store.update(d => {
+            const v = d.vaults.find(x => x.id === d.activeVaultId);
+            const im = v.brief && v.brief.images.find(x => x.id === id);
+            if (!im) return;
+            v.brief.images = v.brief.images.filter(x => x !== im);
+            if (!d.vaults.some(o => o.brief && o.brief.images.some(x => x.file === im.file))) orphan = im.file;
+        });
+        return orphan;
+    }
+
+    /** Every brief image file referenced by any vault (for cleanup). */
+    briefFiles() {
+        const s = new Set();
+        for (const v of this._data().vaults) for (const im of (v.brief && v.brief.images) || []) s.add(im.file);
+        return s;
+    }
+
     /**
      * Rewrite references after a move/rename, across ALL vaults.
      * @param {Array<{from:string,to:string,dir?:boolean}>} moves
@@ -264,10 +381,32 @@ class VaultStore {
                     const seen = new Set();
                     v.collections[name] = arr.filter(p => { const k = P.key(p); if (seen.has(k)) return false; seen.add(k); return true; });
                 }
+                // Brief reference sounds follow their files too, and so do their
+                // suggestion keys ("s:" + path) in pinned, removed, dismissed, created.
+                if (v.brief && v.brief.refs.length) {
+                    v.brief.refs = v.brief.refs.map(p => {
+                        const k = P.key(p);
+                        const f = files.get(k);
+                        if (f) { changed++; return f; }
+                        for (const dm of dirs) if (k.startsWith(dm.from)) { changed++; return dm.to + path.resolve(p).slice(dm.fromLen); }
+                        return p;
+                    });
+                }
+                if (v.brief) {
+                    const moveKey = key => {
+                        if (!key.startsWith('s:')) return key;
+                        const k = P.key(key.slice(2)), f = files.get(k);
+                        if (f) return 's:' + P.key(f);
+                        for (const dm of dirs) if (k.startsWith(dm.from)) return 's:' + P.key(dm.to + k.slice(dm.fromLen));
+                        return key;
+                    };
+                    for (const list of ['pinned', 'removed', 'dismissed']) v.brief[list] = v.brief[list].map(moveKey);
+                    v.brief.created = Object.fromEntries(Object.entries(v.brief.created).map(([k, c]) => [moveKey(k), c]));
+                }
             }
         });
         return changed;
     }
 }
 
-module.exports = { VaultStore, validateCollectionName, DEFAULT_COLOR };
+module.exports = { VaultStore, validateCollectionName, normalizeBrief, DEFAULT_COLOR };
