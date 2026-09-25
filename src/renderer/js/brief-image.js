@@ -1,6 +1,6 @@
 // Brief images: decode whatever the browser can read, shrink it to at most
 // 640 px on the long side, encode WebP, pull a small palette (k-means on a
-// downsampled copy) and the 224x224 RGB copy the image model reads. It all
+// downsampled copy) and the 224x224 RGB views the image model reads. It all
 // happens here, on this computer.
 const MAX_SIDE = 640;
 const QUALITY = 0.86;
@@ -9,7 +9,7 @@ export const MODEL_SIDE = 224;      // what the image model reads
 
 export const isImageFile = f => !!f && (/^image\//.test(f.type || '') || /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(f.name || ''));
 
-/** Blob/File → { bytes (WebP, PNG where WebP is unavailable), palette: string[], pixels (224x224 RGB), width, height } */
+/** Blob/File → { bytes (WebP, PNG where WebP is unavailable), palette: string[], pixels (224x224 RGB views), width, height } */
 export async function prepareImage(blob) {
     const bmp = await createImageBitmap(blob);
     try {
@@ -21,32 +21,48 @@ export async function prepareImage(blob) {
         cx.imageSmoothingQuality = 'high';
         cx.drawImage(bmp, 0, 0, w, h);
         const out = await cv.convertToBlob({ type: 'image/webp', quality: QUALITY });
-        return { bytes: new Uint8Array(await out.arrayBuffer()), palette: paletteOf(bmp), pixels: modelPixels(bmp), width: w, height: h };
+        return { bytes: new Uint8Array(await out.arrayBuffer()), palette: paletteOf(bmp), pixels: modelViews(bmp), width: w, height: h };
     } finally {
         bmp.close();
     }
 }
 
-/** The whole picture squashed (not cropped) to 224x224: RGB bytes, row-major. */
-export function modelPixels(src) {
+/**
+ * What the image model looks at: the whole picture squashed (not cropped) to
+ * 224x224, as SigLIP's processor does, plus crops so small things are not
+ * lost: the centre square, both ends of a wide or tall picture and a zoom on
+ * the middle. Each is 224x224 RGB bytes, row-major.
+ */
+export function modelViews(src) {
+    const W = src.width, H = src.height, s = Math.min(W, H), r = W / H;
+    const rects = [[0, 0, W, H]];
+    if (r > 1.1 || r < 0.9) rects.push([(W - s) / 2, (H - s) / 2, s, s]);
+    if (r > 1.25) rects.push([0, 0, s, s], [W - s, 0, s, s]);
+    else if (r < 0.8) rects.push([0, 0, s, s], [0, H - s, s, s]);
+    rects.push([W / 4, H / 4, W / 2, H / 2]);
+    return rects.map(rc => modelPixels(src, rc));
+}
+
+/** One view: the rectangle [x, y, w, h] of `src` (all of it by default) squashed to 224x224 RGB. */
+export function modelPixels(src, rc = [0, 0, src.width, src.height]) {
     const cv = new OffscreenCanvas(MODEL_SIDE, MODEL_SIDE);
     const cx = cv.getContext('2d', { willReadFrequently: true });
     cx.imageSmoothingEnabled = true;
     cx.imageSmoothingQuality = 'high';
-    cx.drawImage(src, 0, 0, MODEL_SIDE, MODEL_SIDE);
+    cx.drawImage(src, rc[0], rc[1], rc[2], rc[3], 0, 0, MODEL_SIDE, MODEL_SIDE);
     const d = cx.getImageData(0, 0, MODEL_SIDE, MODEL_SIDE).data;
     const out = new Uint8Array(MODEL_SIDE * MODEL_SIDE * 3);
     for (let i = 0, j = 0; i < d.length; i += 4, j += 3) { out[j] = d[i]; out[j + 1] = d[i + 1]; out[j + 2] = d[i + 2]; }
     return out;
 }
 
-/** Model pixels of an image already in the brief (its stored copy, a data: URL). */
+/** Model views of an image already in the brief (its stored copy, a data: URL). */
 export async function pixelsFromDataUrl(url) {
     const bytes = bytesFromDataUrl(url);
     if (!bytes) return null;
     const m = /^data:([^;,]+)/.exec(url);
     const bmp = await createImageBitmap(new Blob([bytes], { type: m ? m[1] : 'image/webp' }));
-    try { return modelPixels(bmp); } finally { bmp.close(); }
+    try { return modelViews(bmp); } finally { bmp.close(); }
 }
 
 /** The stored image back to bytes (a data: URL from the brief), e.g. to undo a removal. */

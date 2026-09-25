@@ -143,6 +143,19 @@ const compact = files => ({ paths: files.map(f => f.path), mtimes: Float64Array.
     ok('brief: a reference whose sounds went to a pinned one joins a card, not "unmatched"', k1Card && !(br2.unmatched || []).includes('Like kick_01'),
         (br2.cards || []).map(c => `${c.title} [${c.reasons.map(r => r.label).join(' + ')}] (${c.candidates.length})`).join(', ') + ` · unmatched: ${(br2.unmatched || []).join(', ') || 'none'}`);
 
+    // ── image concepts (only where the image model is prepared: build-assets/models/siglip2) ─
+    if (engine.status().imageModel === 'ready') {
+        const view = f => { const v = new Uint8Array(224 * 224 * 3); for (let i = 0; i < v.length; i++) v[i] = f(i); return v; };
+        const flat = await engine.imageConcepts([view(() => 128)]);
+        ok('image concepts: a flat picture shows nothing', Array.isArray(flat.concepts) && flat.concepts.length === 0 && !flat.error, JSON.stringify(flat.concepts));
+        let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+        const views = [0, 1, 2, 3, 4].map(k => view(i => (Math.floor(i / 3 / 224 / (8 + k)) % 2 ? 200 : 40) + rnd() * 30));
+        const t = Date.now(), seen = await engine.imageConcepts(views);
+        const good = Array.isArray(seen.concepts) && !seen.error && seen.concepts.every(c => /^[A-Z][A-Za-z]+$/.test(c.key) && c.label && c.ucs && c.score >= 0 && c.score <= 1);
+        ok('image concepts: five views of a picture are read together (UCS keys, a word, its category)', good,
+            `${Date.now() - t} ms · ${(seen.concepts || []).map(c => c.label + (c.label !== c.ucs ? ' (' + c.ucs + ')' : '')).join(', ') || 'nothing'}${seen.error ? ' · ' + seen.error : ''}`);
+    } else console.log('SKIP  image concepts: the image model is not prepared here');
+
     const dupPath = path.join(lib, 'Families', 'fam02', 'fam02_copy.wav');
     fs.copyFileSync(path.join(lib, 'Families', 'fam02', 'fam02_orig.wav'), dupPath);
 

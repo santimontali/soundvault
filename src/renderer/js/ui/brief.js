@@ -442,7 +442,7 @@ function paintConcepts(el, im) {
     for (const x of box.querySelectorAll('.pending, .cc-none')) x.remove();
     const list = conceptsOf(im);
     const quiet = new Set(B.unmatched.map(t => String(t).toLowerCase()));
-    syncChips(box, list.map(c => ({ key: conceptKey(c), label: c.label, quiet: quiet.has(String(c.label).toLowerCase()), onRemove: () => removeConcept(c) })));
+    syncChips(box, list.map(c => ({ key: conceptKey(c), label: c.label, ucs: c.ucs, quiet: quiet.has(String(c.label).toLowerCase()), onRemove: () => removeConcept(c) })));
     if (wasRead(im) && !(im.concepts || []).length) box.appendChild(h('span.cc-none', { text: 'Nothing recognizable' }));
 }
 
@@ -493,14 +493,18 @@ function chip(label, key, onRemove) {
     return el;
 }
 
-/** Pinned state; `quiet` marks an image concept that found no strong matches in the library. */
-function paintChip(el, label, quiet = false) {
+/**
+ * Pinned state; `quiet` marks an image concept that found no strong matches in
+ * the library; `ucs` is the UCS category an image concept leads to ("tiger" → wild cat).
+ */
+function paintChip(el, label, quiet = false, ucs = '') {
     const on = pinnedSet().has(el.dataset.key), t = el.firstElementChild;
+    const cat = ucs && ucs !== label ? `UCS: ${ucs}. ` : '';
     el.classList.toggle('pinned', on);
     el.classList.toggle('quiet', quiet && !on);
     t.setAttribute('aria-pressed', String(on));
     t.setAttribute('aria-label', `${label}${on ? ', pinned' : quiet ? ', no strong matches yet' : ''}. Delete removes it`);
-    t.dataset.tip = on ? 'Pinned: click to unpin' : quiet ? 'No strong matches in your library yet. Click to pin it anyway' : 'Click to pin: it weighs more';
+    t.dataset.tip = cat + (on ? 'Pinned: click to unpin' : quiet ? 'No strong matches in your library yet. Click to pin it anyway' : 'Click to pin: it weighs more');
 }
 
 /**
@@ -515,10 +519,10 @@ function syncChips(box, entries, before = null) {
     for (let i = entries.length - 1; i >= 0; i--) {
         const e = entries[i];
         let el = live.get(e.key);
-        if (el) paintChip(el, e.label, e.quiet);
+        if (el) paintChip(el, e.label, e.quiet, e.ucs);
         else {
             el = chip(e.label, e.key, e.onRemove);
-            if (e.quiet) paintChip(el, e.label, true);
+            if (e.quiet || e.ucs) paintChip(el, e.label, !!e.quiet, e.ucs);
             box.insertBefore(el, next);
             if (B.visible && !reduced()) el.classList.add('in');
         }
@@ -1048,7 +1052,8 @@ function reasonChip(r) {
     else if (r.kind === 'concept') {
         const im = imageOfConcept(r.key);
         if (im && im.thumb) mark = h('span.src', { style: { backgroundImage: `url("${im.thumb}")` } });
-        tip = im ? `From ${im.name || 'an image'}` : 'From an image';
+        const c = im && (im.concepts || []).find(x => conceptKey(x) === String(r.key).toLowerCase());
+        tip = (im ? `From ${im.name || 'an image'}` : 'From an image') + (c && c.ucs && c.ucs !== c.label ? ` · UCS: ${c.ucs}` : '');
     } else tip = 'From your words';
     if (pinned) { mark = icon('pin', 'pin'); tip += ' · pinned'; }
     return h('span.wc' + (pinned ? '.pinned' : ''), { 'data-tip': tip }, mark, h('span.l', { text: r.label }));

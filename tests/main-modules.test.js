@@ -89,6 +89,8 @@ test('VaultStore: brief is validated, shared images survive duplicates, referenc
     assert.deepStrictEqual([seen.analyzed, seen.concepts], [true, []], 'analyzed, nothing stands out: not analyzed again');
     const found = vs.setBriefImageConcepts(file.slice(0, 12), [{ key: 'AMBSea', label: 'seaside', score: 1.7 }, { label: 'no key' }]).images[0];
     assert.deepStrictEqual(found.concepts, [{ key: 'AMBSea', label: 'seaside', score: 1 }], 'concepts validated and clamped');
+    const word = vs.setBriefImageConcepts(file.slice(0, 12), [{ key: 'ANMLWcat', label: 'tiger', ucs: 'wild cat', score: 0.7 }], 3).images[0];
+    assert.deepStrictEqual([word.concepts[0].ucs, word.vocab], ['wild cat', 3], 'a seen word keeps its UCS category and the vocabulary version');
     const copy = vs.duplicateVault(vs.active().id);
     assert.strictEqual(vs.removeBriefImage(file.slice(0, 12)), null, 'the duplicate still uses the file: not orphaned');
     vs.switchVault(copy);

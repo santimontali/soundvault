@@ -498,22 +498,17 @@ class SemanticEngine extends EventEmitter {
         // Excluded: what the vault already holds and the reference sounds themselves.
         const exclude = new Set([...(o.exclude || []), ...(o.queries || []).filter(q => q.kind === 'sound' && q.path).map(q => q.path)].map(keyOf));
         const ctx = o.context && String(o.context).trim() ? (await this.queryVector(String(o.context).slice(0, 300))).vec : null;
-        const runs = [];
-        for (const q of (o.queries || []).slice(0, 40)) {
-            let vec = null;
-            if (q.kind === 'sound') vec = q.path ? store.vector(q.path) : null;
-            else if (q.text || q.title) {
-                const base = (await this.queryVector(String(q.text || q.title).slice(0, 200))).vec;
-                vec = base;
-                if (ctx) {                                             // a pinch of the project's mood
-                    vec = new Float32Array(DIM);
-                    let s = 0; for (let d = 0; d < DIM; d++) { vec[d] = base[d] + 0.2 * ctx[d]; s += vec[d] * vec[d]; }
-                    const k = 1 / Math.sqrt(s || 1); for (let d = 0; d < DIM; d++) vec[d] *= k;
-                }
-            }
-            if (!vec) continue;
+        const textVec = async text => {
+            const base = (await this.queryVector(String(text).slice(0, 200))).vec;
+            if (!ctx) return base;
+            const vec = new Float32Array(DIM);                     // a pinch of the project's mood
+            let s = 0; for (let d = 0; d < DIM; d++) { vec[d] = base[d] + 0.2 * ctx[d]; s += vec[d] * vec[d]; }
+            const k = 1 / Math.sqrt(s || 1); for (let d = 0; d < DIM; d++) vec[d] *= k;
+            return vec;
+        };
+        const evaluate = (q, vec) => {
             const ai = store.search(vec, 220).filter(r => !exclude.has(keyOf(r.path)));
-            if (!ai.length) continue;
+            if (!ai.length) return null;
             const top = ai[0].score;
             // Only results that clear the calibrated floor count (the same floor
             // search uses); a sound reference keeps its close neighbours.
@@ -528,7 +523,7 @@ class SemanticEngine extends EventEmitter {
                 const seen = new Set(strong.map(r => r.path));
                 hits = [...strong.map(r => ({ path: r.path, score: r.score + 0.08 })), ...hits.filter(r => !seen.has(r.path))].sort((a, b) => b.score - a.score);
             }
-            if (!hits.length) continue;
+            if (!hits.length) return null;
             // Rescale to this query's own range (1 = its best, 0 = its floor) so text
             // and sound queries can share a card and compete for the same sounds.
             const hi = hits[0].score;
@@ -544,7 +539,23 @@ class SemanticEngine extends EventEmitter {
             const strength = hits.slice(0, 8).reduce((s, r) => s + r.score, 0) / Math.min(8, hits.length);
             const good = hits.length >= 5 && (q.kind === 'sound'
                 || (q.kind === 'concept' ? named >= 5 || strength >= 0.58 : named >= 3 || strength >= 0.52));
-            runs.push({ q, vec, hits: norm, raw: hits, good, named, strength, weight: (q.pinned ? 2 : 1) * (Number(q.weight) || 0.5) });
+            return { q, vec, hits: norm, raw: hits, good, named, strength, weight: (q.pinned ? 2 : 1) * (Number(q.weight) || 0.5) };
+        };
+        const runs = [];
+        for (const q of (o.queries || []).slice(0, 40)) {
+            let run = null;
+            if (q.kind === 'sound') { const v = q.path ? store.vector(q.path) : null; run = v && evaluate(q, v); }
+            else if (q.text || q.title) {
+                run = evaluate(q, await textVec(q.text || q.title));
+                // A word seen in a picture may be one CLAP barely knows ("cartridge", "lagoon"):
+                // its UCS category ("bullets", "swamp") is heard too, and the stronger one is kept.
+                if (q.alt) {
+                    const other = evaluate(q, await textVec(q.alt));
+                    const rank = r => (r ? (r.good ? 10 : 0) + r.strength : -1);
+                    if (rank(other) > rank(run)) run = other;
+                }
+            }
+            if (run) runs.push(run);
         }
         const heard = new Set(runs.map(r => r.q.key));
         const unmatched = (o.queries || []).filter(q => !heard.has(q.key)).map(q => q.title);
@@ -609,7 +620,7 @@ class SemanticEngine extends EventEmitter {
         return { cards: cardsOut, more: Math.max(0, out.length - cardsOut.length), unmatched, ms: Date.now() - t0 };
     }
 
-    /** Concepts a picture shows (224x224 RGB bytes) → { concepts: [{ key, label, score }] }. */
+    /** Concepts a picture shows (views of it, 224x224 RGB bytes each) → { concepts: [{ key, label, ucs, score }] }. */
     async imageConcepts(pixels) {
         if (!this.images.available) return { concepts: [], error: 'unavailable' };
         const t0 = Date.now();

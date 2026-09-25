@@ -433,21 +433,25 @@ function namesFor(q) {
 }
 // The image vocabulary's distinctive UCS synonyms per concept ("tiger", "lion" for wild cats), read once.
 const IMAGE_MODEL_DIR = app.isPackaged ? path.join(process.resourcesPath, 'models', 'siglip2') : path.join(__dirname, '..', 'build-assets', 'models', 'siglip2');
-let conceptSyn = null;
-function synonymsFor(key) {
-    if (!conceptSyn) {
-        conceptSyn = new Map();
+let vocabulary = null;             // { v: version, syn: Map(CatID → synonyms) }
+function imageVocabulary() {
+    if (!vocabulary) {
+        vocabulary = { v: 0, syn: new Map() };
         try {
-            for (const it of JSON.parse(fs.readFileSync(path.join(IMAGE_MODEL_DIR, 'concepts.json'), 'utf8')).items) if (Array.isArray(it.syn)) conceptSyn.set(it.key, it.syn);
+            const meta = JSON.parse(fs.readFileSync(path.join(IMAGE_MODEL_DIR, 'concepts.json'), 'utf8'));
+            vocabulary.v = Number(meta.v) || 0;
+            for (const it of meta.items) if (Array.isArray(it.syn)) vocabulary.syn.set(it.key, it.syn);
         } catch (e) { /* no vocabulary: CatIDs and labels only */ }
     }
-    return conceptSyn.get(key) || [];
+    return vocabulary;
 }
+const synonymsFor = key => imageVocabulary().syn.get(key) || [];
 // Files named for a concept seen in a picture: its UCS CatID ("AMBSea_Rockpool 02.wav",
-// the most precise), its label, or one of its synonyms in the name or folder ("Bengal_Tiger_purr").
-// { all, exact }: all lift the ranking, exact (CatID or label) also prove the card.
+// the most precise), the word seen or its category's name, or one of the category's
+// synonyms in the name or folder ("Bengal_Tiger_purr").
+// { all, exact }: all lift the ranking, exact (CatID, word, category name) also prove the card.
 function conceptNames(c) {
-    const k = 'concept:' + String(c.key).toLowerCase();
+    const k = 'concept:' + String(c.key).toLowerCase() + ':' + String(c.label).toLowerCase();
     if (nameCache.version !== library.version) { nameCache.version = library.version; nameCache.map.clear(); }
     if (!nameCache.map.has(k)) {
         const prefix = String(c.key).toLowerCase() + '_', syn = new Set(synonymsFor(c.key));
@@ -457,7 +461,9 @@ function conceptNames(c) {
             if (e.name.toLowerCase().startsWith(prefix)) byCatId.push(e.path);
             else if (syn.size && e._tokens && (hasSyn(e._tokens.name) || hasSyn(e._tokens.folder))) bySyn.push(e.path);
         }
-        const exact = [...new Set([...byCatId, ...namesFor(c.label)])];
+        // the category's name only with every word ("casino game", not any file named "game")
+        const byName = c.ucs && c.ucs !== c.label ? lexical(library.all(), c.ucs, 3000).filter(r => !r.partial).map(r => r.path) : [];
+        const exact = [...new Set([...byCatId, ...namesFor(c.label), ...byName])];
         nameCache.map.set(k, { all: [...new Set([...exact, ...bySyn])].slice(0, 3000), exact: exact.slice(0, 3000) });
     }
     return nameCache.map.get(k);
@@ -468,16 +474,19 @@ const briefKey = s => String(s).toLowerCase();
 
 function briefState() {
     const v = vaults.active(), b = vaults.brief();
+    const ready = engine.status().imageModel === 'ready';
     const images = b.images.map(im => {
         let thumb = '';
         try { thumb = `data:image/${im.file.endsWith('.jpg') ? 'jpeg' : im.file.split('.').pop()};base64,` + fs.readFileSync(path.join(BRIEF_DIR, im.file)).toString('base64'); } catch (e) { /* file gone: shown as a placeholder */ }
-        return { id: im.id, name: im.name, palette: im.palette, concepts: im.concepts, analyzed: im.analyzed, thumb };
+        // read with an older vocabulary: not analyzed as far as the renderer knows, so it reads it again
+        const analyzed = im.analyzed && (!ready || im.vocab >= imageVocabulary().v);
+        return { id: im.id, name: im.name, palette: im.palette, concepts: im.concepts, analyzed, thumb };
     });
     const refs = b.refs.map(p => { const e = library.get(p); return e ? pub(e) : { path: p, name: path.basename(p), dir: '', missing: true }; });
     return {
         vaultId: v.id, name: v.name, color: v.color, description: v.description,
         words: b.words, refs, images, pinned: b.pinned, removed: b.removed, dismissed: b.dismissed, created: b.created,
-        imageModel: engine.status().imageModel === 'ready' ? 'ready' : 'unavailable',
+        imageModel: ready ? 'ready' : 'unavailable',
     };
 }
 
@@ -493,13 +502,16 @@ ipcMain.handle('brief:update', (_e, patch = {}) => {
     if (typeof p.description === 'string') vaults.updateVault(vaults.active().id, { description: p.description });
     return briefState();
 });
-// 224x224 RGB of the picture (the renderer squashes it as SigLIP does) → concepts, stored on the image.
-const pixelsOf = p => (p && p.buffer && p.byteLength === 224 * 224 * 3 ? new Uint8Array(p.buffer, p.byteOffset || 0, p.byteLength) : null);
-async function analyzeBriefImage(id, pixels) {
-    if (!pixels || engine.status().imageModel !== 'ready') return;
-    const r = await engine.imageConcepts(pixels);
+// Views of the picture, 224x224 RGB each (the whole of it squashed as SigLIP does, then
+// crops) → concepts, stored on the image. One view (older renderers) still works.
+const VIEW_BYTES = 224 * 224 * 3;
+const viewOf = p => (p && p.buffer && p.byteLength === VIEW_BYTES ? new Uint8Array(p.buffer, p.byteOffset || 0, p.byteLength) : null);
+const pixelsOf = p => { const list = (Array.isArray(p) ? p : [p]).slice(0, 6).map(viewOf); return list.length && list.every(Boolean) ? list : null; };
+async function analyzeBriefImage(id, views) {
+    if (!views || engine.status().imageModel !== 'ready') return;
+    const r = await engine.imageConcepts(views);
     // A failed analysis (engine restarting) leaves the image unanalyzed, so it can be retried.
-    if (!r.error && Array.isArray(r.concepts)) vaults.setBriefImageConcepts(id, r.concepts);
+    if (!r.error && Array.isArray(r.concepts)) vaults.setBriefImageConcepts(id, r.concepts, imageVocabulary().v);
 }
 ipcMain.handle('brief:analyze-image', async (_e, id, pixels) => { await analyzeBriefImage(str(id), pixelsOf(pixels)); return briefState(); });
 ipcMain.handle('brief:add-image', async (_e, img = {}) => {
@@ -537,7 +549,7 @@ ipcMain.handle('brief:suggest', async (_e, opts = {}) => {
         const key = 'c:' + briefKey(c.key);
         if (removed.has(key) || queries.some(q => q.key === key)) continue;
         const named = conceptNames(c);
-        queries.push({ key, title: c.label, kind: 'concept', text: c.label, weight: 0.3 + 0.7 * c.score, pinned: pinned.has(key), names: named.all, exact: named.exact });
+        queries.push({ key, title: c.label, kind: 'concept', text: c.label, alt: c.ucs && c.ucs !== c.label ? c.ucs : null, weight: 0.3 + 0.7 * c.score, pinned: pinned.has(key), names: named.all, exact: named.exact });
     }
     for (const p of refs) {
         const key = 's:' + P.key(p), nm = path.parse(library.get(p).name).name;

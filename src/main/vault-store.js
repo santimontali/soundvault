@@ -15,7 +15,8 @@
  * words, reference sounds and images) from which collections are suggested:
  *   { words: string[], refs: string[] (library paths), images: [{ id, file,
  *     name, addedAt, palette: string[], concepts: [{ key, label, score }],
- *     analyzed (the image model has looked at it; concepts may still be empty) }],
+ *     analyzed (the image model has looked at it; concepts may still be empty),
+ *     vocab (the image vocabulary version it was read with) }],
  *     pinned: string[], removed: string[], dismissed: string[],
  *     created: { [suggestionKey]: collectionName } }
  * Image files are content-addressed (file = sha1 name), so duplicated vaults
@@ -54,8 +55,12 @@ function normalizeBrief(b) {
             addedAt: Number(im.addedAt) || Date.now(),
             palette: strList(im.palette, 6, 7).filter(c => COLOR_RE.test(c)),
             concepts: (Array.isArray(im.concepts) ? im.concepts : []).filter(c => c && typeof c.key === 'string')
-                .slice(0, 12).map(c => ({ key: c.key.slice(0, 60), label: String(c.label || c.key).slice(0, 60), score: Math.max(0, Math.min(1, Number(c.score) || 0)) })),
+                .slice(0, 12).map(c => ({
+                    key: c.key.slice(0, 60), label: String(c.label || c.key).slice(0, 60), score: Math.max(0, Math.min(1, Number(c.score) || 0)),
+                    ...(typeof c.ucs === 'string' && c.ucs ? { ucs: c.ucs.slice(0, 60) } : {}),     // the UCS category a seen word leads to
+                })),
             analyzed: im.analyzed === true || (Array.isArray(im.concepts) && im.concepts.length > 0),
+            vocab: Math.max(0, Number(im.vocab) || 0),
         });
         if (images.length >= 12) break;
     }
@@ -323,12 +328,12 @@ class VaultStore {
         return this.brief();
     }
 
-    /** Store the concepts found in an image (by id) of the active vault's brief. */
-    setBriefImageConcepts(id, concepts) {
+    /** Store the concepts found in an image (by id) of the active vault's brief, read with vocabulary `vocab`. */
+    setBriefImageConcepts(id, concepts, vocab = 0) {
         this.store.update(d => {
             const v = d.vaults.find(x => x.id === d.activeVaultId);
             const im = v.brief && v.brief.images.find(x => x.id === id);
-            if (im) { im.concepts = concepts; im.analyzed = true; v.brief = normalizeBrief(v.brief); }
+            if (im) { im.concepts = concepts; im.analyzed = true; im.vocab = vocab; v.brief = normalizeBrief(v.brief); }
         });
         return this.brief();
     }
